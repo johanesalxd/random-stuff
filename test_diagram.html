@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BigQuery vs Kubernetes Workload Management Comparison</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .mermaid {
+            text-align: center;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Comparing Workload Management: Kubernetes vs. BigQuery</h1>
+        <div id="diagram-container">
+            <div class="loading">Loading diagram...</div>
+        </div>
+    </div>
+
+    <script>
+        // Function to load and parse the Mermaid diagram from comparison.md
+        async function loadDiagramFromMD() {
+            try {
+                const response = await fetch('./comparison.md');
+                const mdContent = await response.text();
+
+                // Extract the mermaid code from the markdown file
+                // Remove the ``` mermaid wrapper if present
+                let mermaidCode = mdContent.trim();
+                if (mermaidCode.startsWith('``` mermaid') || mermaidCode.startsWith('```mermaid')) {
+                    mermaidCode = mermaidCode.replace(/^```\s*mermaid\s*\n/, '');
+                    mermaidCode = mermaidCode.replace(/\n```\s*$/, '');
+                } else if (mermaidCode.startsWith('```')) {
+                    mermaidCode = mermaidCode.replace(/^```\s*\n/, '');
+                    mermaidCode = mermaidCode.replace(/\n```\s*$/, '');
+                }
+
+                // Create the mermaid div with the loaded content
+                const container = document.getElementById('diagram-container');
+                container.innerHTML = `<div class="mermaid">${mermaidCode}</div>`;
+
+                // Initialize mermaid after content is loaded
+                mermaid.initialize({
+                    startOnLoad: true,
+                    theme: 'default',
+                    flowchart: {
+                        useMaxWidth: true,
+                        htmlLabels: true
+                    }
+                });
+
+                // Re-render the diagram
+                mermaid.init();
+
+            } catch (error) {
+                console.error('Error loading diagram:', error);
+                document.getElementById('diagram-container').innerHTML =
+                    '<div style="color: red; text-align: center;">Error loading diagram from comparison.md</div>';
+            }
+        }
+
+        // Load the diagram when the page loads
+        document.addEventListener('DOMContentLoaded', loadDiagramFromMD);
+    </script>
+</body>
+</html>
