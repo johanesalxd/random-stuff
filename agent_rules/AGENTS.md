@@ -274,6 +274,54 @@ Every function must include:
 - Use appropriate exception types
 - Document all exceptions that can be raised
 
+## Confirmation Before Retesting
+
+After debugging or making changes to fix errors, always request explicit user confirmation before rerunning tests, commands, or validation steps.
+
+### Requirements
+
+**Before Retesting:**
+- Summarize the changes made to address the error
+- Explain what will be tested or executed
+- Request explicit confirmation from the user
+- Wait for user approval before proceeding
+
+**When to Request Confirmation:**
+- After fixing code errors or bugs
+- Before rerunning failed tests
+- Before re-executing commands that previously failed
+- Before validating changes with browser_action or execute_command
+- After modifying configuration files that affect execution
+
+**Example Workflow:**
+
+```
+1. Error occurs during task execution
+2. Analyze the error and identify the fix
+3. Make necessary code changes
+4. Summarize changes made
+5. Ask: "I've made the following changes to fix the error:
+   - [List specific changes]
+
+   Would you like me to rerun [test/command/validation] to verify the fix?"
+6. Wait for user confirmation
+7. Proceed only after receiving approval
+```
+
+**Communication Format:**
+- Be clear and concise about what was changed
+- Specify exactly what will be executed upon confirmation
+- Use ask_followup_question tool for confirmation requests
+- Do not assume approval or proceed automatically
+
+### Best Practices
+
+- Always explain the reasoning behind changes
+- Provide context about what the retest will verify
+- Allow users to review changes before retesting
+- Respect user's decision if they decline to retest
+- Document the current state if retesting is declined
+
 ## Git Commit Messages
 
 All commit messages must follow industry-standard best practices for clarity and professionalism.
