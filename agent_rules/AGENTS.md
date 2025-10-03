@@ -125,6 +125,54 @@ public double calculateTotal(List<Item> items, double taxRate) {
 - Use `@throws` for declared exceptions
 - Summary fragment should not be a complete sentence
 
+### Shell
+
+Documentation follows Google Shell Style Guide standards.
+
+**Comment Format:**
+- File header with brief description
+- Function comments with Globals, Arguments, Outputs, Returns sections
+- Use complete sentences with proper punctuation
+- Comments appear directly before the declaration
+
+**Example:**
+```bash
+#!/bin/bash
+#
+# Perform hot backups of Oracle databases.
+
+#######################################
+# Cleanup files from the backup directory.
+# Globals:
+#   BACKUP_DIR
+#   ORACLE_SID
+# Arguments:
+#   None
+#######################################
+cleanup() {
+  rm "${BACKUP_DIR}/"*
+}
+
+#######################################
+# Get configuration directory.
+# Globals:
+#   SOMEDIR
+# Arguments:
+#   None
+# Outputs:
+#   Writes location to stdout
+#######################################
+get_dir() {
+  echo "${SOMEDIR}"
+}
+```
+
+**Requirements:**
+- All functions must have header comments
+- Use complete sentences
+- Explain "why" not "what"
+- Include TODO comments with owner when needed
+
 ## General Code Quality Standards
 
 ### Naming Conventions
@@ -143,6 +191,11 @@ public double calculateTotal(List<Item> items, double taxRate) {
 - Classes: `UpperCamelCase`
 - Methods and variables: `lowerCamelCase`
 - Constants: `UPPER_SNAKE_CASE`
+
+**Shell:**
+- Functions and variables: `lowercase_with_underscores`
+- Constants and environment variables: `UPPERCASE_WITH_UNDERSCORES`
+- Source filenames: `lowercase_with_underscores.sh`
 
 ### Project Structure and Directory Naming
 
@@ -265,6 +318,20 @@ Every function must include:
 - 2 spaces for indentation
 - Maximum line length: 100 characters
 - Use google-java-format when available
+
+### Shell
+- 2 spaces for indentation (no tabs)
+- Maximum line length: 80 characters
+- Use `#!/bin/bash` shebang
+- Place `; then` and `; do` on same line as `if`/`for`/`while`
+- Use `[[  ]]` over `[  ]` for tests
+- Use `$(command)` over backticks
+- Always quote variables: `"${var}"`
+- Use arrays for lists
+- Use `(( ))` for arithmetic
+- Check return values explicitly
+- Use `local` for function variables
+- Run ShellCheck on all scripts
 
 ## Error Handling
 
