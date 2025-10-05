@@ -36,14 +36,32 @@ alias manage-mcp='~/Developer/git/random-stuff/agent_stuff/cline_gemini_mcp/mana
 - `manage-docker`: Start, stop, or check status of Docker SSH tunnel
 - `manage-mcp`: Manage Cline MCP server configurations
 
+## AI Agent Configuration
+
+Cline uses two global rule files:
+- `~/Documents/Cline/Rules/AGENTS.md` - Coding standards
+- `~/Documents/Cline/Rules/MEMORY_BANK.md` - Context management
+
+**Setup:**
+```bash
+# Protect files from accidental modification
+chmod 444 ~/Documents/Cline/Rules/*.md
+```
+
+**Usage:**
+Start tasks with: `"Follow guidelines in ~/Documents/Cline/Rules/"`
+
 ## Important Notes
 
 ### Agent Rules Synchronization
 
-The `agent_stuff/AGENTS.md` file in this repository must be kept synchronized with the global Cline rules file located at `~/Documents/Cline/Rules/AGENTS.md`. These files should always contain identical content to ensure consistent coding standards across all projects.
+Files in `agent_stuff/` must be kept synchronized with global Cline rules:
 
 **File Locations:**
-- Global: `~/Documents/Cline/Rules/AGENTS.md`
-- Local: `agent_stuff/AGENTS.md`
+- Global: `~/Documents/Cline/Rules/AGENTS.md` and `MEMORY_BANK.md`
+- Local: `agent_stuff/AGENTS.md` and `MEMORY_BANK.md`
 
-When updating coding standards, both files must be updated to maintain alignment.
+**Protection:**
+Set global files to read-only (chmod 444) to prevent accidental modification.
+
+When updating standards, modify the local/source files, then sync and re-apply permissions.
