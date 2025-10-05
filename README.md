@@ -19,6 +19,23 @@ random-stuff/
 - **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies
 - **remote_docker**: SSH tunnel management for remote Docker daemon access
 
+## Shell Integration
+
+Add the following aliases to your `.zshrc` or `.bashrc` for quick access to management scripts:
+
+```bash
+# Docker SSH Tunnel Management
+export DOCKER_HOST=tcp://localhost:2375
+alias manage-docker='~/Developer/git/random-stuff/remote_docker/manage_docker_tunnel.sh'
+
+# Cline MCP Management
+alias manage-mcp='~/Developer/git/random-stuff/agent_stuff/cline_gemini_mcp/manage_mcp_servers.sh'
+```
+
+**Usage:**
+- `manage-docker`: Start, stop, or check status of Docker SSH tunnel
+- `manage-mcp`: Manage Cline MCP server configurations
+
 ## Important Notes
 
 ### Agent Rules Synchronization
