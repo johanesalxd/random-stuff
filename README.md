@@ -49,7 +49,22 @@ chmod 444 ~/Documents/Cline/Rules/*.md
 ```
 
 **Usage:**
-Start tasks with: `"Follow guidelines in ~/Documents/Cline/Rules/"`
+```bash
+# Start all tasks with
+"Follow guidelines in ~/Documents/Cline/Rules/"
+
+# Optional: Initialize Memory Bank for complex projects
+"Initialize memory bank"
+```
+
+**Memory Bank (Optional):**
+Use for complex projects requiring context across multiple sessions:
+- ✅ Multi-session projects
+- ✅ Complex codebases
+- ❌ Simple scripts
+- ❌ One-off tasks
+
+Memory Bank creates a `memory-bank/` folder with project context files.
 
 ## Important Notes
 
