@@ -9,9 +9,35 @@ You are a BigQuery administrator analyzing slot utilization to optimize workload
 - Project ID: `[YOUR_GCP_PROJECT_ID]`
 - Region: `[YOUR_REGION]` (e.g., `us`, `eu`, `asia-northeast1`)
 
+## Before You Start: Handling Schema Errors
+
+If you encounter "Unrecognized name" errors when running queries:
+
+1. Replace the SELECT clause with `SELECT *` to see all available fields
+2. Identify which fields exist in your BigQuery edition
+3. Modify the query to use only the available fields
+
+**Example:**
+```sql
+-- If this fails with "Unrecognized name: autoscale_max_slots"
+SELECT reservation_name, slot_capacity, autoscale_max_slots
+FROM `region-us`.INFORMATION_SCHEMA.RESERVATIONS_BY_PROJECT;
+
+-- Use this instead to discover available fields
+SELECT *
+FROM `region-us`.INFORMATION_SCHEMA.RESERVATIONS_BY_PROJECT
+LIMIT 1;
+
+-- Then adjust your query based on what fields actually exist
+SELECT reservation_name, slot_capacity
+FROM `region-us`.INFORMATION_SCHEMA.RESERVATIONS_BY_PROJECT;
+```
+
+**Note:** Field availability varies by BigQuery edition (Standard/Enterprise/Enterprise Plus).
+
 ## About the SQL Queries
 
-**Query Validation Status:** All SQL queries in this guide are validated against official Google Cloud BigQuery documentation and represent current best practices as of October 2024.
+**Query Validation Status:** All SQL queries in this guide are validated against the latest official Google Cloud BigQuery documentation and represent current best practices.
 
 **Using the Provided Queries:**
 - The queries are production-ready and can be used as-is

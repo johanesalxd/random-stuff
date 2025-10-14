@@ -6,6 +6,33 @@ A comprehensive framework for analyzing BigQuery slot utilization and optimizing
 
 This framework helps BigQuery administrators and data platform teams make data-driven decisions about workload management strategies. By analyzing historical usage patterns, it recommends the optimal approach: staying on-demand, committing to baseline slots, using autoscaling, or implementing a hybrid strategy.
 
+## Quick Reference
+
+### When to Stay On-Demand (PAYG)
+- Average slots < 100
+- High variability (CV > 1.0)
+- Sporadic, unpredictable usage
+- Development/testing environments
+
+### When to Use Baseline Commitment
+- p25 slots ≥ 50 (meets minimum)
+- Low variability (CV < 1.0)
+- Stable baseline with manageable peaks
+- Production workloads with consistent patterns
+
+### When to Use Autoscaling (Enterprise Plus)
+- p25 slots ≥ 50 (baseline requirement)
+- High burst ratio (p95/p50 > 3)
+- Predictable peak patterns
+- Need guaranteed capacity during bursts
+
+### When to Use Hybrid Approach
+- Multiple distinct workload types
+- Some projects stable (prod), others variable (dev/test)
+- Can separate workloads by project
+
+**Note:** If Mermaid diagrams don't render in your viewer, view this file on GitHub or use a Mermaid-compatible markdown viewer.
+
 ### What This Framework Does
 
 - Analyzes 30 days of BigQuery slot usage patterns
@@ -67,20 +94,6 @@ graph TD
 ```
 
 ### Decision Framework Logic
-
-The recommendation engine uses two key metrics:
-
-**1. Coefficient of Variation (CV) = stddev / avg**
-- Measures workload stability
-- Low CV (<0.5): Stable, predictable workload
-- High CV (>1.0): Variable, unpredictable workload
-
-**2. Burst Ratio = p95 / p50**
-- Measures peak intensity
-- Low ratio (<2): Consistent usage
-- High ratio (>4): Significant spikes
-
-These metrics drive the decision tree:
 
 ```mermaid
 graph TD
@@ -176,45 +189,6 @@ my project your-project-id, which has compute and storage in the US region.
 Please list your plan before execution.
 ```
 
-### AI Assistant Response
-
-The assistant will:
-
-1. **Plan the Analysis**
-   - Outline the 5-step process
-   - Confirm project ID and region
-   - List queries to be executed
-
-2. **Execute Step 0: Current Configuration**
-   - Check for existing reservations
-   - Analyze current assignments
-   - Calculate current utilization
-
-3. **Execute Step 1: Slot Usage Analysis**
-   - Query 1.1: System-wide slot percentiles
-   - Query 1.2: Top slot consumers
-   - Query 1.3: Usage patterns by time
-
-4. **Execute Step 2: Workload Characterization**
-   - Calculate Coefficient of Variation
-   - Calculate Burst Ratio
-   - Classify workload type
-
-5. **Execute Step 3: Strategy Recommendation**
-   - Evaluate against decision tree
-   - Recommend optimal strategy
-   - Provide configuration details
-
-6. **Execute Step 4: Optimization Opportunities**
-   - Check for slot contention
-   - Identify expensive queries
-   - Suggest scheduling improvements
-
-7. **Execute Step 5: Generate Reports**
-   - Create individual report files
-   - Compile final recommendation
-   - Provide implementation commands
-
 ### Example Output
 
 ```markdown
@@ -245,43 +219,14 @@ The `analysis_results/` directory contains:
 ```
 analysis_results/
 ├── 00_current_configuration.md (if reservations exist)
-│   ├── Existing reservation details
-│   ├── Current utilization metrics
-│   ├── Idle capacity analysis
-│   └── On-demand spillover tracking
-│
 ├── 01_slot_metrics.md
-│   ├── Percentile distribution (p10, p25, p50, p75, p95, max)
-│   ├── Average and standard deviation
-│   ├── Coefficient of Variation calculation
-│   └── Burst Ratio calculation
-│
 ├── 02_top_consumers.md
-│   ├── Top 10 projects by slot consumption
-│   ├── Slot-hours per project
-│   └── Query count per project
-│
 ├── 03_usage_patterns.md
-│   ├── Hourly usage by day of week
-│   ├── Peak usage identification
-│   ├── Off-peak hours identification
-│   └── Trend analysis (week-over-week)
-│
 ├── 04_optimization_opportunities.md
-│   ├── Slot contention analysis
-│   ├── Expensive queries (>1TB scanned)
-│   ├── Slow query identification
-│   ├── Reservation utilization simulation
-│   └── Scheduling recommendations
-│
 └── 05_final_recommendation.md
-    ├── Current state summary
-    ├── Recommended strategy with reasoning
-    ├── Configuration details
-    ├── Implementation commands
-    ├── Monitoring setup
-    └── Validation criteria
 ```
+
+Each report provides detailed analysis and actionable recommendations. See the generated files for complete details.
 
 ## Best Practices
 
@@ -292,28 +237,6 @@ analysis_results/
 - **After Major Changes:** New projects, data migrations, architecture changes
 - **Performance Issues:** Query slowdowns, slot contention, or failures
 - **Capacity Planning:** Before committing to reservations or changing capacity
-
-### How to Interpret Results
-
-**Low Average, High Variability**
-- Indicates sporadic, unpredictable usage
-- On-demand provides optimal flexibility
-- Focus on query optimization to reduce peaks
-
-**High Average, Low Variability**
-- Indicates stable, consistent usage
-- Baseline commitment provides predictable performance
-- Ensures dedicated capacity for consistent workloads
-
-**High Average, High Burstiness**
-- Indicates stable baseline with predictable peaks
-- Autoscaling commitment ideal (if available)
-- Hybrid approach as alternative
-
-**Idle Slots in Existing Reservations**
-- Indicates over-provisioned capacity
-- Reduce baseline or reassign projects
-- Consider switching to on-demand for variable projects
 
 ### Common Pitfalls to Avoid
 
@@ -420,9 +343,3 @@ For issues or questions:
 1. Review the troubleshooting section above
 2. Check official Google Cloud documentation
 3. Consult with your organization's FinOps or data platform team
-
----
-
-**Last Updated:** October 2024
-**Framework Version:** 1.0
-**Compatibility:** BigQuery Standard, Enterprise, and Enterprise Plus editions
