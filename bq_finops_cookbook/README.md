@@ -32,8 +32,6 @@ This framework helps BigQuery administrators and data platform teams make data-d
 - Some projects stable (prod), others variable (dev/test)
 - Can separate workloads by project
 
-**Note:** If Mermaid diagrams don't render in your viewer, view this file on GitHub or use a Mermaid-compatible markdown viewer.
-
 ### What This Framework Does
 
 - Analyzes 30 days of slot usage patterns
@@ -87,11 +85,8 @@ graph TD
     F --> G[Step 3: Determine Strategy]
     G --> H[Step 4: Identify Optimizations]
     H --> I[Step 5: Generate Report]
-    I --> J{Satisfied with<br/>Recommendations?}
-    J -->|No| K[Refine Analysis]
-    K --> E
-    J -->|Yes| L[Implement Changes]
-    L --> M[Monitor & Validate]
+    I --> J[Implement Changes]
+    J --> K[Monitor & Validate]
 ```
 
 ### Decision Framework Logic
@@ -175,44 +170,6 @@ Follow the implementation steps in the final recommendation report. This typical
 - Setting up monitoring queries
 - Validating the changes
 
-## Quick Start Example
-
-### Scenario
-
-Analyze project `your-project-id` in the `us` region.
-
-### User Request
-
-```
-Based on the guidance in 'bq_finops_cookbook/finops_prompt.md', please help me analyze
-my project your-project-id, which has compute and storage in the US region.
-
-Please list your plan before execution.
-```
-
-### Example Output
-
-```markdown
-### Current State
-- Slot Metrics: p10=0.0, p25=0.0, p50=0.0, p95=1.4, max=190.7, avg=2.7
-- Variability: CV=7.52 (Highly Variable)
-- Burstiness: Ratio=Infinite (High burst)
-- Top Project: your-project-id (387 slot-hours)
-- Peak Hours: Day 2 (2:00-4:00), Day 7 (18:00-20:00)
-
-### Recommended Strategy
-Choice: Stay On-Demand (PAYG)
-
-Reasoning: Workload shows very low average usage (2.7 slots) with extremely
-high variability (CV > 7.0). Usage is sporadic with long idle periods followed
-by short bursts. On-demand model provides optimal flexibility for this pattern.
-
-### Implementation Steps
-1. Continue current operations (no changes needed)
-2. Monitor slot utilization patterns
-3. Re-run analysis quarterly to detect pattern changes
-```
-
 ## Output Structure
 
 The `analysis_results/` directory contains:
@@ -229,103 +186,6 @@ analysis_results/
 
 Each report provides detailed analysis and actionable recommendations. See the generated files for complete details.
 
-## Best Practices
-
-### When to Re-Run Analysis
-
-- **Quarterly:** Regular check-ins for stable workloads
-- **Monthly:** For rapidly growing or changing workloads
-- **After Major Changes:** New projects, data migrations, architecture changes
-- **Performance Issues:** Query slowdowns, slot contention, or failures
-- **Capacity Planning:** Before committing to reservations or changing capacity
-
-### Common Pitfalls to Avoid
-
-1. **Committing Too Early**
-   - Don't commit based on a single peak week
-   - Analyze at least 30 days of data
-   - Account for seasonal variations
-
-2. **Ignoring Growth Trends**
-   - Review week-over-week trends
-   - Plan for expected growth
-   - Leave headroom for expansion
-
-3. **Over-Optimizing**
-   - Don't chase 100% utilization
-   - Target 70-85% for healthy buffer
-   - Allow room for unexpected spikes
-
-4. **Forgetting to Monitor**
-   - Set up ongoing monitoring queries
-   - Create alerts for utilization thresholds
-   - Review quarterly at minimum
-
-5. **Mixing Workload Types**
-   - Separate production from dev/test
-   - Use hybrid approach for mixed environments
-   - Don't assign variable workloads to commitments
-
-## Troubleshooting
-
-### Common Errors and Solutions
-
-**Error: "Access Denied" on INFORMATION_SCHEMA queries**
-
-Solution: Ensure you have `roles/bigquery.resourceViewer` role:
-```bash
-gcloud projects add-iam-policy-binding [PROJECT_ID] \
-  --member="user:[YOUR_EMAIL]" \
-  --role="roles/bigquery.resourceViewer"
-```
-
-**Error: "Table not found: INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT"**
-
-Solution: Verify region qualifier is correct:
-- Use `` `region-us` `` for multi-region US
-- Use `` `region-eu` `` for multi-region EU
-- Use `` `region-asia-northeast1` `` for specific regions
-
-**Error: "Query returned 0 rows" for all queries**
-
-Solution: Check data availability:
-```sql
--- Verify jobs exist in the time range
-SELECT COUNT(*) as job_count
-FROM `region-us`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
-WHERE creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
-```
-
-**Error: "Division by zero" in metric calculations**
-
-Solution: This indicates zero or near-zero usage. The workload is likely:
-- Very new with minimal history
-- Inactive or rarely used
-- Better suited for on-demand billing
-
-### Permission Requirements
-
-Minimum required permissions:
-- `bigquery.jobs.list`
-- `bigquery.jobs.get`
-- `bigquery.reservations.list`
-- `bigquery.reservations.get`
-- `bigquery.capacityCommitments.list`
-
-Recommended role: `roles/bigquery.resourceViewer`
-
-### Data Availability Issues
-
-**INFORMATION_SCHEMA retention:**
-- `JOBS_BY_PROJECT`: 180 days
-- `JOBS_TIMELINE_BY_PROJECT`: 180 days
-- `RESERVATIONS_BY_PROJECT`: Current state only
-
-**Best practices:**
-- Export historical data for long-term analysis
-- Run analysis before data ages out
-- Archive reports for trend comparison
-
 ## Additional Resources
 
 ### Official Documentation
@@ -338,9 +198,3 @@ Recommended role: `roles/bigquery.resourceViewer`
 ### Related Guides
 - `finops_prompt.md` - Detailed analysis guide with all SQL queries
 - `analysis_results/` - Generated reports from your analysis
-
-### Support
-For issues or questions:
-1. Review the troubleshooting section above
-2. Check official Google Cloud documentation
-3. Consult with your organization's FinOps or data platform team
