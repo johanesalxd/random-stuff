@@ -87,40 +87,14 @@ The following new capabilities will be added to `finops_prompt.md`.
     LIMIT 10;
     ```
 
-### Addition 3: Deep-Dive Job Analysis (Interactive)
+### Addition 3: Query Deep-Dive Guide (Optional Next Step)
 
--   **Capability:** Perform a detailed analysis of a single slow or expensive job.
+**Status: REJECTED** ❌
+
+-   **Capability:** Provide a separate guide for detailed query-level performance analysis.
 -   **Source File:** `bigquery-utils/dashboards/system_tables/sql/job_analyzer_slow.sql`
--   **Benefit:** Moves the tool from a high-level recommender to a powerful, interactive troubleshooting assistant. The LLM can use this to explain *why* a query is slow (e.g., "This query spent 80% of its time in the 'JOIN' stage, which indicates a potential performance bottleneck").
--   **Integration Point:** This will be an **interactive follow-up action**. After the main analysis identifies a slow query, the LLM will prompt the user: *"I've identified a slow query (Job ID: xyz). Would you like me to perform a deep-dive analysis on it?"* If the user agrees, the LLM will then execute the query below.
--   **New SQL Query (Parameterized):**
-    ```sql
-    -- Interactive Step: Deep-Dive Job Analysis
-    -- Source: bigquery-utils/dashboards/system_tables/sql/job_analyzer_slow.sql
-    -- Provides a detailed breakdown of a single job's execution stages.
-    SELECT
-      job_id,
-      total_slot_ms,
-      ARRAY(
-        SELECT
-          STRUCT(
-            stage.name,
-            stage.end_ms - stage.start_ms AS duration_ms,
-            stage.slot_ms,
-            SAFE_DIVIDE(stage.slot_ms, (stage.end_ms - stage.start_ms)) AS avg_slots,
-            stage.wait_ratio_avg,
-            stage.read_ratio_avg,
-            stage.compute_ratio_avg,
-            stage.write_ratio_avg,
-            stage.shuffle_output_bytes_spilled
-          )
-        FROM
-          UNNEST(job_stages) stage
-      ) AS stage_performance
-    FROM
-      `region-{region_name}`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
-    WHERE job_id = @job_id_param;
-    ```
+-   **Reason for Rejection:** This feature crosses the line into query optimization rather than workload management. The framework's north star is to recommend workload management strategies (on-demand, baseline, autoscaling, hybrid), not to perform detailed query-level performance tuning. Including this would dilute the focus and scope of the tool.
+-   **Alternative:** Users needing query-level optimization can refer directly to the bigquery-utils repository or use BigQuery's built-in query execution details.
 
 ---
 
@@ -156,7 +130,7 @@ The queries in `bigquery-utils` are often more robust and detailed. We can repla
 
 ## 3. Updated Workflow
 
-The new analysis flow will incorporate these steps, making it more thorough.
+The new analysis flow will incorporate these steps, making it more thorough while maintaining focus on workload management strategy.
 
 ```mermaid
 graph TD
@@ -169,13 +143,8 @@ graph TD
     E --> F[Step 4: Identify Optimizations];
     F --> F1[Step 4.8: Analyze Job Errors];
     F1 --> G[Step 5: Generate Report];
-    G --> H{Slow Query Found?};
-    H -->|Yes| I[Prompt for Deep-Dive];
-    I --> J{User Agrees?};
-    J -->|Yes| K[Run Deep-Dive Analysis];
-    K --> L[End];
-    J -->|No| L;
-    H -->|No| L;
+    G --> H[End: Main Analysis Complete];
+    H -.Optional Next Step.-> I[06_query_deep_dive_guide.md];
 ```
 
 ---
@@ -187,6 +156,7 @@ The final reports will be enhanced as follows:
 -   **`00_current_configuration.md`:** Will now include a section on "Historical Slot Commitments" with a summary of how capacity has changed over time.
 -   **`03_usage_patterns.md`:** Will provide a more granular breakdown of peak usage, attributing it to specific users or job types.
 -   **`04_optimization_opportunities.md`:** Will include a new "Job Error Analysis" section with a table of common errors and their frequencies.
--   **`05_final_recommendation.md`:** The recommendations will be more context-aware, considering historical trends and error patterns. The LLM can also offer the interactive "deep-dive" as a next step.
+-   **`05_final_recommendation.md`:** The recommendations will be more context-aware, considering historical trends and error patterns. Will include a reference to the optional query deep-dive guide in the "Next Steps" section.
+-   **`06_query_deep_dive_guide.md` (New):** An optional guide for users who need to perform detailed query-level performance analysis after completing the main workload management analysis.
 
-This integration will create a more powerful and insightful FinOps tool, moving beyond high-level recommendations to provide deep, actionable intelligence.
+This integration will create a more powerful and insightful FinOps tool while maintaining laser focus on the primary goal: recommending the optimal workload management strategy.

@@ -2,6 +2,8 @@
 
 A comprehensive framework for analyzing BigQuery slot utilization and optimizing workload performance.
 
+**Note:** This framework integrates proven queries and patterns from [Google Cloud's BigQuery Utils](https://github.com/GoogleCloudPlatform/bigquery-utils/tree/master/dashboards/system_tables) to provide enhanced historical analysis and granular utilization insights.
+
 ## Overview
 
 This framework helps BigQuery administrators and data platform teams make data-driven decisions about workload management strategies. By analyzing historical usage patterns, it recommends the optimal approach: staying on-demand, committing to baseline slots, using autoscaling, or implementing a hybrid strategy.
@@ -35,12 +37,11 @@ This framework helps BigQuery administrators and data platform teams make data-d
 
 ### What This Framework Does
 
-- Analyzes 30 days of BigQuery slot usage patterns
-- Assesses current reservation configurations (if any)
+- Analyzes 30 days of slot usage patterns
 - Calculates workload stability and burstiness metrics
-- Recommends optimal workload management strategy based on performance characteristics
-- Identifies specific performance optimization opportunities
-- Generates detailed reports for stakeholder review
+- Recommends optimal workload management strategy
+- Identifies optimization opportunities
+- Generates detailed reports
 
 ### Who Should Use This
 

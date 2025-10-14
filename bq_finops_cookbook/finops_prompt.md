@@ -127,6 +127,59 @@ ORDER BY
 
 **MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
 
+### 0.2a Analyze Historical Slot Commitments
+
+Understand how your committed capacity has evolved over time:
+
+```sql
+-- Analyze historical slot commitments over time
+-- Source: Adapted from bigquery-utils/dashboards/system_tables/sql/daily_commitments.sql
+-- Provides a daily time-series of active monthly/annual slot commitments
+WITH
+  commitments AS (
+    SELECT
+      change_timestamp,
+      EXTRACT(DATE FROM change_timestamp) AS start_date,
+      IFNULL(
+        LEAD(DATE_SUB(EXTRACT(DATE FROM change_timestamp), INTERVAL 1 DAY))
+          OVER (PARTITION BY state ORDER BY change_timestamp),
+        CURRENT_DATE()) AS stop_date,
+      SUM(CASE WHEN action IN ('CREATE', 'UPDATE') THEN slot_count ELSE slot_count * -1 END)
+        OVER (
+          PARTITION BY state
+          ORDER BY change_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS slot_cumulative,
+      ROW_NUMBER()
+        OVER (
+          PARTITION BY EXTRACT(DATE FROM change_timestamp)
+          ORDER BY change_timestamp DESC
+        ) AS rn
+    FROM
+      `region-[YOUR_REGION]`.INFORMATION_SCHEMA.CAPACITY_COMMITMENT_CHANGES_BY_PROJECT
+    WHERE
+      state = 'ACTIVE' AND commitment_plan != 'FLEX'
+  ),
+  results AS (SELECT * FROM commitments WHERE rn = 1),
+  days AS (
+    SELECT day
+    FROM (SELECT start_date, stop_date FROM results),
+    UNNEST(GENERATE_DATE_ARRAY(start_date, stop_date)) day
+  )
+SELECT
+  TIMESTAMP(day) as date,
+  LAST_VALUE(slot_cumulative IGNORE NULLS) OVER(ORDER BY day) as committed_slots
+FROM days
+LEFT JOIN results ON day = DATE(change_timestamp)
+ORDER BY date;
+```
+
+**MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
+
+**Interpretation:**
+- Shows how committed capacity has changed over time
+- Helps identify if current under/over-utilization is a recent issue or long-term pattern
+- Useful for understanding capacity planning decisions and their outcomes
+
 ### 0.3 Calculate Current Reservation Utilization
 
 Analyze how well your existing reservations are being utilized:
@@ -315,32 +368,40 @@ LIMIT 10;
 
 **MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
 
-### 1.3 Analyze Usage Patterns by Time
+### 1.3 Analyze Granular Usage Patterns
 
-Understand when peak usage occurs:
+Understand usage patterns by project, user, and job type to enable workload segmentation:
 
 ```sql
--- Hourly usage pattern by day of week
--- Source: https://cloud.google.com/bigquery/docs/information-schema-jobs-timeline
--- Custom query to identify peak usage periods for workload scheduling
+-- Hourly usage patterns by project, user, and job type
+-- Source: Adapted from bigquery-utils/dashboards/system_tables/sql/hourly_utilization.sql
+-- Enables hybrid strategy recommendations by identifying distinct workload patterns
 SELECT
+  TIMESTAMP_TRUNC(period_start, HOUR) AS usage_hour,
   EXTRACT(DAYOFWEEK FROM period_start) as day_of_week,
   EXTRACT(HOUR FROM period_start) as hour_of_day,
-  ROUND(AVG(period_slot_ms) / 1000, 1) as avg_slot_seconds,
-  ROUND(MAX(period_slot_ms) / 1000, 1) as max_slot_seconds
+  project_id,
+  user_email,
+  job_type,
+  ROUND(SUM(period_slot_ms) / (1000 * 60 * 60), 2) AS hourly_slot_usage
 FROM
   `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
 WHERE
   period_start BETWEEN TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
     AND CURRENT_TIMESTAMP()
   AND (statement_type != 'SCRIPT' OR statement_type IS NULL)
-GROUP BY
-  day_of_week, hour_of_day
-ORDER BY
-  day_of_week, hour_of_day;
+GROUP BY 1, 2, 3, 4, 5, 6
+ORDER BY usage_hour DESC, hourly_slot_usage DESC
+LIMIT 1000;
 ```
 
 **MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
+
+**Interpretation:**
+- Identifies which projects have stable vs. variable usage patterns
+- Shows which users or teams drive peak usage
+- Enables Hybrid Strategy: assign stable projects to reservations, keep variable projects on-demand
+- Helps answer: "Should different projects get different workload management strategies?"
 
 ## Step 2: Characterize Your Workload
 
@@ -364,7 +425,34 @@ Burst Ratio = p95_slots / p50_slots
 
 **MCP Tool:** Use `ask_data_insights` from `bigquery-conversational-analytics` server to interpret patterns
 
+### Validation Checkpoint
+
+Before proceeding to strategy recommendation, validate your analysis:
+
+1. **Confidence Check:** Rate your confidence (1-10) in the calculated metrics
+2. **Assumption Check:** List any assumptions made about the workload patterns
+3. **Data Quality:** Confirm the data covers a representative period (no holidays, migrations, etc.)
+
 ## Step 3: Decide on Workload Management Strategy
+
+### Pre-Decision Validation
+
+Before recommending a strategy, validate your understanding:
+
+1. **List All Assumptions:**
+   - What assumptions have you made about workload patterns?
+   - Are there any seasonal factors not captured in the 30-day window?
+   - Have you accounted for planned growth or changes?
+
+2. **Confidence Rating:**
+   - Rate your confidence (1-10) in the strategy recommendation
+   - Identify any uncertainties that could affect the recommendation
+   - Note any additional data that would improve confidence
+
+3. **Stakeholder Alignment:**
+   - Confirm the recommendation aligns with business priorities
+   - Verify budget constraints are considered
+   - Ensure performance requirements are met
 
 Based on your metrics, choose the appropriate strategy:
 
@@ -690,6 +778,46 @@ Based on the hourly pattern analysis from Step 1.3:
 - Move batch jobs and non-critical queries to off-peak
 - Use Cloud Scheduler or Airflow for automated scheduling
 
+### 4.8 Analyze Job Error Patterns
+
+Identify common job errors that may indicate capacity or configuration issues:
+
+```sql
+-- Analyze job error patterns over 30 days
+-- Source: Adapted from bigquery-utils/dashboards/system_tables/sql/job_error.sql
+-- Identifies the most common reasons for query failures
+SELECT
+  error_result.reason,
+  error_result.message,
+  COUNT(*) AS error_count,
+  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1) as error_pct
+FROM
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+WHERE
+  creation_time BETWEEN TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+    AND CURRENT_TIMESTAMP()
+  AND error_result.reason IS NOT NULL
+  AND job_type = 'QUERY'
+  AND statement_type != 'SCRIPT'
+GROUP BY 1, 2
+ORDER BY error_count DESC
+LIMIT 10;
+```
+
+**MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
+
+**Interpretation:**
+- **`rateLimitExceeded`:** Indicates insufficient capacity, consider increasing reservation size
+- **`resourcesExceeded`:** Queries need more slots, may need larger reservation or autoscaling
+- **`accessDenied`:** Permission issues, not capacity-related
+- **`invalidQuery`:** Query syntax errors, not capacity-related
+- **`quotaExceeded`:** Project-level quota limits, may need quota increase
+
+**Actions:**
+- High rate of capacity-related errors (>5% of queries): Strong signal to increase committed capacity
+- Sporadic capacity errors: Current strategy may be adequate, errors are acceptable
+- Non-capacity errors: Address through query fixes or permission updates
+
 ## Step 5: Monitor and Validate
 
 After implementing your chosen strategy, monitor these metrics:
@@ -872,6 +1000,22 @@ bq_finops/analysis_results/
 - **Jobs with Contention:** [X]
 - **Impact:** [Description]
 - **Recommendation:** [Action items]
+
+## Job Error Analysis
+[Table of common error patterns]
+
+| Error Reason | Error Count | Error % | Capacity-Related |
+|--------------|-------------|---------|------------------|
+| [reason] | [X] | [X]% | [Yes/No] |
+
+**Capacity-Related Errors:**
+- **rateLimitExceeded:** [X] occurrences ([X]%)
+- **resourcesExceeded:** [X] occurrences ([X]%)
+
+**Recommendations:**
+- If capacity errors >5%: Increase reservation size or switch to committed capacity
+- If capacity errors <5%: Current strategy adequate
+- Non-capacity errors: Address through query fixes or permission updates
 
 ## Expensive Queries
 [Table of top users by bytes scanned]
