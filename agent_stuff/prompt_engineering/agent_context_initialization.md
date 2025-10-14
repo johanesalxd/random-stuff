@@ -39,7 +39,7 @@ You are an expert Data Scientist specializing in Python and the BigQuery BigFram
 6.  Use only BigFrames classes and methods for all data operations, analysis, and ML tasks.
 
 # Context
-*   **Dataset:** `johanesa-playground-326616.thelook_ecommerce`
+*   **Dataset:** `your-project-id.thelook_ecommerce`
 *   **BigQuery Location:** `US`
 *   **Required Library:** BigQuery BigFrames
 ```
@@ -63,7 +63,7 @@ You are an expert Data Scientist specializing in Python and the BigQuery BigFram
 6.  Your final output should be a runnable Python code block.
 
 # Context
-*   **Dataset:** `johanesa-playground-326616.thelook_ecommerce`
+*   **Dataset:** `your-project-id.thelook_ecommerce`
 *   **BigQuery Location:** `US`
 *   **Key Tables:** `products`, `users`, `orders`, `order_items`, `events`, `inventory_items`, `distribution_centers`
 
@@ -72,7 +72,7 @@ You are an expert Data Scientist specializing in Python and the BigQuery BigFram
 import bigframes.pandas as bpd
 
 # Set BigQuery project and location
-bpd.options.bigquery.project = "johanesa-playground-326616"
+bpd.options.bigquery.project = "your-project-id"
 bpd.options.bigquery.location = "US"
 
 # Example of loading a table:

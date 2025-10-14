@@ -1,6 +1,6 @@
 # BigQuery Data Science Agent: Example Prompts
 
-This document provides a set of example prompts for the BigQuery Data Science Agent, designed to be used with the `johanesa-playground-326616.thelook_ecommerce` dataset and BigFrames. The prompts are categorized by difficulty, from simple one-shot questions to complex, multi-step analytical tasks.
+This document provides a set of example prompts for the BigQuery Data Science Agent, designed to be used with the `your-project-id.thelook_ecommerce` dataset and BigFrames. The prompts are categorized by difficulty, from simple one-shot questions to complex, multi-step analytical tasks.
 
 ---
 
