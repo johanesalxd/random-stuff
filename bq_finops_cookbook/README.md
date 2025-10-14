@@ -16,17 +16,16 @@ This framework helps BigQuery administrators and data platform teams make data-d
 - Sporadic, unpredictable usage
 - Development/testing environments
 
-### When to Use Baseline Commitment
-- p25 slots ≥ 50 (meets minimum)
-- Low variability (CV < 1.0)
-- Stable baseline with manageable peaks
-- Production workloads with consistent patterns
-
-### When to Use Autoscaling (Enterprise Plus)
-- p25 slots ≥ 50 (baseline requirement)
+### When to Use Autoscaling Reservations (Standard Edition)
 - High burst ratio (p95/p50 > 3)
-- Predictable peak patterns
-- Need guaranteed capacity during bursts
+- Bursty workloads without baseline needs
+- Pay slot-hours (no commitments available)
+
+### When to Use Baseline Reservations (Enterprise/Enterprise Plus)
+- p25 slots ≥ 50 (meets minimum)
+- Stable workloads needing guaranteed capacity
+- Choose: Pay slot-hours OR purchase commitments (1-year/3-year for discounts)
+- Can add autoscaling on top (always pay-as-you-go)
 
 ### When to Use Hybrid Approach
 - Multiple distinct workload types
@@ -63,9 +62,10 @@ This framework helps BigQuery administrators and data platform teams make data-d
 ### Why Slot Optimization Matters
 
 BigQuery offers multiple workload management models:
-- **On-Demand (PAYG):** Flexible capacity, scales automatically
-- **Flat-Rate Commitments:** Dedicated capacity, predictable performance
-- **Autoscaling:** Dynamic capacity adjustment (Enterprise Plus edition)
+- **On-Demand (PAYG):** Flexible capacity, pay per query
+- **Reservations:** Dedicated capacity with different pricing options
+  - **Standard Edition:** Autoscaling only, pay slot-hours
+  - **Enterprise/Enterprise Plus:** Baseline (+ optional autoscaling), choose slot-hours or commitments
 
 Choosing the wrong model can result in:
 - **Resource Waste:** Paying for committed slots that sit idle
@@ -103,13 +103,13 @@ graph TD
     B -->|No| D{p25 >= 50?}
     C -->|Yes| E[Stay On-Demand]
     C -->|No| F{p25 >= 50?}
-    D -->|Yes| G{High Burst<br/>p95/p50 > 3?}
+    D -->|Yes| G{Need Guaranteed<br/>Baseline?}
     D -->|No| E
-    F -->|Yes| H{Stable Baseline?}
+    F -->|Yes| H{Need Guaranteed<br/>Baseline?}
     F -->|No| E
-    G -->|Yes| I[Autoscaling Commitment<br/>Enterprise Plus]
-    G -->|No| J[Baseline Commitment<br/>Standard/Enterprise]
-    H -->|Yes| J
+    G -->|Yes| I[Baseline Reservations<br/>Enterprise/Enterprise Plus]
+    G -->|No| J[Autoscaling Reservations<br/>Standard Edition]
+    H -->|Yes| I
     H -->|No| K[Hybrid Approach<br/>Mixed Strategy]
 ```
 

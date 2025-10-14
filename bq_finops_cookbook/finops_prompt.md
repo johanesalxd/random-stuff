@@ -469,56 +469,22 @@ Based on your metrics, choose the appropriate strategy:
 
 ---
 
-### Option B: Baseline Commitment (Standard/Enterprise Edition)
+### Option B: Autoscaling Reservations (Standard Edition)
 **Recommend when:**
-- p25 slots ≥ 50 (meets minimum)
-- Low to medium variability (CV < 1.0)
-- Stable baseline with manageable peaks
-- Production workloads with consistent patterns
-
-**Baseline Size:** Use p10 or p25 percentile (whichever is ≥ 50 slots)
-
-**Implementation:**
-```bash
-# Create reservation
-bq mk --reservation \
-  --project=[PROJECT_ID] \
-  --location=[REGION] \
-  --slots=[BASELINE_SLOTS] \
-  production_baseline
-
-# Assign top projects to reservation
-bq mk --reservation_assignment \
-  --project=[PROJECT_ID] \
-  --location=[REGION] \
-  --reservation=production_baseline \
-  --job_type=QUERY \
-  --assignee_type=PROJECT \
-  --assignee_id=[TOP_PROJECT_ID]
-```
-
-**Peak Handling:** Queries exceeding baseline will use on-demand slots automatically.
-
----
-
-### Option C: Autoscaling Commitment (Enterprise Plus Edition)
-**Recommend when:**
-- p25 slots ≥ 50 (baseline requirement)
 - High burst ratio (p95/p50 > 3)
-- Predictable peak patterns
-- Need guaranteed capacity during bursts
+- Bursty workloads without baseline needs
+- Don't need guaranteed baseline capacity
 
-**Baseline Size:** Use p25 percentile
-**Max Autoscale:** Set to p95 percentile
+**Reservation Size:** Use p95 percentile
 
 **Implementation:**
 ```bash
-# Create autoscaling reservation
+# Create autoscaling reservation (Standard Edition)
 bq mk --reservation \
   --project=[PROJECT_ID] \
   --location=[REGION] \
-  --slots=[BASELINE_SLOTS] \
-  --max_autoscale_slots=[MAX_SLOTS] \
+  --edition=STANDARD \
+  --autoscale_max_slots=[MAX_SLOTS] \
   production_autoscale
 
 # Assign projects
@@ -531,7 +497,53 @@ bq mk --reservation_assignment \
   --assignee_id=[TOP_PROJECT_ID]
 ```
 
-**Benefit:** Automatically scales up during peaks, scales down during quiet periods.
+**Pricing:** Pay slot-hours (no commitments available in Standard Edition)
+
+**Benefit:** Automatically scales to handle bursts, pay only for what you use.
+
+---
+
+### Option C: Baseline Reservations (Enterprise/Enterprise Plus)
+**Recommend when:**
+- p25 slots ≥ 50 (meets minimum)
+- Stable workloads needing guaranteed capacity
+- Production workloads with consistent patterns
+
+**Baseline Size:** Use p10 or p25 percentile (whichever is ≥ 50 slots)
+
+**Optional Autoscaling:** Add autoscaling on top if you have burst patterns (p95/p50 > 3)
+
+**Implementation:**
+```bash
+# Create baseline reservation (Enterprise/Enterprise Plus)
+bq mk --reservation \
+  --project=[PROJECT_ID] \
+  --location=[REGION] \
+  --edition=ENTERPRISE \
+  --slots=[BASELINE_SLOTS] \
+  production_baseline
+
+# Optional: Add autoscaling on top
+# --autoscale_max_slots=[MAX_SLOTS] \
+
+# Assign top projects to reservation
+bq mk --reservation_assignment \
+  --project=[PROJECT_ID] \
+  --location=[REGION] \
+  --reservation=production_baseline \
+  --job_type=QUERY \
+  --assignee_type=PROJECT \
+  --assignee_id=[TOP_PROJECT_ID]
+```
+
+**Pricing Options:**
+- **Pay slot-hours:** Flexible, no commitment
+- **Purchase commitments:** 1-year (20% discount) or 3-year (40% discount) for baseline capacity only
+  - Note: Autoscaling portion always pays slot-hours
+
+**Peak Handling:**
+- Without autoscaling: Queries exceeding baseline use on-demand slots
+- With autoscaling: Automatically scales up to max, then uses on-demand if needed
 
 ---
 
