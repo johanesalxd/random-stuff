@@ -8,16 +8,31 @@ A collection of random, ad-hoc code and projects built over time.
 random-stuff/
 ├── agent_stuff/
 │   ├── AGENTS.md                           # Coding standards for AI-generated code
+│   ├── MEMORY_BANK.md                      # Context management for complex projects
 │   └── cline_gemini_mcp/                   # BigQuery MCP server management for Cline
+├── bq_finops_cookbook/                     # BigQuery slot optimization framework
 ├── bq_kubernetes_comparison/               # BigQuery vs Kubernetes resource management comparison
+├── bq_migration/                           # Databricks to GCP migration questionnaire
+├── bq_prompt_engineering/                  # BigQuery Data Science Agent example prompts
 └── remote_docker/                          # Docker SSH tunnel management
 ```
 
 ## Projects
 
-- **agent_stuff**: Coding standards based on Google style guides and Cline MCP server configurations
-- **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies
-- **remote_docker**: SSH tunnel management for remote Docker daemon access
+### BigQuery Tools
+
+- **bq_finops_cookbook**: Comprehensive framework for analyzing BigQuery slot utilization and optimizing workload performance. Provides data-driven recommendations for choosing between on-demand, baseline reservations, autoscaling, or hybrid strategies.
+- **bq_migration**: Migration questionnaire and TCO analysis framework for transitioning from Databricks on AWS to Google Cloud Platform, with focus on serverless architecture.
+- **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies.
+- **bq_prompt_engineering**: Example prompts for BigQuery Data Science Agent, categorized by complexity level (simple one-shot to complex multi-step analytical tasks).
+
+### AI/Agent Tools
+
+- **agent_stuff**: Coding standards based on Google style guides (AGENTS.md), context management guidelines (MEMORY_BANK.md), and Cline MCP server configurations for BigQuery integration.
+
+### Infrastructure
+
+- **remote_docker**: SSH tunnel management for remote Docker daemon access.
 
 ## Shell Integration
 
