@@ -14,7 +14,8 @@ random-stuff/
 ├── bq_kubernetes_comparison/               # BigQuery vs Kubernetes resource management comparison
 ├── bq_migration/                           # Databricks to GCP migration questionnaire
 ├── bq_prompt_engineering/                  # BigQuery Data Science Agent example prompts
-└── remote_docker/                          # Docker SSH tunnel management
+├── remote_docker/                          # Docker SSH tunnel management
+└── samba_management/                       # Samba service management
 ```
 
 ## Projects
@@ -45,11 +46,15 @@ alias manage-docker='~/Developer/git/random-stuff/remote_docker/manage_docker_tu
 
 # Cline MCP Management
 alias manage-mcp='~/Developer/git/random-stuff/agent_stuff/cline_gemini_mcp/manage_mcp_servers.sh'
+
+# Samba Management
+alias manage-samba='~/Developer/git/random-stuff/samba_management/manage_samba.sh'
 ```
 
 **Usage:**
 - `manage-docker`: Start, stop, or check status of Docker SSH tunnel
 - `manage-mcp`: Manage Cline MCP server configurations
+- `manage-samba`: Manage Samba services (smbd and nmbd) on MacOS
 
 ## AI Agent Configuration
 
