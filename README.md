@@ -12,7 +12,6 @@ random-stuff/
 │   └── cline_gemini_mcp/                   # BigQuery MCP server management for Cline
 ├── bq_finops_cookbook/                     # BigQuery slot optimization framework
 ├── bq_kubernetes_comparison/               # BigQuery vs Kubernetes resource management comparison
-├── bq_migration/                           # Databricks to GCP migration questionnaire
 ├── bq_prompt_engineering/                  # BigQuery Data Science Agent example prompts
 ├── remote_docker/                          # Docker SSH tunnel management
 └── samba_management/                       # Samba service management
@@ -23,7 +22,6 @@ random-stuff/
 ### BigQuery Tools
 
 - **bq_finops_cookbook**: Comprehensive framework for analyzing BigQuery slot utilization and optimizing workload performance. Provides data-driven recommendations for choosing between on-demand, baseline reservations, autoscaling, or hybrid strategies.
-- **bq_migration**: Migration questionnaire and TCO analysis framework for transitioning from Databricks on AWS to Google Cloud Platform, with focus on serverless architecture.
 - **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies.
 - **bq_prompt_engineering**: Example prompts for BigQuery Data Science Agent, categorized by complexity level (simple one-shot to complex multi-step analytical tasks).
 
