@@ -1,0 +1,8 @@
+Based on the guidance in 'bq_finops_cookbook/finops_prompt.md', please help me analyze
+my project johanesa-playground-326616, which has compute and storage in the US region.
+
+Please list your plan before execution.
+
+* how much slots that needed in average
+* if we use the average as commitments, how many jobs will be affected, e.g.,e the one that causing spikes, p90, p95
+*
