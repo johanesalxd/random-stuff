@@ -1,3 +1,5 @@
 .DS_Store
 *.tmp
 internal/
+# Internal Google-specific content
+internal/
