@@ -1,0 +1,183 @@
+# Migration Questionnaire: Databricks on AWS to Google Cloud
+
+### **Purpose and Process**
+
+This document outlines the strategy and methodology for estimating the cost of migrating data workloads from the Databricks on AWS platform to Google Cloud. Its purpose is to gather the specific technical metrics required to build a Total Cost of Ownership (TCO) analysis for evolving the architecture.
+
+The process is designed to be straightforward:
+1.  **Understand the Strategy:** Review the proposed architectural evolution from a cluster-centric model to a modern, serverless paradigm on GCP.
+2.  **Provide Key Metrics:** Answer the questions in the following sections.
+3.  **Receive Analysis:** The provided answers will be used to generate a detailed pricing estimate and a preliminary migration roadmap.
+
+### 1. From Databricks on AWS to a Modern GCP Architecture
+
+To translate costs accurately, it's helpful to first understand the components. The Databricks platform separates its **Control Plane** (managed by Databricks) from the **Data Plane** (EC2 instances and S3 storage running in the designated AWS account). The total cost is a combination of the Databricks license/DBU fee and the underlying AWS infrastructure.
+
+The goal is to map the AWS infrastructure portion (vCPU, RAM, Storage) to an optimized, serverless-first architecture on Google Cloud. This approach is designed to enhance efficiency, improve scalability, and reduce operational overhead by paying only for consumed resources.
+
+### 2. The GCP Translation Strategy: From Cluster-Centric to Serverless
+
+The proposed GCP architecture evolves from a "cluster-centric" model to a "serverless, consumption-based" model. This is the core of the cost-optimization and efficiency strategy.
+
+```mermaid
+graph LR
+    subgraph AWS Sources
+        A[APIs / Object Data]
+        B[Databases]
+        C[Message Broker]
+    end
+
+    subgraph GCP [Google Cloud Platform]
+        subgraph Datalake
+            direction LR
+            D[Batch Pipeline<br>Serverless Spark]
+            E[CDC<br>Datastream]
+            F[Streaming Pipeline<br>Dataflow]
+            G[Orchestration & Governance<br>Cloud Composer & Dataplex]
+        end
+
+        subgraph Central Storage
+            direction TB
+            H[Storage<br>BigQuery]
+        end
+
+        subgraph Consumers
+            direction LR
+            I[Compute<br>AI/ML/LLM on BigQuery]
+            J[Self-service Dashboard<br>Looker]
+        end
+    end
+
+    A --> D
+    B --> E
+    C --> F
+    D -- Batch --> H
+    E -- Replication --> H
+    F -- Streaming --> H
+    H --> I
+    I -- Reporting --> J
+```
+
+*   **Databricks Jobs/Notebooks** -> **Serverless Spark on Dataproc:** Instead of paying for a cluster's uptime, Spark code is submitted to pay only for the exact vCPU-cores and memory used, for the precise duration of the job.
+*   **Databricks SQL Warehouse** -> **BigQuery Editions (Slots):** Instead of a dedicated cluster of VMs, a flat-rate amount of multi-tenant query processing power ("Slots") is reserved. This provides predictable costs and leverages BigQuery's powerful serverless engine.
+*   **Batch Database Reads** -> **Datastream:** The existing ETL pipeline is evolved to a Change Data Capture (CDC) model. Datastream lands change data into BigQuery, where a low-latency `MERGE` job efficiently applies updates.
+*   **Databricks Realtime/Streaming -> Dataflow (Apache Beam):** For continuous data ingestion and processing, workloads are migrated to Dataflow. This provides a fully managed, serverless service for stream processing that automatically scales resources based on workload demands.
+*   **DBR Workflows / Airflow** -> **Cloud Composer:** This acts as a lightweight, low-cost "command center." Its role is to orchestrate other powerful services (e.g., triggering `dbt run` or submitting a Serverless Spark job), minimizing its own footprint and cost.
+
+### 3. The Questionnaire: Capturing the Essentials
+
+The following questions are designed to gather the raw metrics needed to model the costs for the serverless GCP architecture described above.
+
+---
+
+### **Questionnaire**
+
+#### **1. CDC with Datastream (for Database Replication)**
+
+| # | Question | Answer |
+|:---|:---|:---|
+| 1.1 | Can you list the source databases/tables you plan to replicate using CDC? | |
+| 1.2 | For each source table, what is its **total size (in GB/TB)**? <br> *This helps price the one-time historical data backfill.* | |
+| 1.3 | For each source, what is the **estimated daily volume of changed data (in GB)**? <br> *This is for pricing the ongoing, continuous replication.* | |
+| 1.4 | What are the database types and versions (e.g., PostgreSQL 13, Oracle 19c)? | |
+
+#### **2. Serverless Spark (for Batch ETL/ELT)**
+
+| # | Question | Answer |
+|:---|:---|:---|
+| 2.1 | For recurring Spark ETL jobs, what **AWS instance types** are typically used for the worker nodes (e.g., m5.xlarge, r6g.2xlarge)? | |
+| 2.2 | On average, how many **worker nodes** do these jobs run on? | |
+| 2.3 | What is the **average runtime** (in hours) and **daily frequency** of these jobs? <br> *This combination allows for the calculation of the total vCPU-hours needed, which maps directly to Serverless Spark costs.* | |
+
+#### **3. Realtime Pipelines (from Databricks to Dataflow)**
+
+*Please provide answers to either the "Usage-Based" questions OR the "Infrastructure-Based" questions, whichever is easier.*
+
+| # | Question (Usage-Based - Preferred) | Answer |
+|:---|:---|:---|
+| 3.1 | What are the sources for the realtime pipelines (e.g., Kafka, Kinesis)? | |
+| 3.2 | What is the average and peak message throughput (e.g., messages/sec or MB/sec)? | |
+| 3.3 | What is the average size of a single message/record (in KB)? | |
+| 3.4 | Can you describe the processing logic? (e.g., simple filtering, windowed aggregations, joins). <br> *Details on window duration and frequency are very helpful here.* | |
+| 3.5 | Is the processing stateful? If so, what is the estimated size of the state data per key? <br> *This is critical for estimating memory requirements.* | |
+| 3.6 | What are the end-to-end data processing latency requirements? | |
+| **#** | **Question (Infrastructure-Based - Fallback)** | **Answer** |
+| 3.7 | What **AWS instance types** and **number of nodes** are used for the current Databricks realtime clusters? | |
+| 3.8 | Are these realtime clusters running 24/7, or are they scaled down during off-peak hours? | |
+
+#### **4. BigQuery Storage (Central Data Lake & Warehouse)**
+
+| # | Question | Answer |
+|:---|:---|:---|
+| 4.1 | What is the **total volume of data (in TB)** that will be migrated to BigQuery? | |
+| 4.2 | Of that total, what percentage is "active" (queried daily/weekly) vs. "archive" (queried rarely)? <br> *This helps optimize storage costs, as BigQuery automatically discounts long-term storage by ~50% for data not modified in 90 days.* | |
+| 4.3 | What is the estimated monthly data **growth rate (in TB)**? | |
+
+#### **5. BigQuery Compute (for Analytics, BI, and dbt)**
+
+*Please provide answers to either the "Usage-Based" questions OR the "Infrastructure-Based" questions, whichever is easier.*
+
+| # | Question (Usage-Based - Preferred) | Answer |
+|:---|:---|:---|
+| 5.1 | Can you estimate the **total data scanned per day (in TB)** by all queries? | |
+| 5.2 | How many **concurrent queries** are typically seen during peak business hours? | |
+| **#** | **Question (Infrastructure-Based - Fallback)** | **Answer** |
+| 5.3 | What are the **cluster sizes** (e.g., Small, Medium) and **number of clusters** for the Databricks SQL Warehouses? | |
+| 5.4 | What are the auto-scaling settings (min/max clusters) for these warehouses? | |
+
+#### **6. Cloud Composer (Orchestration)**
+
+*Please provide answers to either the "Usage-Based" questions OR the "Infrastructure-Based" questions, whichever is easier.*
+
+| # | Question (Usage-Based - Preferred) | Answer |
+|:---|:---|:---|
+| 6.1 | At the busiest time of day, what is the **maximum number of tasks running in parallel** across all pipelines? <br> *This is the key metric for sizing the Composer environment correctly.* | |
+| 6.2 | Are the orchestration tasks mostly lightweight (triggering other services) or do any perform heavy processing *within the orchestrator itself*? <br> *This confirms the strategy of using Composer for scheduling, not heavy data processing.* | |
+| **#** | **Question (Infrastructure-Based - Fallback)** | **Answer** |
+| 6.3 | For the Databricks Workflows that run on "Job Clusters," what are the typical **instance types and number of nodes** used? | |
+| 6.4 | What is the average runtime for these workflow/job clusters? | |
+
+#### **7. Data Governance with Dataplex**
+
+| # | Question | Answer |
+|:---|:---|:---|
+| 7.1 | How is Unity Catalog primarily used today (e.g., simple metastore, enforcing access control, data lineage)? | |
+| 7.2 | Can the requirements for data access control be described (e.g., role-based access, column-level security)? | |
+| 7.3 | Is there a need for automated data quality monitoring or data lineage tracking? | |
+
+---
+
+### **Example Scenario: Translating Data to a GCP Estimate**
+
+To make this concrete, the following example uses sample answers to show how they are translated into a GCP cost model.
+
+**Given the following sample answers:**
+
+*   **ETL Workload:** The workload processes **12 TB of data per day** for ETL.
+*   **Storage:** There is **800 TB** of data in S3 for the Data Warehouse.
+*   **Orchestration:** The orchestration includes **~300 pipelines** per day (216 on Airflow, 85 on DBR Workflows).
+*   **DB SQL:** The setup uses a **'Classic'** DBSQL warehouse (assumed to be a `Medium` size for this example).
+*   **Realtime Workload:** A 24/7 pipeline processes **10,000 messages/sec** from a Kafka topic. The processing involves simple filtering and enrichment before writing to BigQuery.
+*   **(Hypothetical for this example)** It is also assumed the 12 TB/day ETL is processed by **10 large Spark jobs**, each using a cluster of **10 `m5.xlarge` (4 vCPU) nodes** and running for **2 hours**.
+
+**Here is the step-by-step translation to a monthly GCP cost estimate:**
+
+*(Note: Prices are illustrative placeholders, e.g., `$X`, `$Y`. The official GCP Pricing Calculator will be used for the actual TCO.)*
+
+| Service | Calculation & Justification | Estimated Cost (Monthly) |
+| :--- | :--- | :--- |
+| **Serverless Spark** | **Total Compute:** 10 jobs * 10 nodes/job * 4 vCPU/node = 400 vCPUs total. <br> **Total vCPU hours/day:** 400 vCPUs * 2 hours = 800 vCPU-hours/day. <br> This is the raw compute to be matched. Serverless Spark is priced in DCU-hours (1 DCU ≈ 1 vCPU). <br> **Total DCU-hours/month:** 800 * 30 days = 24,000 DCU-hours/month. | `24,000 * $Y per DCU-hour` |
+| **Dataflow** | **Data Volume:** 10,000 msg/sec * 3600 s/hr * 24 hr/day ≈ 864 million msgs/day. <br> **vCPU/Memory Estimate:** For a simple filter/enrichment pipeline at this scale, a starting point of **2-4 vCPUs** with autoscaling is a reasonable estimate. Dataflow automatically manages and scales the workers. <br> **Pricing Components:** <br> 1. vCPU-hours: `4 vCPUs * 24 hours/day * 30 days` <br> 2. Memory-GB-hours: Based on worker type. <br> 3. Data Processed (Streaming Engine): Based on total data volume. | `(vCPU-hrs * $V) + (Mem-hrs * $M) + (Data GB * $D)` |
+| **BigQuery Storage** | With 800 TB of data, BigQuery automatically discounts storage not touched for 90 days by ~50%. Assuming 20% active / 80% archive: <br> **Active Storage:** 160 TB * `$A per TB/month`. <br> **Long-Term Storage:** 640 TB * `$B per TB/month`. | `(160 * $A) + (640 * $B)` |
+| **BigQuery Compute** | A 'Classic' `Medium` Databricks SQL Warehouse represents a steady workload, which is a perfect fit for **BigQuery Editions (flat-rate)**. Based on the DBR cluster size, a **100 Slot commitment** with autoscaling would be proposed. This single reservation provides capacity for three key workloads: <br> 1.  **BI & Ad-hoc Queries:** Replaces the DBSQL warehouse. <br> 2.  **DBT Transformations:** Runs all transformations for the 300 daily pipelines. <br> 3.  **Datastream MERGE Jobs:** Efficiently absorbs the continuous, low-latency `MERGE` operations that apply CDC changes, ensuring data is fresh without needing a separate compute reservation. <br> This consolidation into a single, predictable flat-rate plan is a major cost and operational advantage. | `Fixed monthly cost of a 100 Slot commitment` |
+| **Cloud Composer** | With ~300 DAGs per day and an estimated peak of 40-50 concurrent tasks, a medium-sized environment is sufficient. The proposed **`composer-2-medium`** environment offers significant cost savings compared to spinning up a dedicated DBR cluster for each of the 85 DBR workflows. | `Fixed price of a Medium Composer 2 environment` |
+| **Dataplex** | The cost is primarily for actions like data discovery and quality scans, priced per GB processed. For an 800 TB data lake, a budget would be factored in for scanning a critical subset of data, which is typically a small fraction of the overall compute cost. | `Estimated based on desired scan frequency` |
+
+---
+
+### **Next Steps**
+
+Once this questionnaire is completed, the following steps will be taken:
+1.  **Analyze the Metrics:** The provided data will be used to model the target GCP architecture.
+2.  **Generate a TCO Estimate:** A detailed cost comparison will be created using the official Google Cloud Pricing Calculator.
+3.  **Schedule a Review:** A follow-up session will be arranged to present the TCO analysis, discuss the findings, and outline a potential migration roadmap.
