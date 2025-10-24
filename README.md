@@ -101,7 +101,13 @@ When updating standards, modify the local/source files, then sync and re-apply p
 
 ## Git Repository Management
 
-This repository uses a dual-remote setup to separate public and internal Google-specific content.
+### Current Status
+
+This repository is configured with a dual-remote setup:
+- main branch → origin/main (GitHub - public content)
+- internal-main branch → internal/main (GitLab - Google-internal content)
+- internal/ directory excluded from GitHub via .gitignore
+- Both branches aligned and up to date with their respective remotes
 
 ### Repository Structure
 
