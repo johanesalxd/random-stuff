@@ -1,4 +1,0 @@
-* breakdown the scenarios first, for batch and real-time.
-** see how for the historical data use cases, regardless of the modules, to put the BQ at front for scalability
-** check the possibility to have real-time use cases on the GCP side, given all of the data and apps is on the AWS side. e.g., how about precomputing some of the stuff? or opening the inferencing part on the GCP, etc.
-* need to add this details to the generic slides and share with the team.
