@@ -41,18 +41,17 @@ In this phase, the Xendit team will take the lead in migrating their workloads, 
 
 ## 3. 3-Month Migration Timeline
 
-Here is a simple Gantt chart outlining the key activities over a 3-month period.
+Here is a detailed weekly Gantt chart outlining the key activities over a 12-week period.
 
-| Phase | Task | Month 1 | Month 2 | Month 3 |
-| :--- | :--- | :---: | :---: | :---: |
-| **Phase 1** | **Foundation & Enablement (Partner-Led)** | | | |
-| | Infrastructure Setup | [X] | | |
-| | Data Foundation (Bronze, Silver, Gold layers) | [X] | [X] | |
-| | Enablement & Training (BigQuery 101) | [X] | | |
-| | Pilot Migration | | [X] | |
-| **Phase 2**| **Migration & Scaling (Xendit-Led, Partner-Supported)** | | | |
-| | Guided Migration of Initial Workloads | | [X] | |
-| | Migration of Complex/Custom Workloads | | [X] | [X] |
-| | Performance Optimization | | | [X] |
-| | Handover, Documentation, and Project Closure | | | [X] |
-
+| Phase | Task | W1 | W2 | W3 | W4 | W5 | W6 | W7 | W8 | W9 | W10 | W11 | W12 |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Phase 1** | **Foundation & Enablement (Partner-Led)** | | | | | | | | | | | | |
+| | Infrastructure Setup | [X] | [X] | | | | | | | | | | |
+| | Data Foundation (Bronze, Silver, Gold layers) | | [X] | [X] | [X] | [X] | | | | | | | |
+| | Enablement & Training (BigQuery 101) | | | [X] | [X] | | | | | | | | |
+| | Pilot Migration | | | | | [X] | [X] | | | | | | |
+| **Phase 2**| **Migration & Scaling (Xendit-Led, Partner-Supported)** | | | | | | | | | | | | |
+| | Guided Migration of Initial Workloads | | | | | | | [X] | [X] | | | | | |
+| | Migration of Complex/Custom Workloads | | | | | | | | [X] | [X] | [X] | | |
+| | Performance Optimization | | | | | | | | | | [X] | [X] | |
+| | Handover, Documentation, and Project Closure | | | | | | | | | | | | [X] |
