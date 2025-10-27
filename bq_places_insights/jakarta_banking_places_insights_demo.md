@@ -6,7 +6,7 @@
 
 ---
 
-## 🔧 Quick Customization Guide
+## Quick Customization Guide
 
 **To adapt this demo for another bank:**
 
@@ -22,7 +22,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 1. [Demo Overview](#demo-overview)
 2. [Understanding the Data](#understanding-the-data)
 3. [Demo Flow](#demo-flow)
@@ -33,7 +33,7 @@
 8. [Query 5: Regional Performance](#query-5-regional-performance)
 9. [Query 6: Operating Hours Optimization](#query-6-operating-hours-optimization)
 10. [Query 7: Payment Method & Technology Adoption](#query-7-payment-method--technology-adoption)
-11. [Integrating BCA Data](#integrating-bca-data)
+11. [Integrating Your Bank's Data](#integrating-your-banks-data)
 12. [Visualization Guide](#visualization-guide)
 13. [Presentation Tips](#presentation-tips)
 
@@ -684,7 +684,7 @@ market_by_postal AS (
   FROM `johanesa-playground-326616.places_insights___id.places`,
   UNNEST(postal_code_names) AS postal_code
   WHERE
-    ('Jakarta' IN UNNEST(locality_names))
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types))
     AND business_status = 'OPERATIONAL'
   GROUP BY postal_code
@@ -736,7 +736,7 @@ market_opportunities AS (
          OR 'atm' IN UNNEST(types)) AS financial_count
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    ('Jakarta' IN UNNEST(locality_names))
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
   GROUP BY geo_txt
   HAVING commercial_count > 50 AND financial_count < 10
