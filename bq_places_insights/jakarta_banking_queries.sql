@@ -278,7 +278,7 @@ market_by_postal AS (
   FROM `johanesa-playground-326616.places_insights___id.places`,
   UNNEST(postal_code_names) AS postal_code
   WHERE
-    ('Jakarta' IN UNNEST(locality_names))
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types))
     AND business_status = 'OPERATIONAL'
   GROUP BY postal_code
@@ -322,7 +322,7 @@ market_opportunities AS (
          OR 'atm' IN UNNEST(types)) AS financial_count
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    ('Jakarta' IN UNNEST(locality_names))
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
   GROUP BY geo_txt
   HAVING commercial_count > 50 AND financial_count < 10

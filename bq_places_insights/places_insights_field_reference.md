@@ -7,7 +7,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Dataset Overview](#dataset-overview)
 2. [Complete Field Reference](#complete-field-reference)
@@ -217,36 +217,36 @@ The Indonesia Places Insights dataset covers **all major cities** with comprehen
 
 | Field | Type | Primary Use | Query Frequency |
 |-------|------|-------------|-----------------|
-| `point` | GEOGRAPHY | 🗺️ Mapping, spatial queries | ⭐⭐⭐⭐⭐ |
-| `location.latitude` | FLOAT | 📍 Coordinates | ⭐⭐⭐⭐⭐ |
-| `location.longitude` | FLOAT | 📍 Coordinates | ⭐⭐⭐⭐⭐ |
-| `id` | STRING | 🔑 Unique identifier | ⭐⭐⭐⭐⭐ |
-| `types` | ARRAY<STRING> | 🏷️ Multi-type filtering | ⭐⭐⭐⭐⭐ |
-| `primary_type` | STRING | 🏷️ Main classification | ⭐⭐⭐⭐⭐ |
-| `business_status` | STRING | ✅ Filter operational | ⭐⭐⭐⭐⭐ |
-| `rating` | FLOAT | ⭐ Quality metric | ⭐⭐⭐⭐⭐ |
-| `user_rating_count` | INTEGER | 📊 Popularity | ⭐⭐⭐⭐ |
-| `locality_names` | ARRAY<STRING> | 🏙️ City filtering | ⭐⭐⭐⭐⭐ |
-| `postal_code_names` | ARRAY<STRING> | 📮 Postal analysis | ⭐⭐⭐⭐ |
-| `administrative_area_level_1_name` | STRING | 🗺️ Province | ⭐⭐⭐⭐ |
-| `administrative_area_level_2_name` | STRING | 🏙️ City/regency | ⭐⭐⭐⭐ |
-| `administrative_area_level_3_name` | STRING | 📍 District | ⭐⭐⭐⭐ |
-| `price_level` | STRING | 💰 Price analysis | ⭐⭐⭐ |
-| `regular_opening_hours` | RECORD | 🕐 Hours analysis | ⭐⭐⭐⭐ |
-| `wheelchair_accessible_entrance` | BOOLEAN | ♿ Accessibility | ⭐⭐⭐ |
-| `accepts_credit_cards` | BOOLEAN | 💳 Payment methods | ⭐⭐⭐ |
-| `accepts_nfc` | BOOLEAN | 📱 Digital payment | ⭐⭐⭐ |
-| `delivery` | BOOLEAN | 🚚 Service options | ⭐⭐⭐ |
-| `takeout` | BOOLEAN | 🥡 Service options | ⭐⭐⭐ |
-| `dine_in` | BOOLEAN | 🍽️ Service options | ⭐⭐⭐ |
-| `outdoor_seating` | BOOLEAN | 🌳 Amenities | ⭐⭐ |
-| `good_for_children` | BOOLEAN | 👶 Family-friendly | ⭐⭐ |
-| `good_for_groups` | BOOLEAN | 👥 Group capacity | ⭐⭐ |
-| `serves_vegetarian_food` | BOOLEAN | 🥗 Dietary options | ⭐⭐ |
-| `free_parking_lot` | BOOLEAN | 🅿️ Parking | ⭐⭐ |
-| `paid_parking_lot` | BOOLEAN | 🅿️ Parking | ⭐⭐ |
-| `reservable` | BOOLEAN | 📅 Reservations | ⭐⭐ |
-| `ev_charge_options` | RECORD | 🔌 EV infrastructure | ⭐ |
+| `point` | GEOGRAPHY | Mapping, spatial queries | Very High |
+| `location.latitude` | FLOAT | Coordinates | Very High |
+| `location.longitude` | FLOAT | Coordinates | Very High |
+| `id` | STRING | Unique identifier | Very High |
+| `types` | ARRAY<STRING> | Multi-type filtering | Very High |
+| `primary_type` | STRING | Main classification | Very High |
+| `business_status` | STRING | Filter operational | Very High |
+| `rating` | FLOAT | Quality metric | Very High |
+| `user_rating_count` | INTEGER | Popularity | High |
+| `locality_names` | ARRAY<STRING> | City filtering | Very High |
+| `postal_code_names` | ARRAY<STRING> | Postal analysis | High |
+| `administrative_area_level_1_name` | STRING | Province | High |
+| `administrative_area_level_2_name` | STRING | City/regency | High |
+| `administrative_area_level_3_name` | STRING | District | High |
+| `price_level` | STRING | Price analysis | Medium |
+| `regular_opening_hours` | RECORD | Hours analysis | High |
+| `wheelchair_accessible_entrance` | BOOLEAN | Accessibility | Medium |
+| `accepts_credit_cards` | BOOLEAN | Payment methods | Medium |
+| `accepts_nfc` | BOOLEAN | Digital payment | Medium |
+| `delivery` | BOOLEAN | Service options | Medium |
+| `takeout` | BOOLEAN | Service options | Medium |
+| `dine_in` | BOOLEAN | Service options | Medium |
+| `outdoor_seating` | BOOLEAN | Amenities | Low |
+| `good_for_children` | BOOLEAN | Family-friendly | Low |
+| `good_for_groups` | BOOLEAN | Group capacity | Low |
+| `serves_vegetarian_food` | BOOLEAN | Dietary options | Low |
+| `free_parking_lot` | BOOLEAN | Parking | Low |
+| `paid_parking_lot` | BOOLEAN | Parking | Low |
+| `reservable` | BOOLEAN | Reservations | Low |
+| `ev_charge_options` | RECORD | EV infrastructure | Very Low |
 
 ---
 
@@ -271,7 +271,7 @@ FROM (
     ROUND(AVG(rating), 2) AS avg_rating
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    'Surabaya' IN UNNEST(locality_names)  -- Change city as needed
+    administrative_area_level_1_name LIKE '%Jakarta%'  -- Jakarta filter
     AND business_status = 'OPERATIONAL'
   GROUP BY geo_txt
 )
@@ -316,7 +316,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(rating), 2) AS avg_rating_in_category
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Bandung' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
   AND business_status = 'OPERATIONAL'
   AND rating IS NOT NULL
@@ -354,7 +354,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Medan' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'cafe' IN UNNEST(types)
   AND business_status = 'OPERATIONAL'
   AND administrative_area_level_3_name IS NOT NULL
@@ -399,7 +399,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   )) / COUNT(*) * 100, 1) AS saturday_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Denpasar' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
   AND business_status = 'OPERATIONAL';
 ```
@@ -427,7 +427,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS entrance_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Makassar' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND business_status = 'OPERATIONAL'
   AND primary_type IS NOT NULL
 GROUP BY primary_type
@@ -496,7 +496,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Semarang' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
   AND business_status = 'OPERATIONAL'
   AND price_level IS NOT NULL
@@ -532,7 +532,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(rating >= 4.5) AS excellent_count
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Tangerang Selatan' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND business_status = 'OPERATIONAL'
   AND primary_type IS NOT NULL
 GROUP BY primary_type
@@ -565,7 +565,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(takeout = true) / COUNT(*) * 100, 1) AS takeout_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
 WHERE
-  'Depok' IN UNNEST(locality_names)
+  administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
   AND business_status = 'OPERATIONAL';
 ```
@@ -637,7 +637,7 @@ FROM (
     COUNTIF('finance' IN UNNEST(types)) AS finance_count
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    'Surabaya' IN UNNEST(locality_names)
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND (
       'bank' IN UNNEST(types)
       OR 'atm' IN UNNEST(types)
@@ -679,7 +679,7 @@ WITH commercial_activity AS (
     COUNTIF('atm' IN UNNEST(types)) AS atm_count
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    'Bandung' IN UNNEST(locality_names)
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
   GROUP BY geo_txt
   HAVING commercial_count > 0
@@ -773,10 +773,10 @@ SELECT WITH AGGREGATION_THRESHOLD
     WHERE hours.start_time IS NOT NULL
   )) / COUNT(*) * 100, 1) AS saturday_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
-WHERE
-  'Medan' IN UNNEST(locality_names)
-  AND 'bank' IN UNNEST(types)
-  AND business_status = 'OPERATIONAL';
+  WHERE
+    administrative_area_level_1_name LIKE '%Jakarta%'
+    AND 'bank' IN UNNEST(types)
+    AND business_status = 'OPERATIONAL';
 ```
 
 **Insights:**
@@ -802,10 +802,10 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(accepts_nfc = true) / COUNT(*) * 100, 1) AS nfc_adoption_pct,
   ROUND(COUNTIF(accepts_credit_cards = true) / COUNT(*) * 100, 1) AS credit_adoption_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
-WHERE
-  'Denpasar' IN UNNEST(locality_names)
-  AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types))
-  AND business_status = 'OPERATIONAL';
+  WHERE
+    administrative_area_level_1_name LIKE '%Jakarta%'
+    AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types))
+    AND business_status = 'OPERATIONAL';
 ```
 
 **Insights:**
@@ -872,11 +872,11 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS entrance_pct,
   ROUND(AVG(rating), 2) AS avg_rating
 FROM `johanesa-playground-326616.places_insights___id.places`
-WHERE
-  'Surabaya' IN UNNEST(locality_names)
-  AND 'bank' IN UNNEST(types)
-  AND business_status = 'OPERATIONAL'
-  AND administrative_area_level_3_name IS NOT NULL
+  WHERE
+    administrative_area_level_1_name LIKE '%Jakarta%'
+    AND 'bank' IN UNNEST(types)
+    AND business_status = 'OPERATIONAL'
+    AND administrative_area_level_3_name IS NOT NULL
 GROUP BY district
 HAVING bank_count >= 5
 ORDER BY entrance_pct DESC
@@ -907,10 +907,10 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
 FROM `johanesa-playground-326616.places_insights___id.places`,
 UNNEST(postal_code_names) AS postal_code
-WHERE
-  'Semarang' IN UNNEST(locality_names)
-  AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types) OR 'finance' IN UNNEST(types))
-  AND business_status = 'OPERATIONAL'
+  WHERE
+    administrative_area_level_1_name LIKE '%Jakarta%'
+    AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types) OR 'finance' IN UNNEST(types))
+    AND business_status = 'OPERATIONAL'
 GROUP BY postal_code
 HAVING total_financial_services >= 5
 ORDER BY total_financial_services DESC
@@ -941,11 +941,11 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(rating >= 4.5) / COUNT(*) * 100, 1) AS excellent_pct,
   ROUND(COUNTIF(rating < 3.5) / COUNT(*) * 100, 1) AS poor_pct
 FROM `johanesa-playground-326616.places_insights___id.places`
-WHERE
-  'Tangerang Selatan' IN UNNEST(locality_names)
-  AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types) OR 'finance' IN UNNEST(types))
-  AND business_status = 'OPERATIONAL'
-  AND rating IS NOT NULL
+  WHERE
+    administrative_area_level_1_name LIKE '%Jakarta%'
+    AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types) OR 'finance' IN UNNEST(types))
+    AND business_status = 'OPERATIONAL'
+    AND rating IS NOT NULL
 GROUP BY primary_type
 ORDER BY location_count DESC;
 ```
@@ -975,7 +975,7 @@ WITH commercial_density AS (
     COUNTIF('atm' IN UNNEST(types)) AS atm_count
   FROM `johanesa-playground-326616.places_insights___id.places`
   WHERE
-    'Makassar' IN UNNEST(locality_names)
+    administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
   GROUP BY geo_txt
   HAVING commercial_count > 0
