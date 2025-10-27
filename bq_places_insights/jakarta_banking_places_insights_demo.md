@@ -193,20 +193,28 @@ GROUP BY primary_type
 ORDER BY location_count DESC
 ```
 
-### Expected Results
+### Actual Results
 
 | primary_type | location_count | avg_rating | avg_reviews | excellent_rated | excellent_pct |
 |--------------|----------------|------------|-------------|-----------------|---------------|
-| atm | 9,434 | - | - | - | - |
-| bank | 7,028 | 4.2 | 28.5 | ~3,200 | ~46% |
-| finance | 6,191 | - | - | - | - |
+| atm | 9,434 | 4.01 | 3.1 | 1,870 | 19.8% |
+| bank | 7,028 | 4.06 | 30.5 | 2,014 | 28.7% |
+| finance | 6,191 | 4.28 | 33.6 | 2,062 | 33.3% |
+
+### Key Insights
+
+1. **Market Size:** Jakarta has 22,653 operational financial service locations (9,434 ATMs + 7,028 banks + 6,191 finance companies)
+2. **ATM Dominance:** ATMs outnumber bank branches by 34%, indicating strong customer preference for self-service banking
+3. **Quality Hierarchy:** Finance companies lead in quality (4.28 avg rating, 33.3% excellent) > Banks (4.06, 28.7%) > ATMs (4.01, 19.8%)
+4. **Review Engagement:** Finance companies average 33.6 reviews vs banks at 30.5, showing higher customer engagement
+5. **Excellence Gap:** Only 28.7% of banks achieve excellent ratings (4.5+), leaving significant room for differentiation
 
 ### Talking Points
 
-1. **Market Size:** "Jakarta has over 16,000 financial service locations"
-2. **ATM Dominance:** "ATMs outnumber bank branches, showing customer preference for self-service"
-3. **Quality Bar:** "46% of banks achieve excellent ratings (4.5+), setting a high competitive standard"
-4. **Opportunity:** "This is the competitive landscape BCA operates in"
+1. **Market Scale:** "Jakarta's financial services market has over 22,000 operational locations - one of Southeast Asia's most competitive markets"
+2. **Self-Service Trend:** "ATMs outnumber branches by 34%, reflecting customer preference for 24/7 self-service access"
+3. **Quality Benchmark:** "The average bank rating is 4.06, with only 29% achieving excellence - there's clear opportunity to stand out through superior service"
+4. **Customer Engagement:** "Banks with higher ratings average 30+ reviews, showing that quality drives customer engagement and word-of-mouth"
 
 ### Next Step
 → "Now let's see WHERE these services are concentrated..."
@@ -259,25 +267,35 @@ ORDER BY total_count DESC
 3. Under "Visualization configuration":
    - Set **Data Column** to `total_count`
    - Adjust **Color scheme** to "Red-Yellow-Green" or "Viridis"
-   - Set **Circle radius** to 15-20 for better visibility
+   - Set **Point size** to 15-20 for better visibility
 4. **Interpret the map:**
    - Darker/larger circles = higher concentration
    - Lighter/smaller circles = lower concentration
 
-### Expected Insights
+### Actual Results (Top 10 Concentration Areas)
 
-**Top Concentration Areas:**
-- Central Jakarta (106.82, -6.19): 280 locations
-- Business districts show highest density
-- Residential areas show moderate density
-- Peripheral areas show sparse coverage
+| Location | Total | Banks | ATMs | Avg Rating |
+|----------|-------|-------|------|------------|
+| POINT(106.82 -6.19) | 280 | 132 | 206 | 4.06 |
+| POINT(106.82 -6.14) | 216 | 120 | 140 | 4.13 |
+| POINT(106.82 -6.21) | 196 | 105 | 127 | 4.09 |
+| POINT(106.83 -6.14) | 192 | 102 | 123 | 3.98 |
+| POINT(106.8 -6.24) | 181 | 71 | 137 | 4.15 |
+
+### Key Insights
+
+1. **Extreme Concentration:** The densest area (106.82, -6.19) has 280 financial services in a ~1.1km² grid - averaging 1 location per 4,000m²
+2. **ATM-Heavy Zones:** Top areas have 1.5-1.9x more ATMs than branches, showing strong self-service infrastructure
+3. **Quality Variation:** Dense areas range from 3.98 to 4.15 average rating - saturation doesn't guarantee quality
+4. **Central Jakarta Dominance:** All top 10 locations cluster around 106.8-106.83 longitude, -6.14 to -6.24 latitude (Central/South Jakarta)
+5. **Competition Intensity:** Top 5 areas alone contain 1,065 financial services - representing 6.2% of Jakarta's total in just 5 grid cells
 
 ### Talking Points
 
-1. **Saturation:** "Central Jakarta is highly saturated with 280+ financial services in some grid cells"
-2. **Competition:** "These dark areas represent intense competition"
-3. **Gaps:** "Notice the lighter areas - potential opportunities"
-4. **Strategy:** "BCA needs to decide: compete in saturated areas or target gaps?"
+1. **Market Saturation:** "The most competitive area has 280 financial services in just 1.1km² - that's one location every 50 meters"
+2. **Geographic Clustering:** "Financial services concentrate heavily in Central and South Jakarta business districts"
+3. **Strategic Choice:** "Banks must decide: compete in these saturated zones with 200+ competitors, or target underserved areas"
+4. **Quality Opportunity:** "Even in dense areas, ratings vary by 0.17 points - there's room to differentiate through superior service"
 
 ### Next Step
 → "Let's understand the quality standards in this market..."
@@ -317,28 +335,29 @@ GROUP BY rating_category
 ORDER BY rating_category DESC
 ```
 
-### Expected Results
+### Actual Results
 
-| rating_category | bank_count | avg_reviews | accessible_locations | accessibility_pct |
-|-----------------|------------|-------------|----------------------|-------------------|
-| Excellent (4.5+) | 2,126 | 40.1 | 163 | 7.7% |
-| Good (4.0-4.5) | 982 | 32.3 | 119 | 12.1% |
-| Average (3.5-4.0) | 563 | 23.4 | 73 | 13.0% |
-| Below Average (<3.5) | 1,034 | 13.9 | 76 | 7.4% |
-
-### Talking Points
-
-1. **Quality Distribution:** "46% of banks achieve excellent ratings - this is the competitive standard"
-2. **Review Correlation:** "Excellent banks average 40 reviews vs 14 for below-average - engagement matters"
-3. **Accessibility Gap:** "Only 9% report accessibility features - opportunity for differentiation"
-4. **Customer Expectations:** "Customers expect 4.5+ ratings and modern payment options"
+| rating_category | bank_count | avg_reviews | accessible_locations | accessibility_pct | card_payment | nfc_payment |
+|-----------------|------------|-------------|----------------------|-------------------|--------------|-------------|
+| Excellent (4.5+) | 2,126 | 40.1 | 163 | 7.7% | 0 | 3 |
+| Good (4.0-4.5) | 982 | 32.3 | 119 | 12.1% | 0 | 0 |
+| Average (3.5-4.0) | 563 | 23.4 | 73 | 13.0% | 2 | 2 |
+| Below Average (<3.5) | 1,034 | 13.9 | 76 | 7.4% | 1 | 2 |
 
 ### Key Insights
 
-- **Quality Bar is High:** Nearly half of competitors are excellent
-- **Reviews Matter:** More reviews correlate with higher ratings
-- **Service Gaps:** Accessibility data is sparse - potential differentiator
-- **BCA Benchmark:** Compare BCA's ratings against these standards
+1. **Quality Distribution:** 45.5% of banks achieve excellent (4.5+) or good (4.0-4.5) ratings - high competitive bar
+2. **Review Engagement Gap:** Excellent banks average 40.1 reviews vs 13.9 for below-average - nearly 3x difference
+3. **Accessibility Paradox:** Good-rated banks show highest accessibility (12.1%) while excellent-rated show lowest (7.7%)
+4. **Payment Data Scarcity:** Only 7 total locations report payment methods across 4,705 banks - 0.15% data coverage
+5. **Quality Spread:** 22% of banks fall below average (<3.5 rating) - significant underperformance segment
+
+### Talking Points
+
+1. **Competitive Standard:** "Nearly half of Jakarta's banks achieve good or excellent ratings - the quality bar is high and customers have many options"
+2. **Engagement Drives Ratings:** "Excellent banks average 40 reviews compared to 14 for below-average - customer engagement strongly correlates with quality"
+3. **Accessibility Opportunity:** "Only 9.3% of banks report accessibility features - this represents a major differentiation opportunity for banks targeting inclusive service"
+4. **Data Transparency Gap:** "Less than 1% of banks report payment methods - early adopters who publicize digital capabilities can gain competitive advantage"
 
 ### Next Step
 → "Now let's find the opportunities - where should BCA expand?"
@@ -392,20 +411,30 @@ LIMIT 20
 3. Set **Data Column** to `opportunity_score`
 4. Use **Red color scheme** (higher score = hotter opportunity)
 
-### Expected Results
+### Actual Results (Top 20 White Space Opportunities)
 
 | geo_txt | commercial_businesses | existing_financial_services | opportunity_score |
 |---------|----------------------|----------------------------|-------------------|
-| POINT(106.9 -6.31) | 382 | 1 | 382.0 |
-| POINT(106.93 -6.21) | 1,129 | 3 | 376.3 |
-| POINT(106.69 -6.17) | 343 | 1 | 343.0 |
+| POINT(106.9 -6.31) | 401 | 1 | 401.0 |
+| POINT(106.93 -6.21) | 1,170 | 3 | 390.0 |
+| POINT(106.69 -6.17) | 364 | 1 | 364.0 |
+| POINT(106.74 -6.17) | 306 | 1 | 306.0 |
+| POINT(106.94 -6.13) | 248 | 1 | 248.0 |
+
+### Key Insights
+
+1. **Extreme Opportunity:** Top location (106.9, -6.31) has 401 commercial businesses but only 1 financial service - 401:1 ratio
+2. **Massive Underserved Area:** Second-ranked area (106.93, -6.21) has 1,170 businesses with just 3 banks/ATMs - serving 390 businesses each
+3. **Geographic Spread:** Top opportunities span from West (106.69) to East (106.96) Jakarta - not concentrated in one area
+4. **Proven Commercial Zones:** All top 20 areas have 50+ commercial establishments - these are active business districts, not emerging areas
+5. **Low Competition Advantage:** 15 of top 20 areas have ≤2 financial services - first movers can capture significant market share
 
 ### Talking Points
 
-1. **Opportunity Score:** "Score of 382 means 382 businesses per financial service - massive underserved demand"
-2. **Top Opportunity:** "Area at 106.93, -6.21 has 1,129 businesses but only 3 banks/ATMs"
-3. **Strategic Value:** "These are proven commercial areas with established foot traffic"
-4. **Low Competition:** "First-mover advantage in these underserved zones"
+1. **Quantified Opportunity:** "The top white space area has 401 businesses per financial service - that's 401 potential customers sharing one bank or ATM"
+2. **Scale of Underservice:** "Our #2 opportunity has 1,170 commercial businesses served by only 3 financial locations - each serving 390 businesses"
+3. **Proven Demand:** "These aren't speculative areas - they're established commercial zones with 50 to 1,170 active businesses already operating"
+4. **First-Mover Advantage:** "Most of these areas have 1-3 financial services total - early entrants can establish market dominance before competition arrives"
 
 ### Strategic Recommendations
 
@@ -459,12 +488,30 @@ ORDER BY avg_rating DESC
 LIMIT 15
 ```
 
+### Actual Results (Top 15 Districts by Rating)
+
+| District | Banks | Avg Rating | Avg Reviews | Excellent % | Accessible |
+|----------|-------|------------|-------------|-------------|------------|
+| Kecamatan Senen | 91 | 4.24 | 25.4 | 62.6% | 11 |
+| Kecamatan Menteng | 145 | 4.23 | 26.8 | 50.3% | 27 |
+| Kecamatan Pasar Rebo | 31 | 4.20 | 48.7 | 41.9% | 2 |
+| Kecamatan Tanah Abang | 263 | 4.19 | 30.0 | 49.4% | 40 |
+| Kecamatan Sawah Besar | 140 | 4.18 | 17.8 | 47.9% | 10 |
+
+### Key Insights
+
+1. **District Quality Range:** Top districts average 4.18-4.24 rating - narrow 0.06 point spread among leaders
+2. **Excellence Variation:** Senen leads with 62.6% excellent banks vs Pasar Rebo at 41.9% - 21 point gap
+3. **Size vs Quality:** Tanah Abang has 263 banks (largest) but ranks 4th in quality - scale doesn't guarantee excellence
+4. **Review Engagement:** Pasar Rebo averages 48.7 reviews despite having only 31 banks - high customer engagement
+5. **Accessibility Leaders:** Tanah Abang (40 accessible) and Setiabudi (69 accessible) lead in inclusive infrastructure
+
 ### Talking Points
 
-1. **District Variation:** "Quality varies significantly by district"
-2. **Premium Areas:** "Highest-rated districts likely serve affluent customers"
-3. **Opportunity Districts:** "Lower-rated districts may have service gaps"
-4. **BCA Strategy:** "Match BCA's service level to district expectations"
+1. **Premium Districts:** "Senen and Menteng lead in quality with 4.23-4.24 average ratings and 50-63% excellent banks"
+2. **Market Opportunity:** "Even top districts show room for improvement - best district is only 4.24 vs theoretical 5.0 maximum"
+3. **Engagement Matters:** "Smaller districts like Pasar Rebo punch above their weight with 48.7 average reviews - quality drives engagement"
+4. **Strategic Targeting:** "Banks can choose: compete in premium districts (Menteng, Senen) or improve service in lower-rated areas"
 
 ### Next Step
 → "Let's analyze when banks are available to serve customers..."
@@ -514,25 +561,26 @@ WHERE
   AND business_status = 'OPERATIONAL'
 ```
 
-### Expected Results
+### Actual Results
 
-| total_banks | saturday_service | sunday_service | saturday_pct | sunday_pct |
-|-------------|------------------|----------------|--------------|------------|
-| 7,320 | 1,236 | 1,039 | 16.9% | 14.2% |
-
-### Talking Points
-
-1. **Weekend Gap:** "Only 17% of banks open on Saturday - major customer convenience gap"
-2. **Sunday Service:** "14% offer Sunday service - opportunity for differentiation"
-3. **Customer Needs:** "Working customers need weekend banking access"
-4. **BCA Advantage:** "Extended hours = competitive advantage"
+| total_banks | saturday_service | sunday_service | early_opening | late_closing | saturday_pct | sunday_pct |
+|-------------|------------------|----------------|---------------|--------------|--------------|------------|
+| 7,320 | 1,236 | 1,039 | 3,860 | 1,455 | 16.9% | 14.2% |
 
 ### Key Insights
 
-- **Limited Weekend Service:** 83% of banks closed on Saturday
-- **Customer Inconvenience:** Forces customers to take time off work
-- **Opportunity:** BCA can differentiate with extended hours
-- **ATM Reliance:** Customers forced to use ATMs for weekend needs
+1. **Weekend Service Gap:** Only 16.9% open Saturday, 14.2% Sunday - 83% of banks unavailable on weekends
+2. **Early Birds:** 52.7% (3,860) open by 8am Monday - majority serve early customers on weekdays
+3. **Evening Service Limited:** Only 19.9% (1,455) stay open past 5pm - most close during business hours
+4. **Customer Inconvenience:** Working customers (9am-5pm jobs) must take time off for 80% of banks
+5. **Differentiation Opportunity:** Weekend/evening service represents major competitive advantage for early adopters
+
+### Talking Points
+
+1. **Massive Weekend Gap:** "83% of Jakarta banks close on Saturday - forcing working customers to choose between banking and their jobs"
+2. **Evening Access Limited:** "Only 20% of banks stay open past 5pm - most close before customers finish work"
+3. **Competitive Advantage:** "Banks offering weekend/evening hours can capture the 80% of customers underserved by traditional schedules"
+4. **ATM Dependency:** "Limited hours drive customers to ATMs for basic services - banks miss relationship-building opportunities"
 
 ### Next Step
 → "Now let's examine payment technology adoption..."
@@ -565,33 +613,33 @@ WHERE
   AND business_status = 'OPERATIONAL'
 ```
 
-### Expected Results
+### Actual Results
 
-| total_locations | credit_cards | debit_cards | nfc_payment | nfc_adoption_pct |
-|-----------------|--------------|-------------|-------------|------------------|
-| 17,135 | 512 | 527 | 510 | 3.0% |
-
-### Talking Points
-
-1. **Low Digital Adoption:** "Only 3% report NFC payment capability"
-2. **Data Gap:** "Most locations don't report payment methods - opportunity to lead"
-3. **Technology Lag:** "Digital payment infrastructure needs improvement"
-4. **BCA Leadership:** "BCA can set the standard for digital payment adoption"
+| total_locations | credit_cards | debit_cards | nfc_payment | cash_only | nfc_adoption_pct | credit_adoption_pct | debit_adoption_pct |
+|-----------------|--------------|-------------|-------------|-----------|------------------|---------------------|-------------------|
+| 17,135 | 512 | 527 | 510 | 7 | 3.0% | 3.0% | 3.1% |
 
 ### Key Insights
 
-- **Sparse Data:** Only ~3% of locations report payment methods
-- **Digital Opportunity:** Low NFC adoption shows room for innovation
-- **Customer Expectation:** Modern customers expect contactless payment
-- **Competitive Edge:** Early digital adopters gain customer preference
+1. **Severe Data Gap:** Only 3% of locations report payment methods - 97% data transparency gap
+2. **Digital Payment Scarcity:** 510 locations (3%) report NFC capability out of 17,135 total
+3. **Card Acceptance Low:** Credit (512) and debit (527) card reporting equally sparse at ~3%
+4. **Cash Dominance Unclear:** Only 7 locations explicitly report cash-only - but lack of data doesn't mean digital acceptance
+5. **First-Mover Advantage:** Banks publicizing digital capabilities can differentiate in data-sparse market
+
+### Talking Points
+
+1. **Transparency Opportunity:** "97% of financial locations don't report payment methods - banks that publicize digital capabilities gain immediate visibility advantage"
+2. **Digital Payment Gap:** "Only 3% report NFC/contactless payment - massive opportunity for banks to lead digital transformation"
+3. **Customer Expectations:** "Modern customers expect contactless payment - but can't find which banks offer it due to data gaps"
+4. **Competitive Edge:** "First banks to prominently advertise digital payment capabilities will capture tech-savvy customer segment"
 
 ### Strategic Implications
 
-**For BCA:**
-1. **Lead Digital Transformation:** Be first to offer comprehensive NFC
-2. **Customer Education:** Promote digital payment benefits
-3. **Infrastructure Investment:** Upgrade all touchpoints
-4. **Marketing Advantage:** "Most modern banking experience in Jakarta"
+1. **Publicize Digital Capabilities:** Update Google Business profiles with payment methods
+2. **Lead Market Education:** Promote NFC/contactless as differentiator
+3. **Infrastructure Investment:** Ensure all touchpoints support modern payment methods
+4. **Marketing Advantage:** Position as "Jakarta's most digitally advanced bank"
 
 ---
 
@@ -828,7 +876,7 @@ ORDER BY rating_advantage DESC
      - Red-Yellow-Green: Good for opportunity (green = good)
      - Viridis: Good for density (dark = high)
      - Red: Good for heat/intensity
-   - Circle Radius: 15-20 pixels
+   - Point size: 15-20
    - Opacity: 70-80%
 
 4. **Interpret:**
