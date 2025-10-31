@@ -10,6 +10,7 @@ random-stuff/
 │   ├── AGENTS.md                           # Coding standards for AI-generated code
 │   ├── MEMORY_BANK.md                      # Context management for complex projects
 │   └── cline_gemini_mcp/                   # BigQuery MCP server management for Cline
+├── bq_firebase/                            # Firebase Analytics with BigQuery integration
 ├── bq_finops_cookbook/                     # BigQuery slot optimization framework
 ├── bq_kubernetes_comparison/               # BigQuery vs Kubernetes resource management comparison
 ├── bq_places_insights/                     # BigQuery Places Insights competitive analysis
@@ -22,6 +23,7 @@ random-stuff/
 
 ### BigQuery Tools
 
+- **bq_firebase**: Jupyter notebook demonstrating Firebase Analytics integration with BigQuery. Shows how to query and analyze Firebase Analytics data exported to BigQuery, including event tracking, user behavior analysis, and conversion funnel analysis.
 - **bq_finops_cookbook**: Comprehensive framework for analyzing BigQuery slot utilization and optimizing workload performance. Provides data-driven recommendations for choosing between on-demand, baseline reservations, autoscaling, or hybrid strategies.
 - **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies.
 - **bq_places_insights**: Competitive intelligence framework using BigQuery Places Insights for banking/finance sector. Includes Jakarta banking demo with 7 analytical queries (market landscape, geographic heatmap, quality analysis, white space opportunities, regional performance, operating hours, payment adoption) and comprehensive field reference guide covering 70+ data fields with use cases for market analysis and strategic expansion planning.
