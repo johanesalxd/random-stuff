@@ -173,6 +173,114 @@ get_dir() {
 - Explain "why" not "what"
 - Include TODO comments with owner when needed
 
+### JavaScript/TypeScript
+
+Documentation follows Google TypeScript Style Guide, which covers both TypeScript and modern JavaScript (ES6+) patterns. Google officially recommends TypeScript over JavaScript for new projects.
+
+**JSDoc Format:**
+- Use `/** */` for all documentation comments
+- First line: brief description
+- Include `@param`, `@return`, and `@throws` tags
+- Type annotations in JSDoc for JavaScript, native types for TypeScript
+
+**Example (JavaScript with JSDoc):**
+```javascript
+/**
+ * Loads configuration from the backend API.
+ *
+ * @return {Promise<?Object>} Configuration object or null on error.
+ */
+async function loadConfig() {
+  try {
+    const response = await fetch('/api/config');
+    return await response.json();
+  } catch (error) {
+    console.error('Error loading configuration:', error);
+    return null;
+  }
+}
+
+/**
+ * Tracks a custom analytics event.
+ *
+ * @param {string} eventName The name of the event to track.
+ * @param {Object=} eventParams Optional parameters for the event.
+ */
+function trackEvent(eventName, eventParams = {}) {
+  if (window.gtag) {
+    window.gtag('event', eventName, eventParams);
+  }
+}
+```
+
+**Example (TypeScript):**
+```typescript
+/**
+ * Loads configuration from the backend API.
+ */
+async function loadConfig(): Promise<Config | null> {
+  try {
+    const response = await fetch('/api/config');
+    return await response.json();
+  } catch (error) {
+    console.error('Error loading configuration:', error);
+    return null;
+  }
+}
+
+/**
+ * Tracks a custom analytics event.
+ *
+ * @param eventName The name of the event to track.
+ * @param eventParams Optional parameters for the event.
+ */
+function trackEvent(eventName: string, eventParams: Record<string, unknown> = {}): void {
+  if (window.gtag) {
+    window.gtag('event', eventName, eventParams);
+  }
+}
+```
+
+**Requirements:**
+- All exported functions, classes, and interfaces must have JSDoc
+- Use JSDoc `@param` and `@return` tags for JavaScript
+- TypeScript: types in signatures, descriptions in JSDoc
+- Include `@throws` for functions that throw exceptions
+- File-level `@fileoverview` for module documentation
+- Use `//` for implementation comments, `/** */` for documentation
+
+**Modern JavaScript/TypeScript Features:**
+- Use `const` and `let`, never `var`
+- Prefer arrow functions for callbacks and short functions
+- Use template literals for string interpolation
+- Use destructuring for cleaner code
+- Use async/await over raw Promises
+- Use optional chaining (`?.`) and nullish coalescing (`??`)
+- Use spread operator for arrays and objects
+
+**Example of Modern Patterns:**
+```javascript
+// Destructuring and default parameters
+function processUser({name, email, role = 'user'} = {}) {
+  console.log(`Processing ${name} (${email}) as ${role}`);
+}
+
+// Arrow functions and array methods
+const activeUsers = users
+  .filter(user => user.active)
+  .map(user => user.name);
+
+// Async/await
+async function fetchUserData(userId) {
+  const response = await fetch(`/api/users/${userId}`);
+  const data = await response.json();
+  return data;
+}
+
+// Optional chaining and nullish coalescing
+const userName = user?.profile?.name ?? 'Anonymous';
+```
+
 ## General Code Quality Standards
 
 ### Naming Conventions
@@ -196,6 +304,13 @@ get_dir() {
 - Functions and variables: `lowercase_with_underscores`
 - Constants and environment variables: `UPPERCASE_WITH_UNDERSCORES`
 - Source filenames: `lowercase_with_underscores.sh`
+
+**JavaScript/TypeScript:**
+- Functions and variables: `lowerCamelCase`
+- Classes and interfaces: `UpperCamelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Private fields: `lowerCamelCase` (optionally with trailing underscore)
+- Type parameters: `UpperCamelCase` or single letter `T`
 
 ### Project Structure and Directory Naming
 
@@ -260,6 +375,31 @@ Follow language-specific best practices for organizing project directories.
   ```
 - Mirror package structure in directory hierarchy
 - Separate main code from test code
+
+**JavaScript/TypeScript:**
+- Directories and files: `lowercase-with-hyphens` or `lowerCamelCase`
+- Standard Node.js/Web project layout:
+  ```
+  project-name/
+  ├── src/
+  │   ├── components/
+  │   │   └── MyComponent.ts
+  │   ├── services/
+  │   │   └── apiService.ts
+  │   ├── utils/
+  │   │   └── helpers.ts
+  │   └── index.ts
+  ├── tests/
+  │   └── myComponent.test.ts
+  ├── public/
+  │   └── index.html
+  ├── README.md
+  ├── package.json
+  └── tsconfig.json
+  ```
+- Use `src/` for source code
+- Use `tests/` or `__tests__/` for test files
+- Separate concerns into logical directories (components, services, utils)
 
 **General Guidelines:**
 - Keep directory names short and descriptive
@@ -332,6 +472,16 @@ Every function must include:
 - Check return values explicitly
 - Use `local` for function variables
 - Run ShellCheck on all scripts
+
+### JavaScript/TypeScript
+- 2 spaces for indentation (no tabs)
+- Maximum line length: 80 characters
+- Semicolons required at end of statements
+- Single quotes for strings (except to avoid escaping)
+- Use Prettier or similar formatter when available
+- Use `const` and `let`, never `var`
+- Prefer template literals for string interpolation
+- Use trailing commas in multi-line arrays and objects
 
 ## Error Handling
 
@@ -651,6 +801,35 @@ logger.error("Database connection failed", exception);
 logger.info("User password: {}", password);  // Never do this
 ```
 
+**JavaScript/TypeScript Example:**
+```javascript
+// Use console methods with appropriate levels
+// Good logging
+console.log('Application started');
+console.info('User login successful', {userId: user.id});
+console.warn('API rate limit approaching', {remaining: 10});
+console.error('Database connection failed', error);
+
+// For production, use a logging library
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({filename: 'error.log', level: 'error'}),
+    new winston.transports.File({filename: 'combined.log'})
+  ]
+});
+
+// Good logging
+logger.info('User login successful', {userId: user.id});
+logger.error('Database connection failed', {error: error.message});
+
+// Bad logging - contains sensitive data
+logger.info('User credentials', {password: password});  // Never do this
+```
+
 ### Best Practices
 
 - Use appropriate log levels consistently
@@ -696,6 +875,13 @@ Before adding a new dependency, consider:
 - Use dependency management sections for version control
 - Run OWASP Dependency-Check for security scanning
 
+**JavaScript/TypeScript:**
+- Use `package.json` for dependency declarations
+- Use lock files: `package-lock.json` (npm), `yarn.lock` (Yarn), or `pnpm-lock.yaml` (pnpm)
+- Pin versions or use semantic versioning (^1.2.3, ~1.2.3)
+- Use `npm ci` or `yarn install --frozen-lockfile` for reproducible builds
+- Run `npm audit` or `yarn audit` for security scanning
+
 ### Security Scanning
 
 Regularly scan dependencies for vulnerabilities:
@@ -709,6 +895,11 @@ go list -json -m all | nancy sleuth
 
 # Java
 mvn dependency-check:check
+
+# JavaScript/TypeScript
+npm audit
+# or
+yarn audit
 ```
 
 ### Update Strategy
@@ -857,13 +1048,73 @@ public class CalculatorTest {
 - Use meaningful assertion messages
 - Test one behavior per test method
 
-### General Testing Best Practices
+### JavaScript/TypeScript Testing (Jest/Mocha)
 
-**Test Organization:**
-- Keep tests independent and isolated
-- Use meaningful test names that describe the scenario
-- Group related tests together
-- Maintain test code quality equal to production code
+**Test File Structure:**
+- Test file naming: `<fileName>.test.ts` or `<fileName>.spec.ts`
+- Test function naming: Descriptive strings in `describe` and `it` blocks
+- Place tests in `tests/` or `__tests__/` directory, or co-located with source files
+
+**Example (Jest):**
+```typescript
+describe('calculateTotal', () => {
+  it('returns correct sum with valid items', () => {
+    const items = [{price: 10.0}, {price: 20.0}];
+    const result = calculateTotal(items, 0.1);
+    expect(result).toBe(33.0);
+  });
+
+  it('throws error with negative tax rate', () => {
+    const items = [{price: 10.0}];
+    expect(() => {
+      calculateTotal(items, -0.1);
+    }).toThrow('Tax rate cannot be negative');
+  });
+
+  it('handles empty items array', () => {
+    const result = calculateTotal([], 0.1);
+    expect(result).toBe(0);
+  });
+});
+```
+
+**Example (Async Testing):**
+```typescript
+describe('fetchUserData', () => {
+  it('fetches user data successfully', async () => {
+    const userId = '123';
+    const mockData = {id: '123', name: 'John'};
+
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        json: () => Promise.resolve(mockData),
+      })
+    ) as jest.Mock;
+
+    const result = await fetchUserData(userId);
+    expect(result).toEqual(mockData);
+    expect(fetch).toHaveBeenCalledWith(`/api/users/${userId}`);
+  });
+
+  it('handles fetch errors', async () => {
+    global.fetch = jest.fn(() =>
+      Promise.reject(new Error('Network error'))
+    ) as jest.Mock;
+
+    await expect(fetchUserData('123')).rejects.toThrow('Network error');
+  });
+});
+```
+
+**Requirements:**
+- Use descriptive test names in `describe` and `it` blocks
+- Follow AAA pattern (Arrange, Act, Assert)
+- Use `beforeEach`/`afterEach` for setup/teardown
+- Mock external dependencies (API calls, DOM, etc.)
+- Test async code with async/await or promises
+- One logical assertion per test (when practical)
+
+### General Testing Best Practices
 
 **Test Coverage:**
 - Write tests for all public functions and methods
@@ -872,17 +1123,14 @@ public class CalculatorTest {
 - Test both success and failure paths
 
 **Test Quality:**
+- Keep tests independent and isolated
 - One logical assertion per test (when practical)
-- Use descriptive assertion messages
 - Mock external dependencies
-- Avoid test interdependencies
 - Keep tests simple and focused
 
 **Test Documentation:**
-- Document complex test scenarios
-- Explain why a test exists if not obvious
-- Include setup requirements in comments
-- Document any test data dependencies
+- Document complex test scenarios when needed
+- Explain non-obvious test requirements
 
 ## Documentation and Diagram Standards
 
