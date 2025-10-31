@@ -1,7 +1,7 @@
 # Places Insights Field Reference & Use Cases Guide
 ## Indonesia Dataset - Complete Reference
 
-**Dataset:** `johanesa-playground-326616.places_insights___id.places`
+**Dataset:** `your-project-id.places_insights___id.places`
 **Region:** Indonesia (All major cities)
 **Last Updated:** October 2025
 
@@ -269,7 +269,7 @@ FROM (
     ST_ASTEXT(ST_SNAPTOGRID(point, 0.01)) AS geo_txt,
     COUNT(*) AS total_count,
     ROUND(AVG(rating), 2) AS avg_rating
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'  -- Jakarta filter
     AND business_status = 'OPERATIONAL'
@@ -314,7 +314,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNT(*) AS place_count,
   ROUND(AVG(user_rating_count), 1) AS avg_reviews,
   ROUND(AVG(rating), 2) AS avg_rating_in_category
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
@@ -352,7 +352,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(rating >= 4.5) AS excellent_places,
   ROUND(AVG(rating), 2) AS avg_rating,
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'cafe' IN UNNEST(types)
@@ -397,7 +397,7 @@ SELECT WITH AGGREGATION_THRESHOLD
     SELECT 1 FROM UNNEST(regular_opening_hours.saturday) AS hours
     WHERE hours.start_time IS NOT NULL
   )) / COUNT(*) * 100, 1) AS saturday_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
@@ -425,7 +425,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(wheelchair_accessible_parking = true) AS accessible_parking,
   COUNTIF(wheelchair_accessible_restroom = true) AS accessible_restroom,
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS entrance_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND business_status = 'OPERATIONAL'
@@ -457,7 +457,7 @@ WITH city_stats AS (
     ROUND(AVG(rating), 2) AS avg_rating,
     ROUND(AVG(user_rating_count), 1) AS avg_reviews,
     COUNTIF(rating >= 4.5) AS excellent_count
-  FROM `johanesa-playground-326616.places_insights___id.places`,
+  FROM `your-project-id.places_insights___id.places`,
   UNNEST(locality_names) AS locality
   WHERE
     locality IN ('Jakarta Selatan', 'Surabaya', 'Bandung', 'Medan', 'Denpasar')
@@ -494,7 +494,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNT(*) AS place_count,
   ROUND(AVG(rating), 2) AS avg_rating,
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
@@ -530,7 +530,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNT(*) AS count,
   ROUND(AVG(rating), 2) AS avg_rating,
   COUNTIF(rating >= 4.5) AS excellent_count
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND business_status = 'OPERATIONAL'
@@ -563,7 +563,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(reservable = true) AS accepts_reservations,
   ROUND(COUNTIF(delivery = true) / COUNT(*) * 100, 1) AS delivery_pct,
   ROUND(COUNTIF(takeout = true) / COUNT(*) * 100, 1) AS takeout_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'restaurant' IN UNNEST(types)
@@ -592,7 +592,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(price_level = 'PRICE_LEVEL_EXPENSIVE'
        OR price_level = 'PRICE_LEVEL_VERY_EXPENSIVE') AS premium_count,
   ROUND(COUNTIF(rating >= 4.5) / COUNT(*) * 100, 1) AS excellent_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_2_name = 'Jakarta Selatan'
   AND 'restaurant' IN UNNEST(types)
@@ -635,7 +635,7 @@ FROM (
     COUNTIF('bank' IN UNNEST(types)) AS bank_count,
     COUNTIF('atm' IN UNNEST(types)) AS atm_count,
     COUNTIF('finance' IN UNNEST(types)) AS finance_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND (
@@ -677,7 +677,7 @@ WITH commercial_activity AS (
          OR 'store' IN UNNEST(types)
          OR 'restaurant' IN UNNEST(types)) AS commercial_count,
     COUNTIF('atm' IN UNNEST(types)) AS atm_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
@@ -726,7 +726,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(user_rating_count), 1) AS avg_reviews,
   COUNTIF(wheelchair_accessible_entrance = true) AS accessible_count,
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS accessibility_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
     'Jakarta Selatan' IN UNNEST(locality_names)
   AND 'bank' IN UNNEST(types)
@@ -772,7 +772,7 @@ SELECT WITH AGGREGATION_THRESHOLD
     SELECT 1 FROM UNNEST(regular_opening_hours.saturday) AS hours
     WHERE hours.start_time IS NOT NULL
   )) / COUNT(*) * 100, 1) AS saturday_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND 'bank' IN UNNEST(types)
@@ -801,7 +801,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(accepts_cash_only = true) AS cash_only,
   ROUND(COUNTIF(accepts_nfc = true) / COUNT(*) * 100, 1) AS nfc_adoption_pct,
   ROUND(COUNTIF(accepts_credit_cards = true) / COUNT(*) * 100, 1) AS credit_adoption_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types))
@@ -830,7 +830,7 @@ WITH city_banking AS (
     COUNTIF('atm' IN UNNEST(types)) AS atm_count,
     ROUND(AVG(rating), 2) AS avg_rating,
     COUNTIF(rating >= 4.5) AS excellent_count
-  FROM `johanesa-playground-326616.places_insights___id.places`,
+  FROM `your-project-id.places_insights___id.places`,
   UNNEST(locality_names) AS locality
   WHERE
     locality IN ('Jakarta Selatan', 'Surabaya', 'Bandung', 'Medan', 'Makassar')
@@ -871,7 +871,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(wheelchair_accessible_parking = true) AS accessible_parking,
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS entrance_pct,
   ROUND(AVG(rating), 2) AS avg_rating
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND 'bank' IN UNNEST(types)
@@ -905,7 +905,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF('finance' IN UNNEST(types)) AS finance_companies,
   ROUND(AVG(rating), 2) AS avg_rating,
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
-FROM `johanesa-playground-326616.places_insights___id.places`,
+FROM `your-project-id.places_insights___id.places`,
 UNNEST(postal_code_names) AS postal_code
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
@@ -940,7 +940,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(rating < 3.5) AS poor_count,
   ROUND(COUNTIF(rating >= 4.5) / COUNT(*) * 100, 1) AS excellent_pct,
   ROUND(COUNTIF(rating < 3.5) / COUNT(*) * 100, 1) AS poor_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND ('bank' IN UNNEST(types) OR 'atm' IN UNNEST(types) OR 'finance' IN UNNEST(types))
@@ -973,7 +973,7 @@ WITH commercial_density AS (
          OR 'restaurant' IN UNNEST(types)) AS commercial_count,
     COUNTIF('bank' IN UNNEST(types)) AS bank_count,
     COUNTIF('atm' IN UNNEST(types)) AS atm_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
@@ -1191,7 +1191,7 @@ FROM (
     ST_ASTEXT(ST_SNAPTOGRID(point, 0.01)) AS geo_txt,
     COUNT(*) AS count,
     AVG(metric) AS avg_metric
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     'CITY_NAME' IN UNNEST(locality_names)
     AND 'TYPE' IN UNNEST(types)
@@ -1213,7 +1213,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   END AS rating_category,
   COUNT(*) AS count,
   ROUND(AVG(user_rating_count), 1) AS avg_reviews
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   'CITY_NAME' IN UNNEST(locality_names)
   AND 'TYPE' IN UNNEST(types)
@@ -1231,7 +1231,7 @@ WITH commercial_activity AS (
     COUNT(*) AS total_businesses,
     COUNTIF('COMMERCIAL_TYPE' IN UNNEST(types)) AS commercial_count,
     COUNTIF('TARGET_TYPE' IN UNNEST(types)) AS target_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     'CITY_NAME' IN UNNEST(locality_names)
     AND business_status = 'OPERATIONAL'
@@ -1262,7 +1262,7 @@ LIMIT 20;
 
 ### Support
 - BigQuery Console: https://console.cloud.google.com/bigquery
-- Dataset: `johanesa-playground-326616.places_insights___id.places`
+- Dataset: `your-project-id.places_insights___id.places`
 
 ---
 

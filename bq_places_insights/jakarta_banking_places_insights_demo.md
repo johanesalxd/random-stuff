@@ -80,7 +80,7 @@ Demonstrate how Places Insights can provide competitive intelligence for **any b
 ## Understanding the Data
 
 ### Dataset Information
-- **Project:** `johanesa-playground-326616`
+- **Project:** `your-project-id`
 - **Dataset:** `places_insights___id.places`
 - **Region:** Indonesia (Jakarta focus)
 - **Location:** US (BigQuery dataset location)
@@ -179,7 +179,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(user_rating_count), 1) AS avg_reviews,
   COUNTIF(rating >= 4.5) AS excellent_rated,
   ROUND(COUNTIF(rating >= 4.5) / COUNT(*) * 100, 1) AS excellent_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   ('Jakarta' IN UNNEST(locality_names)
    OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -244,7 +244,7 @@ FROM (
     COUNTIF('bank' IN UNNEST(types)) AS bank_count,
     COUNTIF('atm' IN UNNEST(types)) AS atm_count,
     AVG(rating) AS avg_rating
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     ('Jakarta' IN UNNEST(locality_names)
      OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -324,7 +324,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(wheelchair_accessible_entrance = true) / COUNT(*) * 100, 1) AS accessibility_pct,
   COUNTIF(accepts_credit_cards = true) AS card_payment_locations,
   COUNTIF(accepts_nfc = true) AS nfc_payment_locations
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   ('Jakarta' IN UNNEST(locality_names)
    OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -383,7 +383,7 @@ WITH commercial_activity AS (
          OR 'cafe' IN UNNEST(types)) AS commercial_count,
     COUNTIF('bank' IN UNNEST(types)
          OR 'atm' IN UNNEST(types)) AS financial_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     ('Jakarta' IN UNNEST(locality_names)
      OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -475,7 +475,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   COUNTIF(rating >= 4.5) AS excellent_count,
   ROUND(COUNTIF(rating >= 4.5) / COUNT(*) * 100, 1) AS excellent_pct,
   COUNTIF(wheelchair_accessible_entrance = true) AS accessible_count
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   administrative_area_level_1_name LIKE '%Jakarta%'
   AND 'bank' IN UNNEST(types)
@@ -553,7 +553,7 @@ SELECT WITH AGGREGATION_THRESHOLD
     SELECT 1 FROM UNNEST(regular_opening_hours.sunday) AS hours
     WHERE hours.start_time IS NOT NULL
   )) / COUNT(*) * 100, 1) AS sunday_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   ('Jakarta' IN UNNEST(locality_names)
    OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -605,7 +605,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(COUNTIF(accepts_nfc = true) / COUNT(*) * 100, 1) AS nfc_adoption_pct,
   ROUND(COUNTIF(accepts_credit_cards = true) / COUNT(*) * 100, 1) AS credit_adoption_pct,
   ROUND(COUNTIF(accepts_debit_cards = true) / COUNT(*) * 100, 1) AS debit_adoption_pct
-FROM `johanesa-playground-326616.places_insights___id.places`
+FROM `your-project-id.places_insights___id.places`
 WHERE
   ('Jakarta' IN UNNEST(locality_names)
    OR administrative_area_level_1_name LIKE '%Jakarta%')
@@ -696,7 +696,7 @@ SELECT WITH AGGREGATION_THRESHOLD
   ROUND(AVG(p.rating), 2) AS avg_competitor_rating,
   ROUND(AVG(p.user_rating_count), 1) AS avg_competitor_reviews
 FROM bca_branches b
-CROSS JOIN `johanesa-playground-326616.places_insights___id.places` p
+CROSS JOIN `your-project-id.places_insights___id.places` p
 WHERE
   ST_DWITHIN(b.branch_location, p.point, 500)  -- 500 meters radius
   AND ('bank' IN UNNEST(p.types) OR 'atm' IN UNNEST(p.types))
@@ -729,7 +729,7 @@ market_by_postal AS (
     COUNT(*) AS total_financial_services,
     COUNTIF('bank' IN UNNEST(types)) AS total_banks,
     COUNTIF('atm' IN UNNEST(types)) AS total_atms
-  FROM `johanesa-playground-326616.places_insights___id.places`,
+  FROM `your-project-id.places_insights___id.places`,
   UNNEST(postal_code_names) AS postal_code
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
@@ -782,7 +782,7 @@ market_opportunities AS (
          OR 'restaurant' IN UNNEST(types)) AS commercial_count,
     COUNTIF('bank' IN UNNEST(types)
          OR 'atm' IN UNNEST(types)) AS financial_count
-  FROM `johanesa-playground-326616.places_insights___id.places`
+  FROM `your-project-id.places_insights___id.places`
   WHERE
     administrative_area_level_1_name LIKE '%Jakarta%'
     AND business_status = 'OPERATIONAL'
@@ -831,7 +831,7 @@ local_competition AS (
     ROUND(AVG(p.rating), 2) AS avg_competitor_rating,
     ROUND(AVG(p.user_rating_count), 1) AS avg_competitor_reviews
   FROM bca_branches b
-  CROSS JOIN `johanesa-playground-326616.places_insights___id.places` p
+  CROSS JOIN `your-project-id.places_insights___id.places` p
   WHERE
     ST_DWITHIN(b.location, p.point, 1000)
     AND 'bank' IN UNNEST(p.types)
