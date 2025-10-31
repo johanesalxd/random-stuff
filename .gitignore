@@ -1,5 +1,7 @@
 .DS_Store
 *.tmp
+.env
+__pycache__
 
 # Internal Google-specific content
 internal/

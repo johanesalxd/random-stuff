@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Success - Firebase Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="success-card">
+            <div class="success-header">
+                <div class="success-icon">✓</div>
+                <h1>Login Successful!</h1>
+                <p class="subtitle">Your information has been collected and tracked</p>
+            </div>
+
+            <div id="loadingState" class="loading">
+                <div class="spinner"></div>
+                <p>Loading your information...</p>
+            </div>
+
+            <div id="userInfo" class="user-info" style="display: none;">
+                <div class="profile-section">
+                    <img id="userPhoto" class="profile-photo" src="" alt="Profile">
+                    <div class="profile-details">
+                        <h2 id="userName"></h2>
+                        <p id="userEmail" class="email"></p>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Google Account Information</h3>
+                    <div class="data-grid">
+                        <div class="data-item">
+                            <span class="label">User ID:</span>
+                            <span id="userId" class="value"></span>
+                        </div>
+                        <div class="data-item">
+                            <span class="label">Email Verified:</span>
+                            <span id="emailVerified" class="value"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="youtubeSection" class="data-section">
+                    <h3>YouTube Channel Information</h3>
+                    <div id="youtubeData"></div>
+                </div>
+
+                <div class="data-section">
+                    <h3>Analytics Events Sent</h3>
+                    <div class="events-list">
+                        <div class="event-item">
+                            <span class="event-icon">📊</span>
+                            <div class="event-details">
+                                <strong>login_success</strong>
+                                <p>User authentication completed</p>
+                            </div>
+                        </div>
+                        <div class="event-item">
+                            <span class="event-icon">👤</span>
+                            <div class="event-details">
+                                <strong>user_profile_loaded</strong>
+                                <p>User profile information retrieved</p>
+                            </div>
+                        </div>
+                        <div class="event-item" id="youtubeEvent" style="display: none;">
+                            <span class="event-icon">📺</span>
+                            <div class="event-details">
+                                <strong>youtube_data_collected</strong>
+                                <p>YouTube channel data retrieved</p>
+                            </div>
+                        </div>
+                        <div class="event-item">
+                            <span class="event-icon">📈</span>
+                            <div class="event-details">
+                                <strong>page_view</strong>
+                                <p>Success page viewed</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h4>Data Flow</h4>
+                    <p>All events are being sent to Google Analytics 4 and will be exported to BigQuery for analysis.</p>
+                    <div class="flow-diagram">
+                        <span>User Action</span>
+                        <span class="arrow">→</span>
+                        <span>GA4 Events</span>
+                        <span class="arrow">→</span>
+                        <span>BigQuery</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorState" class="error-message" style="display: none;">
+                <p>Error loading user information. Please try again.</p>
+            </div>
+
+            <div class="actions">
+                <a href="{{ url_for('logout') }}" class="btn btn-secondary">Logout</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
