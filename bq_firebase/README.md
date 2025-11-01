@@ -109,9 +109,6 @@ source .venv/bin/activate  # On macOS/Linux
    GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
    GOOGLE_CLIENT_SECRET=GOCSPX-abc123
 
-   # YouTube API (optional - can use OAuth credentials)
-   YOUTUBE_API_KEY=AIzaSy...
-
    # Flask
    SECRET_KEY=generate-a-random-secret-key
    DEBUG=True
