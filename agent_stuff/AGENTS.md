@@ -12,6 +12,40 @@ All code and documentation must follow these principles:
 - Focus on clarity and precision over friendliness
 - Use standard technical terminology consistently
 
+## Quick Reference
+
+Universal principles that apply across all languages (adapt syntax as needed):
+
+**Documentation:**
+- Document all public/exported APIs
+- First line: brief summary of purpose
+- Include parameters, return values, and exceptions
+- Private functions: document if non-obvious
+
+**Code Quality:**
+- Explain "why" in comments, not "what"
+- Keep functions focused and under 50 lines
+- Use semantic naming (no abbreviations unless standard)
+- One logical operation per function
+
+**Security:**
+- Never hardcode secrets or credentials
+- Validate all user input
+- Use parameterized queries (prevent SQL injection)
+- Sanitize output (prevent XSS)
+- Never log passwords, tokens, or PII
+
+**Error Handling:**
+- Handle errors explicitly
+- Provide clear, actionable error messages
+- Document all exceptions that can be raised
+
+**Testing:**
+- Follow AAA pattern (Arrange, Act, Assert)
+- Test edge cases and error conditions
+- Keep tests independent and isolated
+- Mock external dependencies
+
 ## Code Documentation Standards
 
 ### Python
@@ -51,188 +85,56 @@ def calculate_total(items: list[dict], tax_rate: float = 0.0) -> float:
 - Include inline comments for complex logic only
 - Comments should explain "why" not "what"
 
-### Go
+### Other Languages - Quick Reference
 
-Documentation follows Go's standard conventions and Google Go Style Guide.
+| Language | Format | When Required | Key Tags/Sections | Notes |
+|----------|--------|---------------|-------------------|-------|
+| **Go** | `// FuncName description` | All exported names | Start with function name | Use complete sentences |
+| **Java** | `/** */` Javadoc | All public APIs | `@param`, `@return`, `@throws` | Summary fragment (not full sentence) |
+| **Shell** | `#######` header block | All functions | Globals, Arguments, Outputs, Returns | File header required |
 
-**Comment Format:**
-- Package-level documentation required at top of package files
-- Function comments start with the function name
-- Use complete sentences with proper punctuation
-- Comments appear directly before the declaration
-
-**Example:**
+**Go Example:**
 ```go
-// Package calculator provides utilities for financial calculations.
-package calculator
-
 // CalculateTotal computes the total cost including tax.
 // Returns an error if taxRate is negative.
-func CalculateTotal(items []Item, taxRate float64) (float64, error) {
-    if taxRate < 0 {
-        return 0, fmt.Errorf("tax rate cannot be negative: %f", taxRate)
-    }
-    var subtotal float64
-    for _, item := range items {
-        subtotal += item.Price
-    }
-    return subtotal * (1 + taxRate), nil
-}
+func CalculateTotal(items []Item, taxRate float64) (float64, error) { ... }
 ```
 
-**Requirements:**
-- All exported functions, types, and constants must have comments
-- Comments should be complete sentences
-- Package documentation required in package files
-- Inline comments only for non-obvious logic
-
-### Java
-
-Documentation follows Google Java Style Guide using Javadoc format.
-
-**Javadoc Format:**
-- Use `/** */` for all public classes and methods
-- First line: summary fragment (noun or verb phrase)
-- Include `@param`, `@return`, and `@throws` tags
-- Each tag description starts on same line or next line
-
-**Example:**
+**Java Example:**
 ```java
-/**
- * Calculates the total cost including tax.
- *
+/** Calculates the total cost including tax.
  * @param items list of items with price information
- * @param taxRate tax rate as decimal (e.g., 0.08 for 8%)
+ * @param taxRate tax rate as decimal
  * @return total cost including tax
- * @throws IllegalArgumentException if taxRate is negative
- */
-public double calculateTotal(List<Item> items, double taxRate) {
-    if (taxRate < 0) {
-        throw new IllegalArgumentException(
-            "Tax rate cannot be negative: " + taxRate);
-    }
-    double subtotal = items.stream()
-        .mapToDouble(Item::getPrice)
-        .sum();
-    return subtotal * (1 + taxRate);
-}
+ * @throws IllegalArgumentException if taxRate is negative */
+public double calculateTotal(List<Item> items, double taxRate) { ... }
 ```
 
-**Requirements:**
-- All public classes, methods, and fields must have Javadoc
-- Use `@param` for each parameter
-- Use `@return` for non-void methods
-- Use `@throws` for declared exceptions
-- Summary fragment should not be a complete sentence
-
-### Shell
-
-Documentation follows Google Shell Style Guide standards.
-
-**Comment Format:**
-- File header with brief description
-- Function comments with Globals, Arguments, Outputs, Returns sections
-- Use complete sentences with proper punctuation
-- Comments appear directly before the declaration
-
-**Example:**
+**Shell Example:**
 ```bash
-#!/bin/bash
-#
-# Perform hot backups of Oracle databases.
-
 #######################################
 # Cleanup files from the backup directory.
-# Globals:
-#   BACKUP_DIR
-#   ORACLE_SID
-# Arguments:
-#   None
+# Globals: BACKUP_DIR, ORACLE_SID
+# Arguments: None
 #######################################
-cleanup() {
-  rm "${BACKUP_DIR}/"*
-}
-
-#######################################
-# Get configuration directory.
-# Globals:
-#   SOMEDIR
-# Arguments:
-#   None
-# Outputs:
-#   Writes location to stdout
-#######################################
-get_dir() {
-  echo "${SOMEDIR}"
-}
+cleanup() { rm "${BACKUP_DIR}/"*; }
 ```
-
-**Requirements:**
-- All functions must have header comments
-- Use complete sentences
-- Explain "why" not "what"
-- Include TODO comments with owner when needed
 
 ### JavaScript/TypeScript
 
-Documentation follows Google TypeScript Style Guide, which covers both TypeScript and modern JavaScript (ES6+) patterns. Google officially recommends TypeScript over JavaScript for new projects.
-
 **JSDoc Format:**
-- Use `/** */` for all documentation comments
-- First line: brief description
-- Include `@param`, `@return`, and `@throws` tags
-- Type annotations in JSDoc for JavaScript, native types for TypeScript
+- Use `/** */` for documentation comments
+- JavaScript: Include types in JSDoc (`@param {string}`, `@return {Promise}`)
+- TypeScript: Types in signature, descriptions only in JSDoc (don't duplicate type info)
+- Include `@param`, `@return`, `@throws` when adding information beyond types
 
-**Example (JavaScript with JSDoc):**
-```javascript
-/**
- * Loads configuration from the backend API.
- *
- * @return {Promise<?Object>} Configuration object or null on error.
- */
-async function loadConfig() {
-  try {
-    const response = await fetch('/api/config');
-    return await response.json();
-  } catch (error) {
-    console.error('Error loading configuration:', error);
-    return null;
-  }
-}
-
-/**
- * Tracks a custom analytics event.
- *
- * @param {string} eventName The name of the event to track.
- * @param {Object=} eventParams Optional parameters for the event.
- */
-function trackEvent(eventName, eventParams = {}) {
-  if (window.gtag) {
-    window.gtag('event', eventName, eventParams);
-  }
-}
-```
-
-**Example (TypeScript):**
+**TypeScript Example:**
 ```typescript
 /**
- * Loads configuration from the backend API.
- */
-async function loadConfig(): Promise<Config | null> {
-  try {
-    const response = await fetch('/api/config');
-    return await response.json();
-  } catch (error) {
-    console.error('Error loading configuration:', error);
-    return null;
-  }
-}
-
-/**
  * Tracks a custom analytics event.
  *
- * @param eventName The name of the event to track.
- * @param eventParams Optional parameters for the event.
+ * @param eventName The name of the event to track
+ * @param eventParams Optional parameters for the event
  */
 function trackEvent(eventName: string, eventParams: Record<string, unknown> = {}): void {
   if (window.gtag) {
@@ -241,45 +143,39 @@ function trackEvent(eventName: string, eventParams: Record<string, unknown> = {}
 }
 ```
 
-**Requirements:**
-- All exported functions, classes, and interfaces must have JSDoc
-- Use JSDoc `@param` and `@return` tags for JavaScript
-- TypeScript: types in signatures, descriptions in JSDoc
-- Include `@throws` for functions that throw exceptions
-- File-level `@fileoverview` for module documentation
-- Use `//` for implementation comments, `/** */` for documentation
+**Key Principle (TypeScript):** Don't duplicate type information. Only document what types don't convey.
 
-**Modern JavaScript/TypeScript Features:**
-- Use `const` and `let`, never `var`
-- Prefer arrow functions for callbacks and short functions
-- Use template literals for string interpolation
-- Use destructuring for cleaner code
-- Use async/await over raw Promises
-- Use optional chaining (`?.`) and nullish coalescing (`??`)
-- Use spread operator for arrays and objects
+**Modern Features to Use:**
+- `const`/`let` (never `var`), arrow functions, template literals, destructuring
+- `async`/`await` over Promises, optional chaining (`?.`), nullish coalescing (`??`)
 
-**Example of Modern Patterns:**
-```javascript
-// Destructuring and default parameters
-function processUser({name, email, role = 'user'} = {}) {
-  console.log(`Processing ${name} (${email}) as ${role}`);
+### TypeScript-Specific Patterns
+
+**Interface/Type Documentation:**
+```typescript
+/** Represents a user in the system. */
+interface User {
+  id: string;
+  name: string;
+  /** @defaultValue "user" */
+  role?: string;
 }
 
-// Arrow functions and array methods
-const activeUsers = users
-  .filter(user => user.active)
-  .map(user => user.name);
+/** @typeParam T - The type of items */
+class Collection<T> { ... }
 
-// Async/await
-async function fetchUserData(userId) {
-  const response = await fetch(`/api/users/${userId}`);
-  const data = await response.json();
-  return data;
-}
-
-// Optional chaining and nullish coalescing
-const userName = user?.profile?.name ?? 'Anonymous';
+/** @enum {string} */
+enum Status { Pending = 'PENDING', Active = 'ACTIVE' }
 ```
+
+**Available TSDoc Tags:**
+- `@typeParam` - Generic type parameters
+- `@deprecated` - Mark as deprecated with migration path
+- `@internal` - Internal APIs not for external use
+- `@example` - Usage examples
+- `@defaultValue` - Default values for optional fields
+- `@throws` - Exceptions that may be thrown
+- `@see` / `@link` - Reference related APIs
 
 ## General Code Quality Standards
 
@@ -314,114 +210,52 @@ const userName = user?.profile?.name ?? 'Anonymous';
 
 ### Project Structure and Directory Naming
 
-Follow language-specific best practices for organizing project directories.
+| Language | Dir Naming | Key Directories | Config File |
+|----------|------------|-----------------|-------------|
+| **Python** | `lower_with_under` | `src/`, `tests/`, `docs/` | `pyproject.toml` |
+| **Go** | `lowercase` | `cmd/`, `pkg/`, `internal/` | `go.mod` |
+| **Java** | `lowercase` | `src/main/java/`, `src/test/java/` | `pom.xml` or `build.gradle` |
+| **JS/TS** | `lower-dash` or `lowerCamel` | `src/`, `tests/`, `public/` | `package.json`, `tsconfig.json` |
 
-**Python:**
-- Package/module directories: `lowercase_with_underscores`
-- Standard project layout:
-  ```
-  project_name/
-  ├── src/
-  │   └── package_name/
-  │       ├── __init__.py
-  │       └── module_name.py
-  ├── tests/
-  │   └── test_module_name.py
-  ├── docs/
-  ├── README.md
-  └── pyproject.toml
-  ```
-- Use `__init__.py` to mark directories as packages
-- Separate source code (`src/`) from tests (`tests/`)
-
-**Go:**
-- Package directories: `lowercase` (no underscores or hyphens)
-- Standard project layout:
-  ```
-  projectname/
-  ├── cmd/
-  │   └── appname/
-  │       └── main.go
-  ├── pkg/
-  │   └── packagename/
-  │       └── file.go
-  ├── internal/
-  │   └── internalpackage/
-  │       └── file.go
-  ├── README.md
-  └── go.mod
-  ```
-- One package per directory
-- Use `internal/` for private packages
-- Use `cmd/` for application entry points
-
-**Java:**
-- Package directories: `lowercase` (no underscores)
-- Standard Maven/Gradle layout:
-  ```
-  project-name/
-  ├── src/
-  │   ├── main/
-  │   │   ├── java/
-  │   │   │   └── com/example/projectname/
-  │   │   │       └── ClassName.java
-  │   │   └── resources/
-  │   └── test/
-  │       └── java/
-  │           └── com/example/projectname/
-  │               └── ClassNameTest.java
-  ├── README.md
-  └── pom.xml (or build.gradle)
-  ```
-- Mirror package structure in directory hierarchy
-- Separate main code from test code
-
-**JavaScript/TypeScript:**
-- Directories and files: `lowercase-with-hyphens` or `lowerCamelCase`
-- Standard Node.js/Web project layout:
-  ```
-  project-name/
-  ├── src/
-  │   ├── components/
-  │   │   └── MyComponent.ts
-  │   ├── services/
-  │   │   └── apiService.ts
-  │   ├── utils/
-  │   │   └── helpers.ts
-  │   └── index.ts
-  ├── tests/
-  │   └── myComponent.test.ts
-  ├── public/
-  │   └── index.html
-  ├── README.md
-  ├── package.json
-  └── tsconfig.json
-  ```
-- Use `src/` for source code
-- Use `tests/` or `__tests__/` for test files
-- Separate concerns into logical directories (components, services, utils)
-
-**General Guidelines:**
+**Common Principles:**
+- Separate source code from tests
 - Keep directory names short and descriptive
-- Use consistent naming throughout the project
-- Avoid special characters in directory names
-- Document project structure in README.md
-- Follow language-specific conventions strictly
+- Use consistent naming throughout project
+- Document structure in README.md
 
-**README.md Requirements:**
-Every README.md file must include a project structure section that:
-- Shows the directory layout
-- Explains the purpose of each major directory
-- Follows the same professional writing standards
-- Uses clear, concise descriptions
+**Python Note:** Use `__init__.py` to mark package directories
+**Go Note:** Use `internal/` for private packages, `cmd/` for entry points
+**Java Note:** Mirror package structure in directory hierarchy
 
 ### Function Documentation Requirements
 
-Every function must include:
+Documentation requirements vary by language and follow Google's official style guides.
+
+**Python:**
+- Required for all public functions (not prefixed with underscore)
+- Optional for private functions that are short (fewer than 5 statements) and obvious
+- Required for classes, modules, and methods overriding base classes (unless decorated with @override and behavior unchanged)
+
+**Java:**
+- Required for all classes and methods
+- Optional for "simple, obvious" methods (e.g., getFoo()) only if nothing worthwhile beyond restating the name
+- Must include if typical reader needs context (e.g., explaining "canonical name")
+
+**Go:**
+- Required for ALL exported (capitalized) names
+- Optional for unexported (private) functions
+- Must be complete sentences starting with the name being described
+
+**TypeScript/JavaScript:**
+- Required when purpose is not immediately obvious from name and type signature
+- Do not duplicate type information already in TypeScript signatures
+- @param and @return only needed when adding information beyond type system
+
+**All documented functions should include:**
 
 1. **Purpose**: What the function does (first line)
-2. **Parameters**: Description of each parameter
-3. **Return value**: What is returned (if applicable)
+2. **Parameters**: Description of each parameter (when not obvious from name/type)
+3. **Return value**: What is returned (when not obvious from type)
 4. **Exceptions**: What errors can be raised/thrown
 5. **Side effects**: Any state changes or external interactions
 
@@ -493,156 +327,48 @@ Every function must include:
 
 ## Confirmation Before Retesting
 
-After debugging or making changes to fix errors, always request explicit user confirmation before rerunning tests, commands, or validation steps.
+After fixing errors, request explicit user confirmation before rerunning tests or commands.
 
-### Requirements
+**Process:**
+1. Make necessary code changes
+2. Summarize what was changed and why
+3. Ask: "I've fixed [issue]. Would you like me to rerun [test/command]?"
+4. Wait for approval before proceeding
 
-**Before Retesting:**
-- Summarize the changes made to address the error
-- Explain what will be tested or executed
-- Request explicit confirmation from the user
-- Wait for user approval before proceeding
-
-**When to Request Confirmation:**
+**When to request confirmation:**
 - After fixing code errors or bugs
-- Before rerunning failed tests
-- Before re-executing commands that previously failed
-- Before validating changes with browser_action or execute_command
+- Before rerunning failed tests or commands
 - After modifying configuration files that affect execution
-
-**Example Workflow:**
-
-```
-1. Error occurs during task execution
-2. Analyze the error and identify the fix
-3. Make necessary code changes
-4. Summarize changes made
-5. Ask: "I've made the following changes to fix the error:
-   - [List specific changes]
-
-   Would you like me to rerun [test/command/validation] to verify the fix?"
-6. Wait for user confirmation
-7. Proceed only after receiving approval
-```
-
-**Communication Format:**
-- Be clear and concise about what was changed
-- Specify exactly what will be executed upon confirmation
-- Use ask_followup_question tool for confirmation requests
-- Do not assume approval or proceed automatically
-
-### Best Practices
-
-- Always explain the reasoning behind changes
-- Provide context about what the retest will verify
-- Allow users to review changes before retesting
-- Respect user's decision if they decline to retest
-- Document the current state if retesting is declined
 
 ## Git Commit Messages
 
-All commit messages must follow industry-standard best practices for clarity and professionalism.
+**Format:** `<type>: <subject>` (max 50 chars, imperative mood, capitalize, no period)
 
-### Commit Message Format
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
-**Structure:**
-```
-<type>: <subject>
-
-<body>
-
-<footer>
-```
-
-### Subject Line
-
-**Rules:**
-- Maximum 50 characters
-- Use imperative mood ("Add feature" not "Added feature")
-- Capitalize first letter
-- No period at the end
-- Be specific and descriptive
-
-**Type Prefixes (Optional but Recommended):**
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `style:` Code style changes (formatting, no logic change)
-- `refactor:` Code refactoring
-- `test:` Adding or updating tests
-- `chore:` Maintenance tasks
-
-**Examples:**
-```
-Add user authentication module
-Fix null pointer exception in data processor
-Update API documentation for v2 endpoints
-Refactor database connection handling
-```
-
-### Message Body
-
-**Guidelines:**
-- Separate from subject with blank line
-- Wrap at 72 characters per line
-- Explain what and why, not how
-- Use bullet points for multiple changes
-- Provide context for the change
-
-**Example:**
-```
-Add user authentication module
-
-Implement JWT-based authentication system with the following features:
-- Token generation and validation
-- Refresh token mechanism
-- Password hashing with bcrypt
-
-This change improves security by replacing the previous session-based
-authentication with a more scalable token-based approach.
-```
-
-### Footer
-
-**Usage:**
-- Reference related issues or tickets
-- Note breaking changes
-- Credit co-authors
-
-**Examples:**
-```
-Fixes #123
-Closes #456
-
-BREAKING CHANGE: API endpoint /auth/login now requires email instead of username
-
-Co-authored-by: Name <email@example.com>
-```
-
-### Complete Example
-
+**Complete Example:**
 ```
 feat: Add user authentication module
 
-Implement JWT-based authentication system with the following features:
-- Token generation and validation
-- Refresh token mechanism
-- Password hashing with bcrypt
+Implement JWT-based authentication with token generation,
+refresh mechanism, and bcrypt password hashing.
 
-This change improves security by replacing the previous session-based
-authentication with a more scalable token-based approach.
+Improves security by replacing session-based auth with
+scalable token-based approach.
 
 Fixes #123
 ```
 
-### Best Practices
+**Structure:**
+- **Subject:** Brief summary (50 chars max)
+- **Body:** Explain what and why (72 chars per line)
+- **Footer:** Issue references, breaking changes, co-authors
 
-- Write commits in present tense
-- Keep commits atomic (one logical change per commit)
-- Commit early and often
-- Review your commit message before pushing
-- Use the body to explain complex changes
-- Reference issues and pull requests when applicable
+**Best Practices:**
+- Keep commits atomic (one logical change)
+- Use imperative mood ("Add" not "Added")
+- Reference issues when applicable
+- Explain why, not how
 
 ## Security Best Practices
 
@@ -716,129 +442,34 @@ credentials.json
 
 ## Logging Standards
 
-All logging must follow consistent standards for debugging, monitoring, and security.
+**Log Levels:** DEBUG (diagnostic) | INFO (flow) | WARNING (potential issues) | ERROR (recoverable) | CRITICAL (failure)
 
-### Log Levels
+**What to Log:**
+- Application startup/shutdown, config changes, auth attempts, API interactions, errors with stack traces
 
-Use appropriate log levels for different types of messages:
+**NEVER Log:**
+- Passwords, API keys, tokens, session IDs, credit cards, PII, encryption keys
 
-- **DEBUG:** Detailed information for diagnosing problems
-- **INFO:** General informational messages about application flow
-- **WARNING:** Indication of potential issues or deprecated features
-- **ERROR:** Error events that might still allow the application to continue
-- **CRITICAL:** Severe errors causing application failure
-
-### What to Log
-
-**Do log:**
-- Application startup and shutdown
-- Configuration changes
-- Authentication attempts (success and failure)
-- Authorization failures
-- Input validation failures
-- Service calls and external API interactions
-- Database queries (in development)
-- Performance metrics
-- Error stack traces
-
-**Do NOT log:**
-- Passwords or password hashes
-- API keys or tokens
-- Session identifiers
-- Credit card numbers or PII
-- Encryption keys
-- Full request/response bodies with sensitive data
-
-### Logging Format
-
-Use structured logging with consistent format across all languages.
-
-**Python Example:**
+**Example (Python - adapt to language-specific library):**
 ```python
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
 logger = logging.getLogger(__name__)
 
-# Good logging
+# Good
 logger.info("User login successful", extra={"user_id": user_id})
 logger.error("Database connection failed", exc_info=True)
 
-# Bad logging - contains sensitive data
-logger.info(f"User logged in with password: {password}")  # Never do this
+# Bad - contains sensitive data
+logger.info(f"User logged in with password: {password}")  # NEVER
 ```
 
-**Go Example:**
-```go
-import "log/slog"
-
-logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-// Good logging
-logger.Info("User login successful", "user_id", userID)
-logger.Error("Database connection failed", "error", err)
-
-// Bad logging - contains sensitive data
-logger.Info("User credentials", "password", password)  // Never do this
-```
-
-**Java Example:**
-```java
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-private static final Logger logger = LoggerFactory.getLogger(MyClass.class);
-
-// Good logging
-logger.info("User login successful, user_id={}", userId);
-logger.error("Database connection failed", exception);
-
-// Bad logging - contains sensitive data
-logger.info("User password: {}", password);  // Never do this
-```
-
-**JavaScript/TypeScript Example:**
-```javascript
-// Use console methods with appropriate levels
-// Good logging
-console.log('Application started');
-console.info('User login successful', {userId: user.id});
-console.warn('API rate limit approaching', {remaining: 10});
-console.error('Database connection failed', error);
-
-// For production, use a logging library
-import winston from 'winston';
-
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.File({filename: 'error.log', level: 'error'}),
-    new winston.transports.File({filename: 'combined.log'})
-  ]
-});
-
-// Good logging
-logger.info('User login successful', {userId: user.id});
-logger.error('Database connection failed', {error: error.message});
-
-// Bad logging - contains sensitive data
-logger.info('User credentials', {password: password});  // Never do this
-```
-
-### Best Practices
-
+**Best Practices:**
 - Use appropriate log levels consistently
-- Include context in log messages (user ID, request ID, etc.)
+- Include context (user ID, request ID)
 - Log exceptions with stack traces
-- Use structured logging for easier parsing
-- Implement log rotation to manage disk space
-- Centralize logs for distributed systems
-- Monitor logs for security events and errors
+- Use structured logging (JSON format)
+- Implement log rotation and centralization
 
 ## Dependency Management
 
@@ -922,215 +553,45 @@ yarn audit
 
 ## Testing
 
-All test code must follow Google's style guides and industry-standard testing practices for each language.
+Follow AAA pattern (Arrange, Act, Assert) and language-specific testing frameworks.
 
 ### Python Testing (pytest/unittest)
 
-**Test File Structure:**
-- Test file naming: `test_<module_name>.py`
-- Test function naming: `test_<function_name>_<scenario>`
-- Place tests in `tests/` directory mirroring source structure
-
-**Example:**
 ```python
-def test_calculate_total_with_valid_inputs():
-    """Tests calculate_total returns correct sum with valid items."""
-    items = [{"price": 10.0}, {"price": 20.0}]
-    result = calculate_total(items, tax_rate=0.1)
-    assert result == 33.0
+def test_format_name_with_valid_inputs():
+    """Tests format_name returns properly formatted full name."""
+    result = format_name("john", "doe")
+    assert result == "John Doe"
 
-def test_calculate_total_raises_error_with_negative_tax():
-    """Tests calculate_total raises ValueError for negative tax rate."""
-    items = [{"price": 10.0}]
-    with pytest.raises(ValueError, match="Tax rate cannot be negative"):
-        calculate_total(items, tax_rate=-0.1)
+def test_format_name_raises_error_with_empty_input():
+    """Tests format_name raises ValueError for empty strings."""
+    with pytest.raises(ValueError, match="cannot be empty"):
+        format_name("", "doe")
 ```
 
-**Requirements:**
-- Use descriptive test names that explain what is being tested
-- Include docstrings for all test functions
-- Follow AAA pattern (Arrange, Act, Assert)
-- Use fixtures for setup/teardown
-- One logical assertion per test (when practical)
+**File naming:** `test_<module>.py` | **Function naming:** `test_<function>_<scenario>`
+**Location:** `tests/` directory mirroring source structure
 
-### Go Testing (testing package)
+### Language-Specific Testing Patterns
 
-**Test File Structure:**
-- Test file naming: `<file>_test.go`
-- Test function naming: `TestFunctionName` or `TestFunctionName_Scenario`
-- Place tests in same package as code being tested
+| Language | Framework | Test Naming | Key Pattern |
+|----------|-----------|-------------|-------------|
+| **Go** | `testing` | `TestFunctionName` | Table-driven tests with `t.Run()` |
+| **Java** | JUnit | `testMethod_scenario` | `@Test`, `@Before`, `@After` annotations |
+| **JS/TS** | Jest/Mocha | `describe`/`it` blocks | Mock with `jest.fn()`, async/await testing |
 
-**Example:**
-```go
-func TestCalculateTotal(t *testing.T) {
-    tests := []struct {
-        name    string
-        items   []Item
-        taxRate float64
-        want    float64
-        wantErr bool
-    }{
-        {
-            name:    "valid inputs",
-            items:   []Item{{Price: 10.0}, {Price: 20.0}},
-            taxRate: 0.1,
-            want:    33.0,
-            wantErr: false,
-        },
-        {
-            name:    "negative tax rate",
-            items:   []Item{{Price: 10.0}},
-            taxRate: -0.1,
-            want:    0,
-            wantErr: true,
-        },
-    }
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            got, err := CalculateTotal(tt.items, tt.taxRate)
-            if (err != nil) != tt.wantErr {
-                t.Errorf("CalculateTotal() error = %v, wantErr %v", err, tt.wantErr)
-                return
-            }
-            if got != tt.want {
-                t.Errorf("CalculateTotal() = %v, want %v", got, tt.want)
-            }
-        })
-    }
-}
-```
+**Go:** Use struct slices for test cases, subtests for scenarios
+**Java:** Use `@Before` for setup, meaningful assertion messages
+**JS/TS:** Use `beforeEach`/`afterEach`, mock external dependencies
 
-**Requirements:**
-- Use table-driven tests for multiple scenarios
-- Use subtests with `t.Run()` for related test cases
-- Include test documentation with comments
-- Test error conditions explicitly
+### General Best Practices
 
-### Java Testing (JUnit)
-
-**Test File Structure:**
-- Test class naming: `<ClassName>Test`
-- Test method naming: `testMethodName_scenario` or `shouldDoSomething_whenCondition`
-- Place tests in `src/test/java/` mirroring package structure
-
-**Example:**
-```java
-public class CalculatorTest {
-    private Calculator calculator;
-
-    @Before
-    public void setUp() {
-        calculator = new Calculator();
-    }
-
-    @Test
-    public void testCalculateTotal_withValidInputs() {
-        List<Item> items = Arrays.asList(
-            new Item(10.0),
-            new Item(20.0)
-        );
-        double result = calculator.calculateTotal(items, 0.1);
-        assertEquals(33.0, result, 0.001);
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testCalculateTotal_withNegativeTaxRate_throwsException() {
-        List<Item> items = Arrays.asList(new Item(10.0));
-        calculator.calculateTotal(items, -0.1);
-    }
-}
-```
-
-**Requirements:**
-- Use `@Test` annotations for test methods
-- Use `@Before`, `@After` for setup/teardown
-- Include Javadoc for test classes and complex test methods
-- Use meaningful assertion messages
-- Test one behavior per test method
-
-### JavaScript/TypeScript Testing (Jest/Mocha)
-
-**Test File Structure:**
-- Test file naming: `<fileName>.test.ts` or `<fileName>.spec.ts`
-- Test function naming: Descriptive strings in `describe` and `it` blocks
-- Place tests in `tests/` or `__tests__/` directory, or co-located with source files
-
-**Example (Jest):**
-```typescript
-describe('calculateTotal', () => {
-  it('returns correct sum with valid items', () => {
-    const items = [{price: 10.0}, {price: 20.0}];
-    const result = calculateTotal(items, 0.1);
-    expect(result).toBe(33.0);
-  });
-
-  it('throws error with negative tax rate', () => {
-    const items = [{price: 10.0}];
-    expect(() => {
-      calculateTotal(items, -0.1);
-    }).toThrow('Tax rate cannot be negative');
-  });
-
-  it('handles empty items array', () => {
-    const result = calculateTotal([], 0.1);
-    expect(result).toBe(0);
-  });
-});
-```
-
-**Example (Async Testing):**
-```typescript
-describe('fetchUserData', () => {
-  it('fetches user data successfully', async () => {
-    const userId = '123';
-    const mockData = {id: '123', name: 'John'};
-
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        json: () => Promise.resolve(mockData),
-      })
-    ) as jest.Mock;
-
-    const result = await fetchUserData(userId);
-    expect(result).toEqual(mockData);
-    expect(fetch).toHaveBeenCalledWith(`/api/users/${userId}`);
-  });
-
-  it('handles fetch errors', async () => {
-    global.fetch = jest.fn(() =>
-      Promise.reject(new Error('Network error'))
-    ) as jest.Mock;
-
-    await expect(fetchUserData('123')).rejects.toThrow('Network error');
-  });
-});
-```
-
-**Requirements:**
-- Use descriptive test names in `describe` and `it` blocks
-- Follow AAA pattern (Arrange, Act, Assert)
-- Use `beforeEach`/`afterEach` for setup/teardown
-- Mock external dependencies (API calls, DOM, etc.)
-- Test async code with async/await or promises
-- One logical assertion per test (when practical)
-
-### General Testing Best Practices
-
-**Test Coverage:**
-- Write tests for all public functions and methods
-- Test edge cases and boundary conditions
-- Test error conditions and exception handling
-- Test both success and failure paths
-
-**Test Quality:**
+- Test all public functions/methods
+- Test edge cases, error conditions, and both success/failure paths
 - Keep tests independent and isolated
-- One logical assertion per test (when practical)
 - Mock external dependencies
-- Keep tests simple and focused
-
-**Test Documentation:**
-- Document complex test scenarios when needed
-- Explain non-obvious test requirements
+- One logical assertion per test (when practical)
+- Document complex test scenarios
 
 ## Documentation and Diagram Standards
 
