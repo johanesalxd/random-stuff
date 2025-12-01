@@ -255,15 +255,24 @@
             background: rgba(66, 133, 244, 0.05);
             border-radius: 12px;
             padding: 10px;
-            height: 140px;
+            min-height: 140px;
+            height: auto;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
+            align-content: flex-start;
             gap: 10px;
-            transition: width 0.5s ease;
+            transition: all 0.5s ease;
             position: relative;
             min-width: 100px;
             flex-wrap: wrap;
             width: 100%;
+            margin-top: 30px;
+        }
+
+        .bq-pool .cluster-label {
+            top: -30px;
+            left: 0;
+            white-space: nowrap;
         }
 
         .bq-node {
@@ -701,7 +710,8 @@
 
             const pool = document.createElement('div');
             pool.className = 'bq-pool';
-            pool.style.width = Math.min(jobs * 70, window.innerWidth - 100) + 'px';
+            // Let the pool expand naturally to fit content, up to viewport width
+            pool.style.maxWidth = (window.innerWidth - 100) + 'px';
 
             pool.innerHTML = `<div class="cluster-label" style="color:var(--bq-color)">Slot Pool (${totalSlots.toLocaleString()} Slots)</div>`;
 
