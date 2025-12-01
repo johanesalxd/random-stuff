@@ -533,6 +533,28 @@
                 <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).</li>
                 <li><strong>Slots:</strong> Virtual compute units in BigQuery that can be dynamically allocated and reallocated during query execution.</li>
             </ul>
+
+            <h3>Caveats & Limitations</h3>
+            <p><strong>About This Visualization:</strong></p>
+            <ul>
+                <li><strong>Fixed 10-Query Limit:</strong> This visualization uses a fixed limit of 10 queries per cluster for simplicity and educational purposes. In reality, Databricks Serverless with IWM may trigger scaling earlier or later based on query complexity, resource requirements, and queue depth.</li>
+                <li><strong>IWM Dynamic Behavior:</strong> Serverless SQL warehouses use ML models to predict when to scale. A cluster might spawn at query #5 if IWM detects high resource demands, or wait until query #15 for lighter workloads. The 10-query threshold shown here is illustrative.</li>
+                <li><strong>Locked-In Queries:</strong> Regardless of when scaling occurs, running queries remain locked to their original cluster. New clusters only help new queries—they cannot rescue slow-running queries already in progress.</li>
+            </ul>
+
+            <p><strong>Cluster Startup Times:</strong></p>
+            <ul>
+                <li><strong>Classic/Pro SQL Warehouses:</strong> Provisioning new VMs from cloud providers typically takes 2-5 minutes, depending on cluster size and cloud service provider (CSP) capacity availability. Larger clusters (e.g., X-Large with 32+ workers) take longer to provision.</li>
+                <li><strong>Serverless SQL Warehouses:</strong> Databricks maintains pre-warmed pools of VMs in their managed compute plane. When capacity is available in the pool, startup is near-instantaneous (seconds to ~1 minute). However, during peak demand or for less common cluster sizes, the pool may be exhausted, requiring new VM provisioning (2-5 minutes).</li>
+                <li><strong>Pre-Warming Architecture:</strong> Serverless uses a shared pool of pre-booted VMs. When you request compute, a VM is assigned exclusively to your workload (not shared with other customers). After use, the VM is sanitized and returned to the pool for the next customer. Pool capacity is finite and shared across all customers in a region.</li>
+            </ul>
+
+            <p><strong>Cloud Provider Dependencies:</strong></p>
+            <ul>
+                <li><strong>CSP Capacity:</strong> Scaling is subject to cloud provider compute availability. During high-demand periods (e.g., regional outages, peak usage times), VM provisioning can be delayed or fail entirely.</li>
+                <li><strong>Not Truly Instantaneous:</strong> While marketed as "instant," serverless scaling depends on pre-warmed pool availability. If the pool is exhausted, you experience the same 2-5 minute delays as Classic/Pro warehouses.</li>
+                <li><strong>Regional Variations:</strong> Availability and performance vary by cloud region. Some regions have larger pre-warmed pools and better CSP capacity than others.</li>
+            </ul>
         </div>
     </div>
 
