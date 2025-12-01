@@ -31,7 +31,8 @@ This visualization demonstrates the fundamental difference between "chunky" clus
 - **DBU-to-Slots Ratio**: Adjust the conversion ratio (default 1:15)
 - **Visual Indicators**: Orange highlighting shows "locked-in" slow queries in Databricks mode
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Detailed Explanations**: Includes scenario walkthrough and comparison table
+- **Detailed Explanations**: Includes scenario walkthrough, comparison table, and caveats section
+- **Technical Accuracy**: Documents IWM behavior, cluster startup times, and cloud provider dependencies
 
 ## How to Use
 
@@ -54,6 +55,17 @@ This visualization demonstrates a key scenario:
 4. **Result**: Queries 1-10 remain slow, locked to first cluster
 
 In BigQuery, all queries would benefit from the increased capacity through dynamic rebalancing.
+
+## Important Caveats
+
+The visualization includes a comprehensive "Caveats & Limitations" section that explains:
+
+- **Fixed 10-Query Limit**: The visualization uses a fixed threshold for educational purposes. In reality, Databricks IWM (Intelligent Workload Management) may trigger scaling earlier or later based on query complexity and resource demands.
+- **Cluster Startup Times**: Classic/Pro warehouses take 2-5 minutes to provision new VMs. Serverless warehouses use pre-warmed pools for near-instant startup (seconds to ~1 minute), but pool exhaustion can result in similar delays.
+- **Cloud Provider Dependencies**: Scaling is subject to CSP capacity availability. During peak demand, VM provisioning can be delayed or fail.
+- **Locked-In Queries**: Regardless of when scaling occurs, running queries remain locked to their original cluster and cannot benefit from newly provisioned resources.
+
+These caveats ensure users understand the real-world behavior beyond the simplified demonstration.
 
 ## Technical Details
 
