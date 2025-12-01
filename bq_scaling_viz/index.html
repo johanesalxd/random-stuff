@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scaling Mechanics: Chunk vs. Seamless</title>
+    <style>
+        :root {
+            --dbx-color: #FF3621;
+            --bq-color: #4285F4;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --warning-color: #ff9800;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1400px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+        }
+
+        .controls {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .config-section {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        .config-section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .slider-container label {
+            font-weight: 600;
+            min-width: 200px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .slider-value {
+            font-weight: bold;
+            color: var(--bq-color);
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .size-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .size-btn {
+            padding: 8px 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .size-btn:hover {
+            border-color: var(--dbx-color);
+        }
+
+        .size-btn.active {
+            background: var(--dbx-color);
+            color: white;
+            border-color: var(--dbx-color);
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        button:active { transform: scale(0.95); }
+
+        .btn-primary { background-color: #222; color: white; }
+        .btn-reset { background-color: #e0e0e0; color: #333; }
+
+        .toggle-group {
+            display: flex;
+            background: #eee;
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            user-select: none;
+            font-size: clamp(0.85rem, 2vw, 1rem);
+        }
+
+        .toggle-btn.active.dbx {
+            background: white;
+            color: var(--dbx-color);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+
+        .toggle-btn.active.bq {
+            background: white;
+            color: var(--bq-color);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+
+        #canvas {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: flex-start;
+            align-items: flex-start;
+            min-height: 300px;
+            margin-bottom: 80px;
+        }
+
+        .cluster-container {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 10px;
+            width: 100%;
+            max-width: 300px;
+            min-width: 250px;
+            height: 300px;
+            position: relative;
+            background: white;
+            transition: all 0.3s ease;
+            flex: 1 1 300px;
+        }
+
+        .cluster-container.slow {
+            border-color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.05);
+        }
+
+        .cluster-label {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            font-weight: bold;
+            color: #666;
+            font-size: clamp(0.85rem, 2vw, 1rem);
+        }
+
+        .cluster-stats {
+            position: absolute;
+            bottom: -60px;
+            width: 100%;
+            text-align: center;
+            font-size: clamp(0.8rem, 2vw, 0.9rem);
+            color: #666;
+        }
+
+        .dbu-indicator {
+            font-weight: bold;
+            color: var(--dbx-color);
+        }
+
+        .slow-indicator {
+            color: var(--warning-color);
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+
+        .job-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            height: 100%;
+            align-content: flex-start;
+        }
+
+        .job-node {
+            background-color: var(--dbx-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .job-node.slow {
+            background-color: var(--warning-color);
+        }
+
+        .bq-pool {
+            border: 2px solid var(--bq-color);
+            background: rgba(66, 133, 244, 0.05);
+            border-radius: 12px;
+            padding: 10px;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: width 0.5s ease;
+            position: relative;
+            min-width: 100px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .bq-node {
+            width: 60px;
+            height: 60px;
+            background-color: var(--bq-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+
+        .metric-box {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 90%;
+            max-width: 300px;
+            z-index: 100;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: clamp(0.85rem, 2vw, 1rem);
+        }
+
+        .explanation-section {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        .explanation-section h2 {
+            margin-top: 0;
+            color: #222;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .explanation-section h3 {
+            color: #444;
+            margin-top: 20px;
+        }
+
+        .scenario-step {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid var(--dbx-color);
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .scenario-step h4 {
+            margin-top: 0;
+            color: var(--dbx-color);
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .comparison-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .comparison-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .dbx-highlight {
+            color: var(--dbx-color);
+            font-weight: 600;
+        }
+
+        .bq-highlight {
+            color: var(--bq-color);
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .controls {
+                padding: 15px;
+            }
+
+            .cluster-container {
+                max-width: 100%;
+                flex: 1 1 100%;
+            }
+
+            .metric-box {
+                position: static;
+                width: 100%;
+                max-width: 100%;
+                margin-top: 20px;
+            }
+
+            .comparison-table {
+                font-size: 0.9rem;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Scaling Mechanics: Chunky vs. Seamless</h1>
+        <p class="subtitle">Comparing Databricks Serverless SQL and BigQuery Autoscaling</p>
+
+        <div class="controls">
+            <div class="toggle-group">
+                <div class="toggle-btn active dbx" onclick="setMode('dbx')">Databricks Mode</div>
+                <div class="toggle-btn bq" onclick="setMode('bq')">BigQuery Mode</div>
+            </div>
+            <button class="btn-primary" onclick="addJob()">+ Add Job</button>
+            <button class="btn-reset" onclick="reset()">Reset</button>
+        </div>
+
+        <div class="config-section">
+            <h3>Configuration</h3>
+            <div class="slider-container" style="margin-bottom: 20px;">
+                <label>Cluster Size:</label>
+                <div class="size-selector">
+                    <button class="size-btn" onclick="setClusterSize(12)">Small (12 DBU)</button>
+                    <button class="size-btn" onclick="setClusterSize(20)">Medium (20 DBU)</button>
+                    <button class="size-btn active" onclick="setClusterSize(40)">Large (40 DBU)</button>
+                    <button class="size-btn" onclick="setClusterSize(80)">X-Large (80 DBU)</button>
+                </div>
+            </div>
+            <div class="slider-container">
+                <label for="dbu-ratio">DBU to Slots Ratio (1 DBU =</label>
+                <input type="range" id="dbu-ratio" min="1" max="100" value="15" oninput="updateRatio(this.value)">
+                <span class="slider-value"><span id="ratio-value">15</span> Slots)</span>
+            </div>
+        </div>
+
+        <div id="canvas"></div>
+
+        <div class="metric-box">
+            <div class="metric-row">
+                <span>Total Jobs:</span>
+                <span id="total-jobs">0</span>
+            </div>
+            <div class="metric-row">
+                <span>Last Job Capacity:</span>
+                <span id="capacity-metric">--</span>
+            </div>
+            <div class="metric-row" id="equivalent-row" style="display:none;">
+                <span>Equivalent:</span>
+                <span id="equivalent-metric">--</span>
+            </div>
+            <div style="margin-top:10px; font-size: 0.8em; color:#666; line-height: 1.4;">
+                <span id="status-text">Add jobs to start simulation.</span>
+            </div>
+        </div>
+
+        <div class="explanation-section">
+            <h2>Scenario Walkthrough: The "1 to 11" Query Problem</h2>
+
+            <div class="scenario-step">
+                <h4>Step 1: Single Query Run</h4>
+                <p><strong>Performance:</strong> Maximum (full cluster capacity)</p>
+                <p><strong>Behavior:</strong> The query has exclusive access to the cluster's resources. With the selected cluster size, it gets all available DBUs.</p>
+            </div>
+
+            <div class="scenario-step">
+                <h4>Step 2: Jobs 2-10 Added</h4>
+                <p><strong>Performance:</strong> Degrades Linearly (Stuffing Effect)</p>
+                <p><strong>Behavior:</strong> Databricks will typically "stuff" these queries into the existing active cluster until it hits a concurrency threshold (often ~10-20 queries depending on cluster size). These jobs now share the same CPU/Memory, so they each get a fraction of the cluster's total DBUs.</p>
+            </div>
+
+            <div class="scenario-step">
+                <h4>Step 3: 11th Job Added</h4>
+                <p><strong>Performance:</strong> Split Experience</p>
+                <p><strong>Behavior:</strong> The system detects the first cluster is full (or queue depth exceeds limit) and spins up Cluster #2.</p>
+                <ul>
+                    <li><strong>The 11th Query:</strong> Routed to Cluster #2 and gets full speed (full cluster capacity).</li>
+                    <li><strong>The First 10 Queries:</strong> REMAIN on Cluster #1, continuing to run slowly with shared resources. They are not moved or rebalanced.</li>
+                </ul>
+            </div>
+
+            <h3>Key Insight: Locked-In vs. Dynamic Rebalancing</h3>
+            <p>Once a query starts on a Databricks cluster, it stays there for its entire execution. Even with Intelligent Workload Management (IWM), running queries cannot migrate to new clusters. This leads to:</p>
+            <ul>
+                <li>Higher costs (paying for multiple clusters)</li>
+                <li>Uneven performance (early queries remain slow)</li>
+                <li>Resource inefficiency (new clusters can't help existing queries)</li>
+            </ul>
+
+            <h2>Comparison: "Chunky" vs. "Seamless" Scaling</h2>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Aspect</th>
+                        <th class="dbx-highlight">Databricks Serverless SQL</th>
+                        <th class="bq-highlight">Google BigQuery</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Scaling Unit</strong></td>
+                        <td>Clusters (Chunky) - Adds entire virtual machines with fixed capacity (12-80 DBU per cluster depending on size)</td>
+                        <td>Slots (Seamless) - Adds granular units of CPU processing power instantly</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Running Queries</strong></td>
+                        <td>Locked-in - Once a query starts on a cluster, it stays there. No resource updates during runtime.</td>
+                        <td>Dynamic/Rebalanced - BigQuery uses "Fair Scheduling." As new slots become available, they can be instantly applied to running stages of existing queries.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>The "Stuffing" Effect</strong></td>
+                        <td>High - Queries share a fixed cluster size. Performance drops linearly as you add concurrency (e.g., 10 queries on a 40 DBU cluster = 4 DBU each) until the next cluster boots.</td>
+                        <td>Low - Resources are distributed across a massive shared pool. You rarely hit a "hard wall" of a single machine's limits.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cost Efficiency</strong></td>
+                        <td>Lower - Multiple clusters needed, but early queries can't use new cluster resources</td>
+                        <td>Higher - Single pool scales dynamically, all queries benefit from added capacity</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Performance Predictability</strong></td>
+                        <td>Variable - Depends on when query arrives (before or after cluster scaling)</td>
+                        <td>Consistent - Fair scheduling ensures even distribution as capacity changes</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Technical Notes</h3>
+            <ul>
+                <li><strong>IWM (Intelligent Workload Management):</strong> Databricks' ML-powered system that predicts resource needs and manages cluster provisioning. However, it cannot migrate running queries between clusters.</li>
+                <li><strong>Fair Scheduling:</strong> BigQuery's algorithm that continuously redistributes slots across projects and queries, even while queries are running.</li>
+                <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).</li>
+                <li><strong>Slots:</strong> Virtual compute units in BigQuery that can be dynamically allocated and reallocated during query execution.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let mode = 'dbx';
+        let jobs = 0;
+        const CLUSTER_LIMIT = 10;
+        let clusterDBU = 40;
+        let dbuToSlotsRatio = 15;
+
+        function setMode(newMode) {
+            mode = newMode;
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.classList.remove('active', 'dbx', 'bq');
+            });
+            const activeBtn = document.querySelector(`.toggle-btn:nth-child(${mode === 'dbx' ? 1 : 2})`);
+            activeBtn.classList.add('active', mode);
+            reset();
+        }
+
+        function setClusterSize(dbu) {
+            clusterDBU = dbu;
+            document.querySelectorAll('.size-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            render();
+        }
+
+        function updateRatio(value) {
+            dbuToSlotsRatio = parseInt(value);
+            document.getElementById('ratio-value').innerText = value;
+            render();
+        }
+
+        function addJob() {
+            jobs++;
+            render();
+        }
+
+        function reset() {
+            jobs = 0;
+            render();
+        }
+
+        function render() {
+            const canvas = document.getElementById('canvas');
+            const totalEl = document.getElementById('total-jobs');
+            const capEl = document.getElementById('capacity-metric');
+            const statusEl = document.getElementById('status-text');
+            const equivalentRow = document.getElementById('equivalent-row');
+            const equivalentEl = document.getElementById('equivalent-metric');
+
+            totalEl.innerText = jobs;
+            canvas.innerHTML = '';
+
+            if (jobs === 0) {
+                capEl.innerText = '--';
+                equivalentRow.style.display = 'none';
+                statusEl.innerText = 'Ready to start.';
+                return;
+            }
+
+            if (mode === 'dbx') {
+                renderDatabricks(canvas, capEl, statusEl, equivalentEl, equivalentRow);
+            } else {
+                renderBigQuery(canvas, capEl, statusEl, equivalentEl, equivalentRow);
+            }
+        }
+
+        function renderDatabricks(canvas, capEl, statusEl, equivalentEl, equivalentRow) {
+            const numClusters = Math.ceil(jobs / CLUSTER_LIMIT);
+
+            for (let c = 1; c <= numClusters; c++) {
+                const isLastCluster = c === numClusters;
+                let jobsInThisCluster;
+
+                if (isLastCluster) {
+                    jobsInThisCluster = jobs % CLUSTER_LIMIT || CLUSTER_LIMIT;
+                } else {
+                    jobsInThisCluster = CLUSTER_LIMIT;
+                }
+
+                const dbuPerJob = (clusterDBU / jobsInThisCluster).toFixed(1);
+                const slotsPerJob = (dbuPerJob * dbuToSlotsRatio).toFixed(0);
+
+                const size = Math.max(40, 280 / Math.ceil(Math.sqrt(jobsInThisCluster))) - 10;
+
+                const clusterDiv = document.createElement('div');
+                clusterDiv.className = 'cluster-container';
+
+                // Mark first cluster as slow if there are multiple clusters
+                if (c === 1 && numClusters > 1) {
+                    clusterDiv.classList.add('slow');
+                }
+
+                clusterDiv.innerHTML = `
+                    <div class="cluster-label">Cluster ${c} (${clusterDBU} DBU)</div>
+                    <div class="job-grid"></div>
+                    <div class="cluster-stats">
+                        <span class="dbu-indicator">${dbuPerJob} DBU</span> per job<br>
+                        <span style="font-size:0.8em">${jobsInThisCluster} Active Jobs</span>
+                        ${c === 1 && numClusters > 1 ? '<br><span class="slow-indicator">⚠ Locked-in (Slow)</span>' : ''}
+                    </div>
+                `;
+
+                const grid = clusterDiv.querySelector('.job-grid');
+                for (let i = 0; i < jobsInThisCluster; i++) {
+                    const node = document.createElement('div');
+                    node.className = 'job-node';
+
+                    // Mark jobs in first cluster as slow if multiple clusters exist
+                    if (c === 1 && numClusters > 1) {
+                        node.classList.add('slow');
+                    }
+
+                    node.style.width = size + 'px';
+                    node.style.height = size + 'px';
+                    const jobId = ((c-1) * CLUSTER_LIMIT) + (i + 1);
+                    node.innerText = jobId;
+                    grid.appendChild(node);
+                }
+                canvas.appendChild(clusterDiv);
+
+                if (c === numClusters) {
+                    capEl.innerText = `${dbuPerJob} DBU`;
+                    equivalentRow.style.display = 'flex';
+                    equivalentEl.innerText = `${slotsPerJob} Slots`;
+
+                    if (jobs > 10 && c > 1) {
+                        statusEl.innerHTML = `<b>The Scaling Event:</b><br>Job #${jobs} triggered Cluster ${c}.<br>It gets full ${clusterDBU} DBU (${clusterDBU * dbuToSlotsRatio} slots).<br>Jobs 1-10 are <b>locked-in</b> to Cluster 1 at ${(clusterDBU/10).toFixed(1)} DBU (${((clusterDBU/10) * dbuToSlotsRatio).toFixed(0)} slots).`;
+                    } else if (jobs > 1) {
+                        statusEl.innerHTML = `<b>Stuffing Effect:</b><br>Cluster is fixed at ${clusterDBU} DBU.<br>Resources divided by ${jobsInThisCluster}.<br>Each job: ${slotsPerJob} slots equivalent.`;
+                    } else {
+                        statusEl.innerText = `Single job gets full cluster power (${clusterDBU * dbuToSlotsRatio} slots equivalent).`;
+                    }
+                }
+            }
+        }
+
+        function renderBigQuery(canvas, capEl, statusEl, equivalentEl, equivalentRow) {
+            const slotsPerJob = dbuToSlotsRatio;
+            const totalSlots = jobs * slotsPerJob;
+
+            const pool = document.createElement('div');
+            pool.className = 'bq-pool';
+            pool.style.width = Math.min(jobs * 70, window.innerWidth - 100) + 'px';
+
+            pool.innerHTML = `<div class="cluster-label" style="color:var(--bq-color)">Slot Pool (${totalSlots.toLocaleString()} Slots)</div>`;
+
+            for (let i = 1; i <= jobs; i++) {
+                const node = document.createElement('div');
+                node.className = 'bq-node';
+                node.innerText = i;
+                pool.appendChild(node);
+            }
+
+            canvas.appendChild(pool);
+
+            capEl.innerText = `${slotsPerJob} Slots`;
+            equivalentRow.style.display = 'flex';
+            equivalentEl.innerText = `${(slotsPerJob / dbuToSlotsRatio).toFixed(2)} DBU`;
+            statusEl.innerHTML = `<b>Linear Scaling:</b><br>Job #${jobs} added +${slotsPerJob} Slots.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>All queries rebalanced</b> - performance is constant.`;
+        }
+
+        render();
+    </script>
+</body>
+</html>
