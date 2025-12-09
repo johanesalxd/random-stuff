@@ -131,28 +131,6 @@ We moved from a strategic guess to an executable reality in a single SQL query."
 
 ---
 
-## Additional Talking Points
-
-### For Technical Audiences
-- "BigQuery's geospatial functions are SQL-native - no data movement required"
-- "We use NTILE for balanced partitioning and ST_GEOHASH for spatial sorting"
-- "The Remote Function pattern allows us to call any HTTP endpoint from SQL"
-- "This architecture is serverless - zero infrastructure management"
-
-### For Business Audiences
-- "This reduces route planning time from hours to seconds"
-- "Drivers get turn-by-turn navigation, not just a list of addresses"
-- "We can handle dynamic changes - new orders, traffic, vehicle breakdowns"
-- "The cost is predictable and scales linearly with usage"
-
-### For Demos
-- "Let me zoom into Zone 5 to show you the detailed route sequence"
-- "Notice how the stops are numbered - that's the visit order"
-- "The distance shown is actual driving distance, not straight-line"
-- "We can filter by layer to compare strategic vs tactical views"
-
----
-
 ## Appendix: Alternative Clustering Methods
 
 ### When to Use K-Means vs Geohash
