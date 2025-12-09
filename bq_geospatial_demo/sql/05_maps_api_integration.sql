@@ -16,13 +16,13 @@
 -- Run this once to register the Cloud Function as a BigQuery function
 -- Replace the placeholders with your actual values
 
-CREATE OR REPLACE FUNCTION `your_project.your_dataset.optimize_route`(
-  stops ARRAY<STRUCT<lat FLOAT64, lng FLOAT64>>
+CREATE OR REPLACE FUNCTION `johanesa-playground-326616.demo_dataset.optimize_route`(
+  stops_json STRING
 )
 RETURNS STRING
-REMOTE WITH CONNECTION `your_project.us.gmaps_conn`
+REMOTE WITH CONNECTION `johanesa-playground-326616.us.gmaps_conn`
 OPTIONS (
-  endpoint = 'https://us-central1-your-project.cloudfunctions.net/optimize-route',
+  endpoint = 'https://us-central1-johanesa-playground-326616.cloudfunctions.net/optimize-route',
   max_batching_rows = 1
 );
 
@@ -108,7 +108,7 @@ WITH
     SELECT
       zone_id,
       waypoints,
-      `your_project.your_dataset.optimize_route`(waypoints) AS maps_response
+      `johanesa-playground-326616.demo_dataset.optimize_route`(TO_JSON_STRING(waypoints)) AS maps_response
     FROM api_input
   ),
 
@@ -116,9 +116,9 @@ WITH
   maps_routes AS (
     SELECT
       zone_id,
-      -- Decode the polyline from Maps API
-      ST_LINEFROMENCODEDPOLYLINE(
-        JSON_EXTRACT_SCALAR(maps_response, '$.polyline')
+      -- Parse the GeoJSON from Maps API response
+      ST_GEOGFROMGEOJSON(
+        FORMAT('%s', JSON_QUERY(maps_response, '$.geojson'))
       ) AS maps_route_geometry,
       JSON_EXTRACT_SCALAR(maps_response, '$.duration') AS maps_duration,
       JSON_EXTRACT_SCALAR(maps_response, '$.distance') AS maps_distance

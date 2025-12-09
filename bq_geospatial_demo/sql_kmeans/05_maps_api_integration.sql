@@ -18,7 +18,7 @@
 -- Replace the placeholders with your actual values
 
 CREATE OR REPLACE FUNCTION `your_project.your_dataset.optimize_route`(
-  stops ARRAY<STRUCT<lat FLOAT64, lng FLOAT64>>
+  stops_json STRING
 )
 RETURNS STRING
 REMOTE WITH CONNECTION `your_project.us.gmaps_conn`
@@ -114,7 +114,7 @@ WITH
     SELECT
       zone_id,
       waypoints,
-      `your_project.your_dataset.optimize_route`(waypoints) AS maps_response
+      `your_project.your_dataset.optimize_route`(TO_JSON_STRING(waypoints)) AS maps_response
     FROM api_input
   ),
 
@@ -122,9 +122,9 @@ WITH
   maps_routes AS (
     SELECT
       zone_id,
-      -- Decode the polyline from Maps API
-      ST_LINEFROMENCODEDPOLYLINE(
-        JSON_EXTRACT_SCALAR(maps_response, '$.polyline')
+      -- Parse the GeoJSON from Maps API response
+      ST_GEOGFROMGEOJSON(
+        FORMAT('%s', JSON_QUERY(maps_response, '$.geojson'))
       ) AS maps_route_geometry,
       JSON_EXTRACT_SCALAR(maps_response, '$.duration') AS maps_duration,
       JSON_EXTRACT_SCALAR(maps_response, '$.distance') AS maps_distance
