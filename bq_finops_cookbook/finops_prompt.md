@@ -830,6 +830,110 @@ LIMIT 10;
 - Sporadic capacity errors: Current strategy may be adequate, errors are acceptable
 - Non-capacity errors: Address through query fixes or permission updates
 
+### 4.9 Analyze Job Impact at Different Commitment Levels
+
+Understand how many jobs would be affected if using average slots as a baseline commitment:
+
+```sql
+-- Analyze job distribution and impact at different slot commitment levels
+-- Answers: "If we commit to X slots, how many jobs will exceed that and need on-demand/autoscaling?"
+WITH job_slot_usage AS (
+  SELECT
+    job_id,
+    user_email,
+    project_id,
+    TIMESTAMP_DIFF(end_time, start_time, SECOND) as duration_seconds,
+    ROUND(total_slot_ms / TIMESTAMP_DIFF(end_time, start_time, MILLISECOND), 1) as avg_slots_per_job,
+    ROUND(total_slot_ms / (1000 * 60 * 60), 2) as slot_hours
+  FROM
+    `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+  WHERE
+    creation_time BETWEEN TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+      AND CURRENT_TIMESTAMP()
+    AND job_type = 'QUERY'
+    AND state = 'DONE'
+    AND statement_type != 'SCRIPT'
+    AND end_time > start_time
+),
+percentiles AS (
+  SELECT
+    ROUND(AVG(avg_slots_per_job), 1) as avg_commitment_level,
+    ROUND(APPROX_QUANTILES(avg_slots_per_job, 100)[OFFSET(50)], 1) as p50_commitment_level,
+    ROUND(APPROX_QUANTILES(avg_slots_per_job, 100)[OFFSET(75)], 1) as p75_commitment_level,
+    ROUND(APPROX_QUANTILES(avg_slots_per_job, 100)[OFFSET(90)], 1) as p90_commitment_level,
+    ROUND(APPROX_QUANTILES(avg_slots_per_job, 100)[OFFSET(95)], 1) as p95_commitment_level
+  FROM job_slot_usage
+)
+SELECT
+  'Average Commitment' as scenario,
+  p.avg_commitment_level as commitment_slots,
+  COUNT(*) as total_jobs,
+  COUNTIF(j.avg_slots_per_job <= p.avg_commitment_level) as jobs_within_commitment,
+  COUNTIF(j.avg_slots_per_job > p.avg_commitment_level) as jobs_exceeding_commitment,
+  ROUND(COUNTIF(j.avg_slots_per_job > p.avg_commitment_level) * 100.0 / COUNT(*), 1) as pct_jobs_exceeding,
+  ROUND(SUM(CASE WHEN j.avg_slots_per_job > p.avg_commitment_level THEN j.slot_hours ELSE 0 END), 1) as slot_hours_exceeding
+FROM job_slot_usage j, percentiles p
+GROUP BY p.avg_commitment_level
+
+UNION ALL
+
+SELECT
+  'P50 Commitment' as scenario,
+  p.p50_commitment_level as commitment_slots,
+  COUNT(*) as total_jobs,
+  COUNTIF(j.avg_slots_per_job <= p.p50_commitment_level) as jobs_within_commitment,
+  COUNTIF(j.avg_slots_per_job > p.p50_commitment_level) as jobs_exceeding_commitment,
+  ROUND(COUNTIF(j.avg_slots_per_job > p.p50_commitment_level) * 100.0 / COUNT(*), 1) as pct_jobs_exceeding,
+  ROUND(SUM(CASE WHEN j.avg_slots_per_job > p.p50_commitment_level THEN j.slot_hours ELSE 0 END), 1) as slot_hours_exceeding
+FROM job_slot_usage j, percentiles p
+GROUP BY p.p50_commitment_level
+
+UNION ALL
+
+SELECT
+  'P90 Commitment' as scenario,
+  p.p90_commitment_level as commitment_slots,
+  COUNT(*) as total_jobs,
+  COUNTIF(j.avg_slots_per_job <= p.p90_commitment_level) as jobs_within_commitment,
+  COUNTIF(j.avg_slots_per_job > p.p90_commitment_level) as jobs_exceeding_commitment,
+  ROUND(COUNTIF(j.avg_slots_per_job > p.p90_commitment_level) * 100.0 / COUNT(*), 1) as pct_jobs_exceeding,
+  ROUND(SUM(CASE WHEN j.avg_slots_per_job > p.p90_commitment_level THEN j.slot_hours ELSE 0 END), 1) as slot_hours_exceeding
+FROM job_slot_usage j, percentiles p
+GROUP BY p.p90_commitment_level
+
+UNION ALL
+
+SELECT
+  'P95 Commitment' as scenario,
+  p.p95_commitment_level as commitment_slots,
+  COUNT(*) as total_jobs,
+  COUNTIF(j.avg_slots_per_job <= p.p95_commitment_level) as jobs_within_commitment,
+  COUNTIF(j.avg_slots_per_job > p.p95_commitment_level) as jobs_exceeding_commitment,
+  ROUND(COUNTIF(j.avg_slots_per_job > p.p95_commitment_level) * 100.0 / COUNT(*), 1) as pct_jobs_exceeding,
+  ROUND(SUM(CASE WHEN j.avg_slots_per_job > p.p95_commitment_level THEN j.slot_hours ELSE 0 END), 1) as slot_hours_exceeding
+FROM job_slot_usage j, percentiles p
+GROUP BY p.p95_commitment_level
+
+ORDER BY commitment_slots;
+```
+
+**MCP Tool:** Use `execute_sql` from `bigquery-data-analytics` server
+
+**Interpretation:**
+- **jobs_exceeding_commitment:** Number of jobs that would need on-demand or autoscaling capacity
+- **pct_jobs_exceeding:** Percentage of jobs affected by the commitment level
+- **slot_hours_exceeding:** Total slot-hours that would spill over to on-demand/autoscaling
+
+**Use Case:**
+- Answers the question: "If we commit to average slots, how many jobs will be affected?"
+- Helps quantify the impact of different commitment levels on workload
+- Supports decision-making for baseline vs. autoscaling strategies
+
+**Example Interpretation:**
+- If "Average Commitment" shows 80% of jobs exceeding → baseline would be underutilized, autoscaling is better
+- If "P90 Commitment" shows only 10% of jobs exceeding → baseline might be appropriate
+- High slot_hours_exceeding indicates significant on-demand costs even with commitment
+
 ## Step 5: Monitor and Validate
 
 After implementing your chosen strategy, monitor these metrics:
@@ -1029,6 +1133,21 @@ bq_finops/analysis_results/
 - If capacity errors <5%: Current strategy adequate
 - Non-capacity errors: Address through query fixes or permission updates
 
+## Job Impact Analysis
+[Table showing impact at different commitment levels]
+
+| Scenario | Commitment Slots | Total Jobs | Jobs Exceeding | % Jobs Exceeding | Slot-Hours Exceeding |
+|----------|-----------------|------------|----------------|------------------|---------------------|
+| Average | [X] | [X] | [X] | [X]% | [X] |
+| P50 | [X] | [X] | [X] | [X]% | [X] |
+| P90 | [X] | [X] | [X] | [X]% | [X] |
+| P95 | [X] | [X] | [X] | [X]% | [X] |
+
+**Interpretation:**
+- Shows how many jobs would exceed different commitment levels
+- Helps answer: "If we commit to average slots, how many jobs will be affected?"
+- High % jobs exceeding indicates baseline would be underutilized
+
 ## Expensive Queries
 [Table of top users by bytes scanned]
 
@@ -1086,6 +1205,26 @@ bq_finops/analysis_results/
 - Baseline slots: [X] (based on p[10/25])
 - Max autoscale: [X] (if applicable)
 - Projects to assign: [List]
+
+## Alternative Analysis
+
+### Why Other Options Were Not Recommended
+
+**Option A: Stay On-Demand (PAYG)**
+- **Why Considered:** [Reason]
+- **Why Rejected:** [Specific reason based on metrics]
+
+**Option B: Autoscaling Reservation (Standard Edition)**
+- **Why Considered:** [Reason]
+- **Why Rejected/Recommended:** [Specific reason based on metrics]
+
+**Option C: Baseline Reservations (Enterprise/Enterprise Plus)**
+- **Why Considered:** [Reason]
+- **Why Rejected:** [Specific reason based on metrics]
+
+**Option D: Hybrid Approach**
+- **Why Considered:** [Reason]
+- **Why Rejected/Partially Applied:** [Specific reason based on metrics]
 
 ## Optimization Actions
 1. **[Action 1]:** [Specific recommendation with expected impact]
