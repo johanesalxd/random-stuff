@@ -253,50 +253,6 @@ Edit `sql/05_maps_api_integration.sql` and replace:
    - **Geo dimension:** `geometry`
    - **Color dimension:** `truck_id` or `zone_id`
 
-### Option 3: Deck.gl (Advanced)
-
-For interactive 3D visualizations, export results and use [deck.gl](https://deck.gl/):
-
-```javascript
-import {DeckGL, GeoJsonLayer} from 'deck.gl';
-
-const layer = new GeoJsonLayer({
-  id: 'routes',
-  data: 'results.geojson',
-  getLineColor: d => colorScale(d.properties.truck_id),
-  getLineWidth: 3
-});
-```
-
-## Demo Presentation Flow
-
-Use the narrative in `slides.md` for presenting this demo:
-
-1. **Slide 1:** Introduce the "Logistics Scale Paradox"
-2. **Slide 2:** Show the hybrid architecture diagram
-3. **Slide 3:** Run Act 1 (Territory Planning) - show clustering
-4. **Slide 4:** Run Act 2 (Route Sequencing) - show spider map
-5. **Slide 5:** Run Act 3 (Maps Integration) - show road network comparison
-6. **Slide 6:** Discuss business value (cost, speed, simplicity)
-
-## Key Talking Points
-
-### BigQuery Strengths (Macro)
-- **Scale:** Process millions of points in seconds
-- **Cost:** Fractions of a cent per query
-- **Speed:** Instant clustering and sequencing
-- **Integration:** Native SQL, no data movement
-
-### Google Maps Strengths (Micro)
-- **Precision:** Real road network with traffic
-- **Optimization:** TSP solver with waypoint reordering
-- **Reality:** Accounts for one-way streets, U-turns, restrictions
-
-### Hybrid Architecture Benefits
-- **Cost Efficiency:** Only send optimized candidates to paid API
-- **Scalability:** Re-plan entire fleet in seconds
-- **Simplicity:** End-to-end pipeline in SQL
-
 ## SQL Functions Reference
 
 | Function | Purpose | Example |
@@ -306,25 +262,7 @@ Use the narrative in `slides.md` for presenting this demo:
 | `ST_MAKELINE(array<geog>)` | Create line from points | `ST_MAKELINE(ARRAY_AGG(location))` |
 | `ST_LENGTH(geog)` | Calculate geodesic length (meters) | `ST_LENGTH(route) / 1000` |
 | `ST_DISTANCE(geog1, geog2)` | Distance between points (meters) | `ST_DISTANCE(a, b)` |
-| `ST_LINEFROMENCODEDPOLYLINE(str)` | Decode Maps API polyline | `ST_LINEFROMENCODEDPOLYLINE(encoded)` |
-
-## Troubleshooting
-
-### Issue: "Remote function call failed"
-
-**Checklist:**
-1. Cloud Function is deployed and accessible
-2. BigQuery connection is created in the same region
-3. Service account has "Cloud Functions Invoker" role
-4. Function endpoint URL is correct in SQL
-
-### Issue: "No results in Geo Viz"
-
-**Checklist:**
-1. Query returns a `geometry` column
-2. Geometry column contains valid GEOGRAPHY values
-3. Try zooming out on the map
-4. Check for NULL geometries: `WHERE geometry IS NOT NULL`
+| `ST_GEOGFROMGEOJSON(str)` | Create geography from GeoJSON | `ST_GEOGFROMGEOJSON(geojson_string)` |
 
 ## Cost Estimation
 
@@ -339,26 +277,6 @@ Use the narrative in `slides.md` for presenting this demo:
 - **Demo usage:** ~10 requests = $0.05
 
 **Total demo cost:** < $0.10
-
-## Next Steps
-
-1. **Production Deployment:**
-   - Use Secret Manager for API keys
-   - Implement rate limiting on Cloud Function
-   - Add error handling and retry logic
-   - Set up monitoring and alerting
-
-2. **Advanced Features:**
-   - Time windows for deliveries
-   - Vehicle capacity constraints
-   - Multi-depot routing
-   - Real-time traffic integration
-
-3. **Integration:**
-   - Export routes to fleet management systems
-   - Schedule daily route optimization
-   - Build dashboards in Looker Studio
-   - Create mobile apps for drivers
 
 ## Resources
 
