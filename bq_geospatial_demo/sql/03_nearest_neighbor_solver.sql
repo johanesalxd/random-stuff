@@ -48,11 +48,11 @@ BEGIN
     location,
     0.0 AS distance_from_previous_km
   FROM remaining_stops
-  WHERE location = current_location;
+  WHERE ST_EQUALS(location, current_location);
 
   -- Remove the starting point from remaining stops
   DELETE FROM remaining_stops
-  WHERE location = current_location;
+  WHERE ST_EQUALS(location, current_location);
 
   SET counter = 1;
 
@@ -84,7 +84,7 @@ BEGIN
 
     -- Remove the visited stop from remaining stops
     DELETE FROM remaining_stops
-    WHERE location = current_location;
+    WHERE ST_EQUALS(location, current_location);
 
     SET counter = counter + 1;
   END LOOP;
