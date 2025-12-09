@@ -49,28 +49,54 @@ graph LR
     style D fill:#c8e6c9
 ```
 
-## Quick Start
+## Choose Your Demo Path
 
-### Option 1: Geohash-Based Clustering (Recommended for Demo)
+This demo offers two approaches for territory clustering. Choose based on your needs:
 
-This approach uses spatial indexing for instant territory assignment without requiring model training.
+| Feature | Geohash (Default) | K-Means (Advanced) |
+|---------|-------------------|-------------------|
+| **Setup Time** | None | 1-2 minutes (model training) |
+| **Execution** | Instant | Instant (after model exists) |
+| **Cluster Balance** | Good | Better (ML-optimized) |
+| **Best For** | Demos, quick analysis | Production, balanced workloads |
+| **SQL Folder** | `sql/` | `sql_kmeans/` |
+| **Complexity** | Simple | Requires ML.PREDICT joins |
 
+### Path 1: Geohash-Based Clustering (Recommended for Demos)
+
+**Advantages:**
+- Zero setup - runs immediately
+- No model training required
+- Perfect for demonstrations and quick analysis
+- Scales to millions of points instantly
+
+**Quick Start:**
 ```bash
 # Run the geohash clustering demo
 bq query --use_legacy_sql=false < sql/01_geohash_clustering.sql
 ```
 
-### Option 2: BQML K-Means Clustering (Advanced)
+### Path 2: BQML K-Means Clustering (Advanced)
 
-This approach uses machine learning for more balanced territories but requires model creation.
+**Advantages:**
+- More balanced territories (ML-optimized)
+- Better workload distribution across vehicles
+- Production-ready approach
+- Reusable model for consistent clustering
 
+**Quick Start:**
 ```bash
-# Step 1: Create the K-Means model (one-time setup)
-bq query --use_legacy_sql=false < sql/00_bqml_kmeans_clustering.sql
+# Step 1: Create the K-Means model (one-time setup, ~1-2 minutes)
+bq query --use_legacy_sql=false < sql_kmeans/00_create_kmeans_model.sql
 
-# Step 2: Use the model for clustering
-# (See sql/00_bqml_kmeans_clustering.sql for usage examples)
+# Step 2: Update project/dataset placeholders in all sql_kmeans/*.sql files
+# Replace 'your_project.your_dataset' with your actual values
+
+# Step 3: Run K-Means clustering
+bq query --use_legacy_sql=false < sql_kmeans/01_kmeans_clustering.sql
 ```
+
+**Note:** All queries in `sql_kmeans/` require the model to be created first and placeholders to be updated.
 
 ## Demo Scenarios
 

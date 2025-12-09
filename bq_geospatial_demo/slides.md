@@ -150,3 +150,51 @@ We moved from a strategic guess to an executable reality in a single SQL query."
 - "Notice how the stops are numbered - that's the visit order"
 - "The distance shown is actual driving distance, not straight-line"
 - "We can filter by layer to compare strategic vs tactical views"
+
+---
+
+## Appendix: Alternative Clustering Methods
+
+### When to Use K-Means vs Geohash
+
+**This demo uses geohash-based clustering by default**, but you can optionally use BQML K-Means for more balanced territories.
+
+| Aspect | Geohash (Default) | K-Means (Advanced) |
+|--------|-------------------|-------------------|
+| **Setup** | None - runs immediately | Requires 1-2 min model training |
+| **Balance** | Good geographic distribution | Better workload balance |
+| **Use Case** | Demos, quick analysis | Production deployments |
+| **SQL Files** | `sql/` folder | `sql_kmeans/` folder |
+
+### K-Means Demo Modifications
+
+If presenting the K-Means version:
+
+**Slide 3 Modifications:**
+- Run `sql_kmeans/01_kmeans_clustering.sql` instead
+- Add talking point: "We trained a K-Means model to create more balanced territories"
+- Emphasize: "The model trains once in 1-2 minutes, then predictions are instant"
+
+**Slide 4 Modifications:**
+- Run `sql_kmeans/02_route_sequencing.sql` instead
+- Add talking point: "K-Means created balanced territories, geohash orders stops within them"
+
+**Additional Talking Points:**
+- "K-Means uses machine learning to optimize cluster balance"
+- "This approach is better for production where workload balance matters"
+- "The model is reusable - train once, use for all future route planning"
+- "Compare the zone sizes - K-Means creates more evenly distributed workloads"
+
+### Prerequisites for K-Means Demo
+
+Before presenting the K-Means version:
+1. Create the model: `bq query < sql_kmeans/00_create_kmeans_model.sql`
+2. Update all `sql_kmeans/*.sql` files with your project/dataset names
+3. Test queries to ensure model is accessible
+
+### Hybrid Approach (Best of Both)
+
+For advanced audiences, you can explain:
+- "We use K-Means for territory assignment (balanced workloads)"
+- "Then geohash for stop sequencing within territories (fast execution)"
+- "This hybrid gives us both ML-powered balance and instant performance"
