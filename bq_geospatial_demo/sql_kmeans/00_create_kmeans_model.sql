@@ -68,15 +68,15 @@ UNION ALL
 
 -- Add cluster centroids
 SELECT
-  CENTROID_ID AS cluster_id,
+  cluster_id,
   ST_GEOGPOINT(
     AVG(longitude),
     AVG(latitude)
   ) AS geometry,
-  CONCAT('Cluster ', CAST(CENTROID_ID AS STRING)) AS label,
+  CONCAT('Cluster ', CAST(cluster_id AS STRING)) AS label,
   'Centroid' AS type
 FROM clustered_stations
-GROUP BY CENTROID_ID;
+GROUP BY cluster_id;
 
 -- STEP 3: Evaluate Model Quality
 -- Check how balanced the clusters are
