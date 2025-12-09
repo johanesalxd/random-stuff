@@ -51,13 +51,20 @@ def optimize_route(request):
 
         # Process each call (BigQuery can batch multiple requests)
         for call in calls:
-            # Extract the stops array from the call
-            # BigQuery sends: [[stops_array]]
+            # Extract the stops JSON string from the call
+            # BigQuery sends: [[stops_json_string]]
             if not call or len(call) == 0:
                 results.append(json.dumps({"error": "Empty call"}))
                 continue
 
-            stops = call[0]
+            # Parse the JSON string to get the stops array
+            try:
+                stops = json.loads(call[0])
+            except (json.JSONDecodeError, TypeError) as e:
+                results.append(json.dumps({
+                    "error": f"Invalid JSON format: {str(e)}"
+                }))
+                continue
 
             # Validate input
             if not stops or not isinstance(stops, list) or len(stops) < 2:
@@ -100,9 +107,23 @@ def optimize_route(request):
                         leg['distance']['value'] for leg in route['legs']
                     )
 
+                    # Decode polyline to coordinates for BigQuery
+                    # Convert to GeoJSON LineString format
+                    decoded_coords = googlemaps.convert.decode_polyline(
+                        polyline)
+                    # GeoJSON uses [lng, lat] order, not [lat, lng]
+                    geojson_coords = [[coord['lng'], coord['lat']]
+                                      for coord in decoded_coords]
+
+                    geojson = {
+                        "type": "LineString",
+                        "coordinates": geojson_coords
+                    }
+
                     # Format the response
                     results.append(json.dumps({
                         "polyline": polyline,
+                        "geojson": geojson,
                         "duration": f"{total_duration_seconds // 60} mins",
                         "distance": f"{total_distance_meters / 1000:.2f} km",
                         "duration_seconds": total_duration_seconds,
