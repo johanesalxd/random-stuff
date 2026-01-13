@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: raw_customers
+    description: Raw customer data from source system. Minimal transformation applied.
+    config:
+      tags: ["bronze", "customers"]
+    columns:
+      - name: customer_id
+        description: Unique customer identifier from source
+        data_tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: Customer first name
+      - name: last_name
+        description: Customer last name
+      - name: email
+        description: Customer email address
+      - name: country_code
+        description: Two-letter country code (ISO 3166-1 alpha-2)
+      - name: created_at
+        description: Timestamp when customer was created in source
+      - name: updated_at
+        description: Timestamp when customer was last updated
+
+  - name: raw_orders
+    description: Raw order data from source system. May contain duplicates for testing deduplication.
+    config:
+      tags: ["bronze", "orders"]
+    columns:
+      - name: order_id
+        description: Order identifier (may have duplicates in raw data)
+      - name: customer_id
+        description: Reference to customer who placed the order
+      - name: order_date
+        description: Date the order was placed
+      - name: status
+        description: Raw order status code from source
+      - name: total_amount
+        description: Total order amount in original currency
+      - name: currency
+        description: Currency code for the order
+      - name: created_at
+        description: Timestamp when order was created
+
+  - name: raw_products
+    description: Raw product catalog from source system.
+    config:
+      tags: ["bronze", "products"]
+    columns:
+      - name: product_id
+        description: Unique product identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: product_name
+        description: Product display name
+      - name: category_code
+        description: Product category code
+      - name: price
+        description: Product price
+      - name: stock_quantity
+        description: Current stock quantity
+      - name: is_active
+        description: Whether product is currently active
+      - name: created_at
+        description: Timestamp when product was created
