@@ -1,0 +1,39 @@
+config {
+  type: "operations",
+  name: "rls_policies",
+  hasOutput: false,
+  description: "Row Level Security policies for employees table",
+  dependencies: ["employees"]
+}
+
+${
+  const { project, dataset } = require("../../includes/constants");
+  const { groups } = require("../../includes/security_config");
+
+  const tableName = `${project}.${dataset}.employees`;
+
+  return `
+-- ================================================================
+-- Row Level Security (RLS) Policies
+-- ================================================================
+
+-- ------------------------------------------------------------
+-- RLS Policy 1: Admin sees ALL rows
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE ROW ACCESS POLICY admin_full_access
+ON \`${tableName}\`
+GRANT TO ('${groups.admin}')
+FILTER USING (TRUE);
+
+
+-- ------------------------------------------------------------
+-- RLS Policy 2: Sales group sees only Sales department
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE ROW ACCESS POLICY sales_department_access
+ON \`${tableName}\`
+GRANT TO ('${groups.sales}')
+FILTER USING (department = 'Sales');
+  `.trim();
+}
