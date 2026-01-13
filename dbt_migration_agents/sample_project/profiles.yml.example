@@ -1,0 +1,32 @@
+# Sample DBT Profile for BigQuery
+# ================================
+# Copy this file to ~/.dbt/profiles.yml and customize.
+#
+# Usage:
+#   cp profiles.yml.example ~/.dbt/profiles.yml
+#   # Edit with your GCP project details
+
+sample_project:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth  # or service-account
+      project: your-gcp-project-id
+      dataset: sample_dev
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
+
+    # Production target (optional)
+    prod:
+      type: bigquery
+      method: service-account
+      project: your-prod-project-id
+      dataset: sample_prod
+      keyfile: /path/to/service-account.json
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive

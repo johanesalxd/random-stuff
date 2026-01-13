@@ -1,0 +1,31 @@
+config {
+  type: "operations",
+  name: "rls_policies",
+  hasOutput: false,
+  description: "Row Level Security policies for employees table",
+  dependencies: ["employees"]
+}
+
+-- ================================================================
+-- Row Level Security (RLS) Policies
+-- ================================================================
+
+
+-- ------------------------------------------------------------
+-- RLS Policy 1: Admin sees ALL rows
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE ROW ACCESS POLICY admin_full_access
+ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+GRANT TO ('${dataform.projectConfig.vars.admin_group}')
+FILTER USING (TRUE);
+
+
+-- ------------------------------------------------------------
+-- RLS Policy 2: Sales group sees only Sales department
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE ROW ACCESS POLICY sales_department_access
+ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+GRANT TO ('${dataform.projectConfig.vars.sales_group}')
+FILTER USING (department = 'Sales');

@@ -1,0 +1,82 @@
+# DBT Migration Agents - Git Ignore
+
+# Configuration (contains project-specific values)
+config/migration_config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Generated outputs (keep structure with .gitkeep)
+lineage_analyzer/outputs/*.md
+lineage_analyzer/outputs/*.json
+!lineage_analyzer/outputs/.gitkeep
+
+prd_generator/outputs/*.md
+!prd_generator/outputs/.gitkeep
+
+migration_validator/outputs/*.md
+migration_validator/outputs/*.json
+!migration_validator/outputs/.gitkeep
+
+migration_validator/scripts/*_integration/
+!migration_validator/scripts/.gitkeep
+
+code_refactor/outputs/*.md
+!code_refactor/outputs/.gitkeep
+
+migration_outputs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and credentials
+*.key
+*.pem
+credentials.json
+service_account.json
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

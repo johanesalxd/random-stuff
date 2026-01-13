@@ -12,9 +12,14 @@ random-stuff/
 │   └── cline_gemini_mcp/                   # BigQuery MCP server management for Cline
 ├── bq_firebase/                            # Firebase Analytics with BigQuery integration
 ├── bq_finops_cookbook/                     # BigQuery slot optimization framework
+├── bq_geospatial_demo/                     # BigQuery geospatial routing optimization demo
 ├── bq_kubernetes_comparison/               # BigQuery vs Kubernetes resource management comparison
 ├── bq_places_insights/                     # BigQuery Places Insights competitive analysis
 ├── bq_prompt_engineering/                  # BigQuery Data Science Agent example prompts
+├── bq_rls_cls_dataform/                    # BigQuery RLS/CLS demo with Dataform
+├── bq_scaling_viz/                         # BigQuery scaling visualization
+├── dbt_migration_agents/                   # dbt migration toolkit with AI agents
+├── dbt_spark_bq/                           # dbt Spark on Dataproc with BigQuery
 ├── remote_docker/                          # Docker SSH tunnel management
 └── samba_management/                       # Samba service management
 ```
@@ -25,9 +30,17 @@ random-stuff/
 
 - **bq_firebase**: Jupyter notebook demonstrating Firebase Analytics integration with BigQuery. Shows how to query and analyze Firebase Analytics data exported to BigQuery, including event tracking, user behavior analysis, and conversion funnel analysis.
 - **bq_finops_cookbook**: Comprehensive framework for analyzing BigQuery slot utilization and optimizing workload performance. Provides data-driven recommendations for choosing between on-demand, baseline reservations, autoscaling, or hybrid strategies.
+- **bq_geospatial_demo**: Delivery route optimization using BigQuery geospatial functions. Includes geohash clustering, nearest neighbor solving, and Maps API integration with both geohash and K-means approaches.
 - **bq_kubernetes_comparison**: Visual comparison of BigQuery and Kubernetes workload management strategies.
 - **bq_places_insights**: Competitive intelligence framework using BigQuery Places Insights for banking/finance sector. Includes Jakarta banking demo with 7 analytical queries (market landscape, geographic heatmap, quality analysis, white space opportunities, regional performance, operating hours, payment adoption) and comprehensive field reference guide covering 70+ data fields with use cases for market analysis and strategic expansion planning.
 - **bq_prompt_engineering**: Example prompts for BigQuery Data Science Agent, categorized by complexity level (simple one-shot to complex multi-step analytical tasks).
+- **bq_rls_cls_dataform**: Comprehensive demonstration of BigQuery Row Level Security (RLS) and Column Level Security (CLS) using Dataform with SQL-based data policy approach. Includes both quick SQL demo and production Dataform setup with workflow_settings.yaml configuration.
+- **bq_scaling_viz**: Interactive visualization demonstrating BigQuery slot scaling and workload distribution.
+
+### dbt Tools
+
+- **dbt_migration_agents**: AI-assisted dbt migration toolkit with lineage analysis, PRD generation, code refactoring, and validation. Includes sample Bronze/Silver/Gold project with intentional errors for testing migration workflows.
+- **dbt_spark_bq**: Jupyter notebook demonstrating dbt Spark on Dataproc with BigQuery integration.
 
 ### AI/Agent Tools
 

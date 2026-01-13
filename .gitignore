@@ -1,7 +1,36 @@
 .DS_Store
 *.tmp
-.env
 __pycache__
+
+# Environment variables and credentials
+.env
+**/.env
+*.env
+!.env.example
+
+# Virtual environments
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+**/env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Dataform credentials
+.df-credentials.json
+**/.df-credentials.json
 
 # Internal Google-specific content
 internal/

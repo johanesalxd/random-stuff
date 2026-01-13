@@ -1,0 +1,157 @@
+# DBT Migration Agents Configuration
+# ===================================
+#
+# This file configures the DBT Migration Agents framework for your project.
+# Copy this file to `migration_config.yaml` and customize for your environment.
+#
+# Usage:
+#   cp migration_config.example.yaml migration_config.yaml
+#   # Edit migration_config.yaml with your project-specific values
+#
+# Architecture: Medallion (Bronze -> Silver -> Gold)
+#   - Bronze: Raw data ingestion from source systems
+#   - Silver: Cleaned, transformed, and enriched data
+#   - Gold: Business-ready curated datasets for analytics
+
+# =============================================================================
+# PROJECT SETTINGS
+# =============================================================================
+project:
+  # Your DBT project name (from dbt_project.yml)
+  name: "your_dbt_project"
+
+  # Path to DBT manifest.json (relative to project root)
+  # Run `dbt parse` to generate if missing
+  manifest_path: "target/manifest.json"
+
+# =============================================================================
+# GCP SETTINGS
+# =============================================================================
+gcp:
+  # Billing project for BigQuery API calls
+  # This project is charged for query costs during validation
+  billing_project: "your-billing-project"
+
+  # Medallion Architecture Layers
+  # Configure each layer's GCP project
+  projects:
+    # Bronze layer - Raw data ingestion from source systems
+    bronze: "your-bronze-project"
+
+    # Silver layer - Cleaned and transformed data
+    # This is where your current staging/transformed models write
+    silver: "your-silver-project"
+
+    # Gold layer - Business-ready curated datasets
+    # This is the migration target (gold layer)
+    gold: "your-gold-project"
+
+  # Default schemas/datasets within projects
+  schemas:
+    bronze: "bronze"
+    silver: "silver"
+    gold: "gold"
+
+# =============================================================================
+# DBT PATHS
+# =============================================================================
+# Paths are relative to your DBT project root
+
+dbt:
+  # Path to bronze (raw) models
+  bronze_models: "models/bronze"
+
+  # Path to silver (transformed) models - source for migration
+  silver_models: "models/silver"
+
+  # Target path for gold (curated) models - migration destination
+  gold_models: "models/gold"
+
+  # Path to seed files
+  seeds: "seeds"
+
+# =============================================================================
+# OUTPUT PATHS
+# =============================================================================
+# Where migration artifacts are generated (relative to dbt_migration_agents/)
+
+outputs:
+  # Lineage analysis outputs
+  lineage: "lineage_analyzer/outputs"
+
+  # PRD documents
+  prd: "prd_generator/outputs"
+
+  # Validation scripts and reports
+  validation: "migration_validator/outputs"
+
+  # Migration cookbooks
+  cookbooks: "code_refactor/outputs"
+
+# =============================================================================
+# VALIDATION SETTINGS
+# =============================================================================
+validation:
+  # Maximum allowed row count difference (as decimal)
+  # 0.001 = 0.1% difference allowed
+  row_count_threshold: 0.001
+
+  # Maximum allowed NULL value increase (as decimal)
+  # 0.05 = 5% NULL increase allowed
+  null_threshold: 0.05
+
+  # Test priority levels to enforce (CRITICAL tests must always pass)
+  # Options: CRITICAL, HIGH, MEDIUM
+  enforce_priorities:
+    - "CRITICAL"
+    - "HIGH"
+
+# =============================================================================
+# DATA ARCHITECTURE DESCRIPTION
+# =============================================================================
+# This section is used in generated PRDs and documentation.
+# Customize to describe your specific data platform architecture.
+
+architecture:
+  description: |
+    Medallion Architecture (Bronze -> Silver -> Gold):
+
+    Our data platform uses a three-layer medallion architecture:
+
+    1. Bronze Layer: Raw data ingestion from source systems. Data is
+       stored as-is with minimal transformation.
+
+    2. Silver Layer: Cleaned, validated, and transformed data. Business
+       logic is applied here including deduplication, type casting,
+       and field standardization.
+
+    3. Gold Layer: Business-ready curated datasets optimized for
+       analytics consumption. These are the final, production-quality
+       tables used by analysts and dashboards.
+
+  # Define your data layers for documentation
+  layers:
+    - name: "Bronze"
+      description: "Raw data ingestion from source systems"
+
+    - name: "Silver"
+      description: "Cleaned, transformed, and enriched data"
+
+    - name: "Gold"
+      description: "Business-ready curated datasets for analytics"
+
+# =============================================================================
+# ADVANCED SETTINGS (OPTIONAL)
+# =============================================================================
+advanced:
+  # Enable verbose logging in Python scripts
+  verbose: false
+
+  # Number of parallel validation tests (1 = sequential)
+  parallel_tests: 1
+
+  # Timeout for BigQuery queries (seconds)
+  query_timeout: 300
+
+  # Retry attempts for failed API calls
+  retry_attempts: 3
