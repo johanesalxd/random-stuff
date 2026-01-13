@@ -1,0 +1,164 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: |
+      Customer dimension with aggregated order metrics and segmentation.
+      Complexity: MEDIUM - Includes aggregations and business logic for segmentation.
+    config:
+      tags: ["gold", "curated", "dimension", "customers"]
+    columns:
+      - name: customer_id
+        description: Unique customer identifier (primary key)
+        data_tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: Customer first name
+      - name: last_name
+        description: Customer last name
+      - name: full_name
+        description: Full customer name
+      - name: email
+        description: Customer email address
+      - name: country_code
+        description: Two-letter country code
+      - name: country_name
+        description: Full country name
+      - name: total_orders
+        description: Total number of orders placed
+      - name: lifetime_value_usd
+        description: Total revenue from customer in USD
+      - name: avg_order_value_usd
+        description: Average order value in USD
+      - name: completed_orders
+        description: Number of completed orders
+      - name: first_order_date
+        description: Date of first order
+      - name: last_order_date
+        description: Date of most recent order
+      - name: customer_segment
+        description: Customer segment based on order count
+        data_tests:
+          - accepted_values:
+              values: ["PROSPECT", "NEW", "ACTIVE", "LOYAL", "UNKNOWN"]
+      - name: value_tier
+        description: Value tier based on lifetime revenue
+        data_tests:
+          - accepted_values:
+              values: ["NO_PURCHASE", "LOW_VALUE", "MEDIUM_VALUE", "HIGH_VALUE", "UNKNOWN"]
+      - name: customer_created_at
+        description: When customer was created
+      - name: customer_updated_at
+        description: When customer was last updated
+      - name: gold_loaded_at
+        description: Gold layer load timestamp
+      - name: gold_source_system
+        description: Source system identifier
+
+  - name: dim_products
+    description: |
+      Product dimension with availability status.
+      Complexity: LOW - Simple transformation with business logic for availability.
+    config:
+      tags: ["gold", "curated", "dimension", "products"]
+    columns:
+      - name: product_id
+        description: Unique product identifier (primary key)
+        data_tests:
+          - unique
+          - not_null
+      - name: product_name
+        description: Product display name
+      - name: category_code
+        description: Category code
+      - name: category_name
+        description: Human-readable category name
+      - name: price
+        description: Product price
+      - name: price_tier
+        description: Price tier classification
+      - name: stock_quantity
+        description: Current stock level
+      - name: stock_status
+        description: Stock status classification
+      - name: is_active
+        description: Whether product is active
+      - name: availability_status
+        description: Combined availability status
+        data_tests:
+          - accepted_values:
+              values: ["DISCONTINUED", "OUT_OF_STOCK", "AVAILABLE"]
+      - name: product_created_at
+        description: When product was created
+      - name: gold_loaded_at
+        description: Gold layer load timestamp
+      - name: gold_source_system
+        description: Source system identifier
+
+  - name: fct_orders
+    description: |
+      Order fact table with complete order details, customer context, and aggregated line item metrics.
+      Complexity: HIGH - Multi-source joins, aggregations, and complex calculated metrics.
+    config:
+      tags: ["gold", "curated", "fact", "orders"]
+    columns:
+      - name: order_id
+        description: Unique order identifier (primary key)
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Reference to customer dimension
+        data_tests:
+          - not_null
+      - name: order_date_key
+        description: Date key for joining to date dimension
+      - name: customer_name
+        description: Customer full name (denormalized)
+      - name: customer_country
+        description: Customer country code (denormalized)
+      - name: order_date
+        description: Date the order was placed
+      - name: raw_status
+        description: Original status from source
+      - name: order_status
+        description: Standardized order status
+      - name: status_category
+        description: Grouped status category
+      - name: order_total_original
+        description: Order total in original currency
+      - name: original_currency
+        description: Original currency code
+      - name: order_total_usd
+        description: Order total in USD
+      - name: order_size_category
+        description: Order size classification
+      - name: total_line_items
+        description: Count of line items in order
+      - name: total_units
+        description: Total units ordered
+      - name: unique_products
+        description: Count of distinct products
+      - name: line_items_subtotal
+        description: Sum of line item totals before discount
+      - name: line_items_after_discount
+        description: Sum of line item totals after discount
+      - name: total_discount_amount
+        description: Total discount applied
+      - name: avg_unit_price_usd
+        description: Average price per unit in USD
+      - name: discount_rate
+        description: Effective discount rate
+      - name: is_completed
+        description: Whether order is completed
+      - name: is_cancelled
+        description: Whether order is cancelled
+      - name: has_discount
+        description: Whether order has any discount
+      - name: order_created_at
+        description: Order creation timestamp
+      - name: gold_loaded_at
+        description: Gold layer load timestamp
+      - name: gold_source_system
+        description: Source system identifier

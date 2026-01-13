@@ -1,0 +1,111 @@
+config {
+  type: "operations",
+  name: "cls_policies",
+  hasOutput: false,
+  description: "Column Level Security (masking and access) policies for employees table",
+  dependencies: ["employees"]
+}
+
+-- ================================================================
+-- Column Level Security (CLS) Policies
+-- ================================================================
+-- Using SQL-based DATA_POLICY approach with 3-step pattern:
+--   1. CREATE OR REPLACE DATA_POLICY
+--   2. ALTER TABLE ... ALTER COLUMN ... SET OPTIONS
+--   3. GRANT FINE_GRAINED_READ
+-- ================================================================
+
+
+-- ------------------------------------------------------------
+-- CLS Policy 1: Mask SSN with SHA256
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
+OPTIONS (
+  data_policy_type="DATA_MASKING_POLICY",
+  masking_expression="SHA256"
+);
+
+ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER COLUMN ssn SET OPTIONS (
+  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy'}"]
+);
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
+TO "${dataform.projectConfig.vars.sales_principal}";
+
+
+-- ------------------------------------------------------------
+-- CLS Policy 2: Mask email with default masking value
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
+OPTIONS (
+  data_policy_type="DATA_MASKING_POLICY",
+  masking_expression="DEFAULT_MASKING_VALUE"
+);
+
+ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER COLUMN email SET OPTIONS (
+  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy'}"]
+);
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
+TO "${dataform.projectConfig.vars.sales_principal}";
+
+
+-- ------------------------------------------------------------
+-- CLS Policy 3: Hide salary as NULL
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
+OPTIONS (
+  data_policy_type="DATA_MASKING_POLICY",
+  masking_expression="ALWAYS_NULL"
+);
+
+ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER COLUMN salary SET OPTIONS (
+  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy'}"]
+);
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
+TO "${dataform.projectConfig.vars.sales_principal}";
+
+
+-- ------------------------------------------------------------
+-- CLS Policy 4: RAW ACCESS POLICY - Block access to bank_account entirely
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.bank_account_access_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
+);
+
+ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER COLUMN bank_account SET OPTIONS (
+  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.bank_account_access_policy'}"]
+);
+
+-- Grant access to ADMIN group only (only they can query this column)
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.bank_account_access_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
+
+-- NOTE: RAW_DATA_ACCESS_POLICY blocks access entirely for unauthorized users
+-- Sales group does NOT get access - any query including bank_account will fail

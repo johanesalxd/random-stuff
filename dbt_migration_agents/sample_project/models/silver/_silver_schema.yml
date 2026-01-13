@@ -1,0 +1,143 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: Staged customer data with standardized fields. Cleaned and ready for gold layer consumption.
+    config:
+      tags: ["silver", "transformed", "customers"]
+    columns:
+      - name: customer_id
+        description: Unique customer identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: Customer first name (trimmed)
+      - name: last_name
+        description: Customer last name (trimmed)
+      - name: full_name
+        description: Concatenated full name
+      - name: email
+        description: Customer email (lowercased and trimmed)
+      - name: country_code
+        description: Two-letter country code
+      - name: created_at
+        description: Original creation timestamp
+      - name: updated_at
+        description: Last update timestamp
+      - name: _loaded_at
+        description: Silver layer load timestamp
+
+  - name: stg_orders
+    description: Staged orders with deduplication, status mapping, and currency normalization.
+    config:
+      tags: ["silver", "transformed", "orders"]
+    columns:
+      - name: order_id
+        description: Unique order identifier (deduplicated)
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Reference to customer
+        data_tests:
+          - not_null
+      - name: order_date
+        description: Date the order was placed
+      - name: order_date_key
+        description: Date key in YYYYMMDD format for joining
+      - name: raw_status
+        description: Original status code from source
+      - name: order_status
+        description: Standardized status (PENDING, PROCESSING, SHIPPED, COMPLETED, CANCELLED)
+        data_tests:
+          - accepted_values:
+              values: ["PENDING", "PROCESSING", "IN_TRANSIT", "COMPLETED", "CANCELLED", "REFUNDED", "UNKNOWN"]
+      - name: status_category
+        description: Grouped status category (FULFILLED, IN_PROGRESS, CANCELLED, OTHER)
+      - name: total_amount
+        description: Order total in original currency
+      - name: currency
+        description: Original currency code
+      - name: total_amount_usd
+        description: Order total normalized to USD
+      - name: order_size_category
+        description: Order size classification (SMALL, MEDIUM, LARGE, ENTERPRISE)
+      - name: created_at
+        description: Order creation timestamp
+      - name: _loaded_at
+        description: Silver layer load timestamp
+
+  - name: stg_products
+    description: Staged products with category enrichment and stock status classification.
+    config:
+      tags: ["silver", "transformed", "products"]
+    columns:
+      - name: product_id
+        description: Unique product identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: product_name
+        description: Product display name
+      - name: category_code
+        description: Category code
+      - name: category_name
+        description: Human-readable category name
+      - name: price
+        description: Product price
+      - name: stock_quantity
+        description: Current stock level
+      - name: is_active
+        description: Active product flag
+      - name: stock_status
+        description: Stock status classification
+        data_tests:
+          - accepted_values:
+              values: ["OUT_OF_STOCK", "LOW_STOCK", "IN_STOCK", "WELL_STOCKED"]
+      - name: price_tier
+        description: Price tier classification
+        data_tests:
+          - accepted_values:
+              values: ["BUDGET", "MID_RANGE", "PREMIUM", "LUXURY"]
+      - name: created_at
+        description: Product creation timestamp
+      - name: _loaded_at
+        description: Silver layer load timestamp
+
+  - name: stg_order_items
+    description: Order line items with calculations and enrichment from orders and products.
+    config:
+      tags: ["silver", "transformed", "order_items"]
+    columns:
+      - name: line_id
+        description: Unique line item identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: Reference to parent order
+      - name: customer_id
+        description: Customer who placed the order
+      - name: order_date
+        description: Date of the order
+      - name: order_status
+        description: Current order status
+      - name: product_id
+        description: Reference to product
+      - name: product_name
+        description: Product name (denormalized)
+      - name: category_name
+        description: Product category (denormalized)
+      - name: quantity
+        description: Quantity ordered
+      - name: unit_price
+        description: Price per unit
+      - name: line_total
+        description: Quantity times unit price
+      - name: discount_rate
+        description: Applied discount rate (0.10 for 3+ items)
+      - name: line_total_after_discount
+        description: Line total after discount applied
+      - name: _loaded_at
+        description: Silver layer load timestamp
