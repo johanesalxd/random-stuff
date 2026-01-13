@@ -1,0 +1,9 @@
+{
+  "defaultSchema": "demo_dataset",
+  "defaultDatabase": "johanesa-playground-326616",
+  "defaultLocation": "us",
+  "assertionSchema": "dataform_assertions",
+  "vars": {
+    "env": "dev"
+  }
+}
