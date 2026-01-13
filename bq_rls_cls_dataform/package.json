@@ -1,0 +1,8 @@
+{
+  "name": "bq-rls-cls-dataform-demo",
+  "version": "1.0.0",
+  "description": "BigQuery Row Level Security and Column Level Security demo using Dataform",
+  "dependencies": {
+    "@dataform/core": "^3.0.0"
+  }
+}
