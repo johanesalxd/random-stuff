@@ -93,13 +93,9 @@ An employee directory with sensitive information where:
 ```
 bq_rls_cls_dataform/
 ├── README.md
-├── dataform.json                        # Project configuration
-├── package.json                         # Dependencies
+├── workflow_settings.yaml               # All configuration (project, groups, vars)
 ├── sql/
 │   └── quick_demo.sql                   # SOURCE OF TRUTH - SQL-only quick demo
-├── includes/
-│   ├── constants.js                     # Environment-specific config
-│   └── security_config.js               # Group configuration (2 groups)
 └── definitions/
     ├── models/
     │   └── employees.sqlx               # Employee table with sample data
@@ -140,49 +136,35 @@ For detailed instructions, see comments in the SQL file.
 
 ## Production Setup (Dataform Demo)
 
-### 1. Configure Groups
+### 1. Update Configuration
 
-The demo uses two groups configured in `includes/security_config.js`:
+Edit `workflow_settings.yaml` with your project and group values:
 
-```javascript
-const groups = {
-  admin: "group:bq-rls-cls-dataform-admin@johanesa.altostrat.com",
-  sales: "group:bq-rls-cls-dataform-sales@johanesa.altostrat.com"
-};
+```yaml
+defaultProject: your-project-id
+defaultDataset: demo_dataset
+defaultLocation: us
+
+vars:
+  project: your-project-id
+  dataset: demo_dataset
+  location: us
+  admin_group: "group:your-admin-group@domain.com"
+  sales_group: "group:your-sales-group@domain.com"
+  admin_principal: "principalSet://goog/group/your-admin-group@domain.com"
+  sales_principal: "principalSet://goog/group/your-sales-group@domain.com"
 ```
 
-Update these to match your environment.
-
-### 2. Create Google Groups
-
-Create the two groups via Google Admin Console or gcloud:
-
-```bash
-gcloud identity groups create bq-rls-cls-dataform-admin@johanesa.altostrat.com \
-  --organization="YOUR_ORG_ID" \
-  --display-name="BigQuery RLS/CLS Demo - Admin Group"
-
-gcloud identity groups create bq-rls-cls-dataform-sales@johanesa.altostrat.com \
-  --organization="YOUR_ORG_ID" \
-  --display-name="BigQuery RLS/CLS Demo - Sales Group"
-```
-
-### 3. Add Group Members
-
-Add test users to each group via Cloud Console:
-1. Go to [Google Admin Console](https://admin.google.com)
-2. Navigate to Directory > Groups
-3. Add members to each group
-
-**Note:** Group members need `bigquery.filteredDataViewer` and `bigquery.jobUser` roles to query the table. These are typically granted at the project level.
-
-### 4. Deploy Dataform Project
+### 2. Deploy Dataform Project
 
 **Option A: Using Dataform CLI**
 
 ```bash
-# Install dependencies
-npm install
+# Install Dataform CLI globally
+npm install -g @dataform/cli
+
+# Initialize Dataform
+dataform init-creds
 
 # Compile and run
 dataform compile
@@ -196,7 +178,7 @@ dataform run
 3. Link to this directory
 4. Click "Execute" to run all definitions
 
-### 5. Verify Deployment
+### 3. Verify Deployment
 
 Check that resources were created:
 
@@ -208,8 +190,6 @@ bq ls --row_access_policies --format=prettyjson johanesa-playground-326616:demo_
 bq query --use_legacy_sql=false \
   "SELECT employee_id, name, email, department, salary, ssn FROM \`johanesa-playground-326616.demo_dataset.employees\`"
 ```
-
-**Note:** BigQuery doesn't have an INFORMATION_SCHEMA view for row access policies. Use the `bq ls` command or check the table details in BigQuery Console UI.
 
 ## Testing the Demo
 
@@ -277,144 +257,6 @@ SELECT bank_account FROM `johanesa-playground-326616.demo_dataset.employees`;
 -- Success: Shows actual bank account numbers (9876543210, etc.)
 ```
 
-## Key Concepts
-
-### Row Level Security (RLS)
-
-RLS filters rows based on the authenticated user's identity:
-
-```sql
-CREATE OR REPLACE ROW ACCESS POLICY sales_department_access
-ON `project.dataset.employees`
-GRANT TO ('group:sales@domain.com')
-FILTER USING (department = 'Sales');
-```
-
-### Column Level Security - Masking
-
-Transforms data for unauthorized users using predefined rules:
-
-```sql
--- Step 1: Create DATA_POLICY
-CREATE OR REPLACE DATA_POLICY `project.region-us.ssn_masking_policy`
-OPTIONS (
-  data_policy_type="DATA_MASKING_POLICY",
-  masking_expression="SHA256"
-);
-
--- Step 2: Attach to column
-ALTER TABLE `project.dataset.employees`
-ALTER COLUMN ssn SET OPTIONS (
-  data_policies = ["{'name':'project.region-us.ssn_masking_policy'}"]
-);
-
--- Step 3: Grant access (currently not working as expected)
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `project.region-us.ssn_masking_policy`
-TO "principalSet://goog/group/admin@domain.com";
-```
-
-**Available Masking Rules:**
-- `SHA256` - Hash the value
-- `ALWAYS_NULL` - Return NULL
-- `DEFAULT_MASKING_VALUE` - Return type-specific default
-- `LAST_FOUR_CHARACTERS` - Show only last 4 characters
-
-### Column Level Security - Access Control
-
-Blocks access to columns entirely using raw data access policy:
-
-```sql
-CREATE OR REPLACE DATA_POLICY `project.region-us.bank_account_access_policy`
-OPTIONS (
-  data_policy_type="RAW_DATA_ACCESS_POLICY"
-);
-
-ALTER TABLE `project.dataset.employees`
-ALTER COLUMN bank_account SET OPTIONS (
-  data_policies = ["{'name':'project.region-us.bank_account_access_policy'}"]
-);
-
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `project.region-us.bank_account_access_policy`
-TO "principalSet://goog/group/admin@domain.com";
-```
-
-## Dataform Implementation Patterns
-
-### Using Operations for Security Policies
-
-Security policies are implemented as `type: "operations"`:
-
-```javascript
-config {
-  type: "operations",
-  name: "rls_policies",
-  hasOutput: false,
-  dependencies: ["employees"]
-}
-```
-
-This ensures:
-- Policies execute after table creation
-- Clear separation of concerns
-- Independent policy management
-
-### Environment Configuration
-
-Use `includes/constants.js` for environment-specific values:
-
-```javascript
-const config = envConfig[currentEnv];
-module.exports = {
-  project: config.project,
-  dataset: config.dataset,
-  location: config.location,
-  region: `region-${config.location}`
-};
-```
-
-Switch environments via `dataform.json`:
-
-```json
-{
-  "vars": {
-    "env": "prod"
-  }
-}
-```
-
-## Troubleshooting
-
-### Error: Permission denied
-
-Ensure users have `bigquery.filteredDataViewer` role:
-
-```bash
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="group:GROUP@DOMAIN.com" \
-  --role="roles/bigquery.filteredDataViewer"
-```
-
-### Error: Data policy not found
-
-Verify the location matches your dataset region:
-
-```sql
-SELECT location FROM `project.dataset.INFORMATION_SCHEMA.SCHEMATA`
-WHERE schema_name = 'demo_dataset';
-```
-
-### Policies not applying
-
-Check policy existence:
-
-```sql
--- Row access policies
-SELECT * FROM `project.dataset.INFORMATION_SCHEMA.ROW_ACCESS_POLICIES`
-WHERE table_name = 'employees';
-```
-
 ### Verifying DATA_POLICY Grantees
 
 Use the V2 API to check if GRANT statements populated the grantees field:
@@ -425,26 +267,3 @@ curl -s -X GET \
   "https://bigquerydatapolicy.googleapis.com/v2/projects/johanesa-playground-326616/locations/us/dataPolicies/ssn_masking_policy" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grantees'
 ```
-
-## Best Practices
-
-1. **Separation of Concerns**: Keep security policies in separate operation files
-2. **Environment Management**: Use constants for project/dataset/location
-3. **Group-Based Access**: Use groups instead of individual users
-4. **Least Privilege**: Grant minimal necessary access
-5. **Documentation**: Comment all security policies with business justification
-6. **Testing**: Test with actual group members before production deployment
-7. **Monitoring**: Monitor policy usage with BigQuery audit logs
-8. **Use RAW_DATA_ACCESS_POLICY**: For selective column access control, prefer RAW_DATA_ACCESS_POLICY over DATA_MASKING_POLICY
-
-## Resources
-
-- [BigQuery Row Level Security](https://cloud.google.com/bigquery/docs/row-level-security-intro)
-- [BigQuery Column Level Security](https://cloud.google.com/bigquery/docs/column-level-security-intro)
-- [Data Policies on Columns](https://cloud.google.com/bigquery/docs/column-data-masking#data-policies-on-column)
-- [Dataform Documentation](https://cloud.google.com/dataform/docs)
-- [BigQuery IAM Roles](https://cloud.google.com/bigquery/docs/access-control)
-
-## License
-
-This demo is provided as-is for educational purposes.
