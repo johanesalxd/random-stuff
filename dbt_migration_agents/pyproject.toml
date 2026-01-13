@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbt-migration-agents"
+version = "2.0.0"
+description = "Generic framework for migrating DBT staging models to gold layer using Claude Code agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Software Development :: Code Generators",
+]
+keywords = ["dbt", "bigquery", "migration", "claude", "ai-agents"]
+dependencies = [
+    "google-cloud-bigquery>=3.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+lineage = [
+    "google-cloud-datacatalog-lineage>=0.2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pip-audit>=2.0",
+]
+
+[project.scripts]
+dbt-lineage = "lineage_analyzer.dbt_based.analyze_dbt_lineage:main"
+bq-lineage = "lineage_analyzer.dataplex_based.analyze_bq_lineage:main"
+migration-setup = "setup:main"
+
+[tool.setuptools.packages.find]
+include = ["config*", "lineage_analyzer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 88

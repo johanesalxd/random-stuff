@@ -1,0 +1,70 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.defaultSchema,
+  name: "employees",
+  description: "Employee data with sensitive columns for RLS and CLS demo"
+}
+
+SELECT
+  'E001' AS employee_id,
+  'Alice Johnson' AS name,
+  'alice.johnson@company.com' AS email,
+  'Sales' AS department,
+  75000.0 AS salary,
+  '123-45-6789' AS ssn,
+  '9876543210' AS bank_account
+
+UNION ALL
+
+SELECT
+  'E002' AS employee_id,
+  'Bob Smith' AS name,
+  'bob.smith@company.com' AS email,
+  'Sales' AS department,
+  68000.0 AS salary,
+  '234-56-7890' AS ssn,
+  '8765432109' AS bank_account
+
+UNION ALL
+
+SELECT
+  'E003' AS employee_id,
+  'Carol Williams' AS name,
+  'carol.williams@company.com' AS email,
+  'HR' AS department,
+  82000.0 AS salary,
+  '345-67-8901' AS ssn,
+  '7654321098' AS bank_account
+
+UNION ALL
+
+SELECT
+  'E004' AS employee_id,
+  'David Brown' AS name,
+  'david.brown@company.com' AS email,
+  'HR' AS department,
+  79000.0 AS salary,
+  '456-78-9012' AS ssn,
+  '6543210987' AS bank_account
+
+UNION ALL
+
+SELECT
+  'E005' AS employee_id,
+  'Emma Davis' AS name,
+  'emma.davis@company.com' AS email,
+  'Finance' AS department,
+  95000.0 AS salary,
+  '567-89-0123' AS ssn,
+  '5432109876' AS bank_account
+
+UNION ALL
+
+SELECT
+  'E006' AS employee_id,
+  'Frank Miller' AS name,
+  'frank.miller@company.com' AS email,
+  'Finance' AS department,
+  88000.0 AS salary,
+  '678-90-1234' AS ssn,
+  '4321098765' AS bank_account
