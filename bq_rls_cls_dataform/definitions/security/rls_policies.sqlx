@@ -6,24 +6,18 @@ config {
   dependencies: ["employees"]
 }
 
-${
-  const { project, dataset } = require("../../includes/constants");
-  const { groups } = require("../../includes/security_config");
-
-  const tableName = `${project}.${dataset}.employees`;
-
-  return `
 -- ================================================================
 -- Row Level Security (RLS) Policies
 -- ================================================================
+
 
 -- ------------------------------------------------------------
 -- RLS Policy 1: Admin sees ALL rows
 -- ------------------------------------------------------------
 
 CREATE OR REPLACE ROW ACCESS POLICY admin_full_access
-ON \`${tableName}\`
-GRANT TO ('${groups.admin}')
+ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+GRANT TO ('${dataform.projectConfig.vars.admin_group}')
 FILTER USING (TRUE);
 
 
@@ -32,8 +26,6 @@ FILTER USING (TRUE);
 -- ------------------------------------------------------------
 
 CREATE OR REPLACE ROW ACCESS POLICY sales_department_access
-ON \`${tableName}\`
-GRANT TO ('${groups.sales}')
+ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+GRANT TO ('${dataform.projectConfig.vars.sales_group}')
 FILTER USING (department = 'Sales');
-  `.trim();
-}
