@@ -1,0 +1,41 @@
+# Sample DBT Project for Migration Agents Testing
+# ================================================
+# This is a minimal medallion architecture project
+# for testing the DBT Migration Agents framework.
+
+name: 'sample_project'
+version: '1.0.0'
+config-version: 2
+
+profile: 'sample_project'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  sample_project:
+    # Bronze layer - raw data ingestion
+    bronze:
+      +materialized: view
+      +schema: sample_bronze
+      +tags: ["bronze", "raw"]
+
+    # Silver layer - transformed data
+    silver:
+      +materialized: table
+      +schema: sample_silver
+      +tags: ["silver", "transformed"]
+
+    # Gold layer - curated business-ready data
+    gold:
+      +materialized: table
+      +schema: sample_gold
+      +tags: ["gold", "curated"]
+
+seeds:
+  sample_project:
+    +schema: seeds
