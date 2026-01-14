@@ -2,8 +2,8 @@
 # All configuration in one place - update these values for your environment
 
 dataformCoreVersion: 3.0.0
-defaultProject: johanesa-playground-326616
-defaultDataset: demo_dataset
+defaultProject: my-project-id
+defaultDataset: my-dataset-id
 defaultLocation: us
 
 vars:
@@ -11,14 +11,14 @@ vars:
   env: dev
 
   # Project configuration (used in SQLX files)
-  project: johanesa-playground-326616
-  dataset: demo_dataset
+  project: my-project-id
+  dataset: my-dataset-id
   location: us
 
   # Security Groups (for RLS policies)
-  admin_group: "group:bq-rls-cls-dataform-admin@johanesa.altostrat.com"
-  sales_group: "group:bq-rls-cls-dataform-sales@johanesa.altostrat.com"
+  admin_group: "group:bq-rls-cls-dataform-admin@mydomain.com"
+  sales_group: "group:bq-rls-cls-dataform-sales@mydomain.com"
 
   # Principal Sets (for CLS GRANT statements)
-  admin_principal: "principalSet://goog/group/bq-rls-cls-dataform-admin@johanesa.altostrat.com"
-  sales_principal: "principalSet://goog/group/bq-rls-cls-dataform-sales@johanesa.altostrat.com"
+  admin_principal: "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com"
+  sales_principal: "principalSet://goog/group/bq-rls-cls-dataform-sales@mydomain.com"
