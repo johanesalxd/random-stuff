@@ -141,13 +141,13 @@ For detailed instructions, see comments in the SQL file.
 Edit `workflow_settings.yaml` with your project and group values:
 
 ```yaml
-defaultProject: your-project-id
-defaultDataset: demo_dataset
+defaultProject: my-project-id
+defaultDataset: my-dataset-id
 defaultLocation: us
 
 vars:
-  project: your-project-id
-  dataset: demo_dataset
+  project: my-project-id
+  dataset: my-dataset-id
   location: us
   admin_group: "group:your-admin-group@domain.com"
   sales_group: "group:your-sales-group@domain.com"
@@ -184,11 +184,11 @@ Check that resources were created:
 
 ```bash
 # List row access policies
-bq ls --row_access_policies --format=prettyjson johanesa-playground-326616:demo_dataset.employees
+bq ls --row_access_policies --format=prettyjson my-project-id:my-dataset-id.employees
 
 # View employee table (via BigQuery Console or bq CLI)
 bq query --use_legacy_sql=false \
-  "SELECT employee_id, name, email, department, salary, ssn FROM \`johanesa-playground-326616.demo_dataset.employees\`"
+  "SELECT employee_id, name, email, department, salary, ssn FROM \`my-project-id.my-dataset-id.employees\`"
 ```
 
 ## Testing the Demo
@@ -205,13 +205,13 @@ SELECT
   department,
   salary,
   ssn
-FROM `johanesa-playground-326616.demo_dataset.employees`;
+FROM `my-project-id.my-dataset-id.employees`;
 -- Returns only 2 rows (E001, E002 - Sales department)
 ```
 
 **As Admin group member:**
 ```sql
-SELECT * FROM `johanesa-playground-326616.demo_dataset.employees`;
+SELECT * FROM `my-project-id.my-dataset-id.employees`;
 -- Returns all 6 rows (E001-E006 - All departments)
 -- Works because Admin has access to all columns including bank_account
 ```
@@ -226,7 +226,7 @@ SELECT
   email,        -- Shows "" (masked - known issue)
   salary,       -- Shows NULL (masked - known issue)
   ssn           -- Shows SHA256 hash (masked - known issue)
-FROM `johanesa-playground-326616.demo_dataset.employees`;
+FROM `my-project-id.my-dataset-id.employees`;
 -- Returns 2 rows with masked values
 ```
 
@@ -239,7 +239,7 @@ SELECT
   salary,       -- Shows NULL (masked - known issue)
   ssn,          -- Shows SHA256 hash (masked - known issue)
   bank_account  -- Shows actual value (RAW_DATA_ACCESS_POLICY works!)
-FROM `johanesa-playground-326616.demo_dataset.employees`;
+FROM `my-project-id.my-dataset-id.employees`;
 -- Returns 6 rows with masked values except bank_account
 ```
 
@@ -247,13 +247,13 @@ FROM `johanesa-playground-326616.demo_dataset.employees`;
 
 **As Sales group member:**
 ```sql
-SELECT bank_account FROM `johanesa-playground-326616.demo_dataset.employees`;
+SELECT bank_account FROM `my-project-id.my-dataset-id.employees`;
 -- Error: Access Denied - User does not have permission
 ```
 
 **As Admin group member:**
 ```sql
-SELECT bank_account FROM `johanesa-playground-326616.demo_dataset.employees`;
+SELECT bank_account FROM `my-project-id.my-dataset-id.employees`;
 -- Success: Shows actual bank account numbers (9876543210, etc.)
 ```
 
@@ -264,6 +264,6 @@ Use the V2 API to check if GRANT statements populated the grantees field:
 ```bash
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 curl -s -X GET \
-  "https://bigquerydatapolicy.googleapis.com/v2/projects/johanesa-playground-326616/locations/us/dataPolicies/ssn_masking_policy" \
+  "https://bigquerydatapolicy.googleapis.com/v2/projects/my-project-id/locations/us/dataPolicies/ssn_masking_policy" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grantees'
 ```
