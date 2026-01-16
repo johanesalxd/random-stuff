@@ -41,7 +41,7 @@ dev = [
 [project.scripts]
 dbt-lineage = "lineage_analyzer.dbt_based.analyze_dbt_lineage:main"
 bq-lineage = "lineage_analyzer.dataplex_based.analyze_bq_lineage:main"
-migration-setup = "setup:main"
+migration-setup = "configure:main"
 
 [tool.setuptools.packages.find]
 include = ["config*", "lineage_analyzer*"]

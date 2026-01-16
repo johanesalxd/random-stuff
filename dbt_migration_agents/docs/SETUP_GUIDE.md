@@ -15,8 +15,7 @@ Detailed instructions for setting up DBT Migration Agents in your project.
    - Verify: `dbt --version`
 
 3. **Python 3.8+**
-   - With pip or poetry
-   - Verify: `python --version`
+   - **uv** (Recommended): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 4. **Google Cloud SDK**
    - Authenticated for BigQuery
@@ -24,8 +23,11 @@ Detailed instructions for setting up DBT Migration Agents in your project.
 
 ### Required Python Packages
 
+We use `uv` to manage dependencies via `pyproject.toml`.
+
 ```bash
-pip install google-cloud-bigquery pyyaml
+# Installs everything defined in pyproject.toml
+uv sync --all-extras
 ```
 
 ### Required Access
@@ -53,16 +55,22 @@ git clone https://github.com/your-org/dbt-migration-agents.git dbt_migration_age
 
 ### Step 2: Create Configuration
 
+Run the interactive wizard to generate your configuration and output directories.
+
 ```bash
 cd dbt_migration_agents
+uv run configure.py
+```
 
-# Copy example config
+Alternatively, you can manually copy and edit:
+
+```bash
 cp config/migration_config.example.yaml config/migration_config.yaml
 ```
 
 ### Step 3: Edit Configuration
 
-Open `config/migration_config.yaml` and fill in your values:
+If you used the wizard, this is already done! Otherwise, open `config/migration_config.yaml` and fill in your values:
 
 ```yaml
 # PROJECT SETTINGS
@@ -95,7 +103,7 @@ dbt:
 ### Step 4: Validate Configuration
 
 ```bash
-python config/config_loader.py
+uv run python config/config_loader.py
 ```
 
 Expected output:
@@ -226,7 +234,7 @@ Permission denied accessing project
 - [ ] Configuration validation passes
 - [ ] DBT manifest exists at configured path
 - [ ] BigQuery authentication works
-- [ ] Python dependencies installed
+- [ ] Python dependencies installed (`uv sync`)
 
 ## Next Steps
 
