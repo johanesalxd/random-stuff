@@ -121,14 +121,26 @@ The `sample_project/` directory is the primary integration test bed.
     - Be aware of the difference between execution root (repo root) and dbt project root.
     - Configuration paths should generally be relative to the repo root or absolute.
 
-## 6. Git Commit Messages
-- **Format:** `type(scope): subject`
-- **Types:**
-    - `feat`: New feature
-    - `fix`: Bug fix
-    - `docs`: Documentation only
-    - `style`: Formatting, missing semi-colons, etc.
-    - `refactor`: Code change that neither fixes a bug nor adds a feature
-    - `test`: Adding missing tests
-    - `chore`: Maintain
-- **Example:** `feat(lineage): add support for external tables`
+## 7. Running Agents (OpenCode)
+
+In OpenCode, agents are invoked using the `Task` tool. Here are the common patterns:
+
+### Running the Full Migration Workflow
+
+To run the complete migration process (Lineage -> PRD -> Cookbook):
+
+> "Follow the workflow in .agents/commands/migration_workflow.md to migrate <model_file_path> targeting <target_project.dataset>"
+
+### Running Individual Agents Manually
+
+If you need to run specific agents individually, use the following patterns:
+
+**1. Lineage Analyzer**
+> "Use the Task tool with .agents/agents/lineage_analyzer.md to analyze dependencies for <model_file_path> using config/migration_config.yaml"
+
+**2. PRD Generator**
+> "Use the Task tool with .agents/agents/prd_generator.md to generate a PRD from <analysis_file_path> targeting <target_project.dataset>"
+
+**3. Validation Subagent**
+> "Use the Task tool with .agents/agents/validation_subagent.md to validate <new_table> against <old_table>. Use BigQuery MCP tools for analysis."
+
