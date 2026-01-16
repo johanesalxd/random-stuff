@@ -227,15 +227,15 @@ SELECT * FROM renamed
 
 ```bash
 # Compile to verify SQL
-poetry run dbt compile --select [model_name]
+uv run dbt compile --select [model_name]_migrated
 
 # Run to create table
-poetry run dbt run --select [model_name]
+uv run dbt run --select [model_name]_migrated
 ```
 
 **Verify in BigQuery**:
 ```sql
-SELECT COUNT(*) FROM `[target_project].[target_dataset].[model_name]`
+SELECT COUNT(*) FROM `[target_project].[target_dataset].[model_name]_migrated`
 ```
 
 ### Step 2.3: Intelligent Validation (Delegate to Subagent)
@@ -244,8 +244,8 @@ SELECT COUNT(*) FROM `[target_project].[target_dataset].[model_name]`
 
 ```
 Use the validation_subagent to validate:
-- New table: `[target_project].[target_dataset].[model_name]`
-- Current table: `{{ config.gcp.projects.silver }}.{{ config.gcp.schemas.silver }}.[model_name]`
+- New table: `[target_project].[target_dataset].[model_name]_migrated`
+- Current table: `[target_project].[target_dataset].[model_name]`
 Using config: config/migration_config.yaml
 ```
 
@@ -276,7 +276,7 @@ When validation fails, the subagent provides RCA and remediation SQL.
    - Note remediation SQL provided
 
 2. **Apply Remediation**:
-   - Edit `{{ config.dbt.gold_models }}/[category]/[model_name].sql`
+   - Edit `{{ config.dbt.gold_models }}/[category]/[model_name]_migrated.sql`
    - Apply the remediation SQL changes
    - Document what was changed
 
@@ -292,15 +292,15 @@ When validation fails, the subagent provides RCA and remediation SQL.
 
 4. **Recompile and Re-run**:
    ```bash
-   poetry run dbt compile --select [model_name]
-   poetry run dbt run --select [model_name]
+   uv run dbt compile --select [model_name]_migrated
+   uv run dbt run --select [model_name]_migrated
    ```
 
 5. **Re-validate**:
    ```
    Use the validation_subagent to validate:
-   - New table: `[target_project].[target_dataset].[model_name]`
-   - Current table: `{{ config.gcp.projects.silver }}.{{ config.gcp.schemas.silver }}.[model_name]`
+   - New table: `[target_project].[target_dataset].[model_name]_migrated`
+   - Current table: `[target_project].[target_dataset].[model_name]`
    Using config: config/migration_config.yaml
    ```
 
@@ -310,7 +310,14 @@ When validation fails, the subagent provides RCA and remediation SQL.
 
 **Iteration Limit**: One refinement attempt per model. If still failing after refinement, escalate for manual review.
 
-### Step 2.4: Document Migration
+### Step 2.4: Cleanup (Manual)
+
+Once validation is approved:
+1. Delete the old `{model_name}.sql`
+2. Rename `{model_name}_migrated.sql` to `{model_name}.sql`
+3. Run `uv run dbt run --select {model_name}` one last time to finalize.
+
+### Step 2.5: Document Migration
 
 Add entry to `{{ config.outputs.cookbooks }}/MIGRATION_NOTES.md`:
 
@@ -340,7 +347,7 @@ Add entry to `{{ config.outputs.cookbooks }}/MIGRATION_NOTES.md`:
 - Difference: [Z]%
 ```
 
-### Step 2.5: Confirm Success Before Next Model
+### Step 2.6: Confirm Success Before Next Model
 
 **Checkpoint**: Before moving to the next model, confirm:
 
@@ -424,11 +431,14 @@ To:
 
 ```bash
 # Compile to verify
-poetry run dbt compile --select [downstream_model]
+   uv run dbt compile --select [downstream_model]
+   ```
 
-# Run with validation
-poetry run dbt run --select [downstream_model]
-```
+2. **Run Model**:
+   ```bash
+   uv run dbt run --select [downstream_model]
+   ```
+
 
 ---
 
@@ -488,19 +498,19 @@ poetry run dbt run --select [downstream_model]
 
 ```bash
 # Parse project (regenerate manifest)
-poetry run dbt parse
+uv run dbt parse
 
 # Compile single model
-poetry run dbt compile --select [model_name]
+uv run dbt compile --select [model_name]
 
 # Run single model
-poetry run dbt run --select [model_name]
+uv run dbt run --select [model_name]
 
 # Run with dependencies
-poetry run dbt run --select +[model_name]
+uv run dbt run --select +[model_name]
 
 # List model dependencies
-poetry run dbt ls --select +[model_name]
+uv run dbt ls --select +[model_name]
 ```
 
 ## Appendix B: Validation Quick Reference

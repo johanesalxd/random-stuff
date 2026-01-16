@@ -175,8 +175,8 @@ Manifest file not found at {MANIFEST_PATH}.
 Please run:
   dbt parse
 
-Or if using poetry:
-  poetry run dbt parse
+Or if using uv:
+  uv run dbt parse
 
 Then retry the lineage generation.
 ```

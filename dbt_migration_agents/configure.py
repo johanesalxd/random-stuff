@@ -158,21 +158,14 @@ def collect_configuration() -> Dict[str, Any]:
     config["gcp"] = {
         "billing_project": billing_project,
         "projects": {
-            "raw": get_project_input("Raw data project", billing_project),
-            "refined": get_project_input("Refined data project", billing_project),
-            "serving": get_project_input(
-                "Serving layer project (optional, press Enter to skip)",
-                "",
-            )
-            or None,
-            "staging": get_project_input(
-                "Current DBT staging project", billing_project
-            ),
-            "asset": get_project_input("Target gold layer project", billing_project),
+            "bronze": get_project_input("Bronze layer project", billing_project),
+            "silver": get_project_input("Silver layer project", billing_project),
+            "gold": get_project_input("Gold layer project", billing_project),
         },
         "schemas": {
-            "staging": get_input("Current staging schema name", "staging"),
-            "asset": get_input("Target asset schema name", "asset_layer"),
+            "bronze": get_input("Bronze schema name", "bronze"),
+            "silver": get_input("Silver schema name", "silver"),
+            "gold": get_input("Gold schema name", "gold"),
         },
     }
 
@@ -186,8 +179,8 @@ def collect_configuration() -> Dict[str, Any]:
     print("Enter the paths to your DBT model directories.\n")
 
     config["dbt"] = {
-        "staging_models": get_path_input("Staging models path", "models/staging"),
-        "marts_models": get_path_input("Marts models path", "models/marts"),
+        "bronze_models": get_path_input("Bronze models path", "models/bronze"),
+        "silver_models": get_path_input("Silver models path", "models/silver"),
         "gold_models": get_path_input("Gold models path", "models/gold"),
         "seeds": get_path_input("Seeds path", "seeds"),
     }
@@ -266,14 +259,15 @@ def generate_yaml(config: Dict[str, Any]) -> str:
         [
             "",
             "  schemas:",
-            f'    staging: "{config["gcp"]["schemas"]["staging"]}"',
-            f'    asset: "{config["gcp"]["schemas"]["asset"]}"',
+            f'    bronze: "{config["gcp"]["schemas"]["bronze"]}"',
+            f'    silver: "{config["gcp"]["schemas"]["silver"]}"',
+            f'    gold: "{config["gcp"]["schemas"]["gold"]}"',
             "",
             "# === DBT PATHS ===",
             "dbt:",
-            f'  staging_models: "{config["dbt"]["staging_models"]}"',
-            f'  marts_models: "{config["dbt"]["marts_models"]}"',
-            f'  asset_models: "{config["dbt"]["asset_models"]}"',
+            f'  bronze_models: "{config["dbt"]["bronze_models"]}"',
+            f'  silver_models: "{config["dbt"]["silver_models"]}"',
+            f'  gold_models: "{config["dbt"]["gold_models"]}"',
             f'  seeds: "{config["dbt"]["seeds"]}"',
             "",
             "# === OUTPUT PATHS ===",
@@ -286,8 +280,8 @@ def generate_yaml(config: Dict[str, Any]) -> str:
             "",
             "# === VALIDATION SETTINGS ===",
             "validation:",
-            f'  row_count_threshold: {config["validation"]["row_count_threshold"]}',
-            f'  null_threshold: {config["validation"]["null_threshold"]}',
+            f"  row_count_threshold: {config['validation']['row_count_threshold']}",
+            f"  null_threshold: {config['validation']['null_threshold']}",
         ]
     )
 
@@ -345,20 +339,20 @@ def run_with_defaults() -> Dict[str, Any]:
         "gcp": {
             "billing_project": "my-billing-project",
             "projects": {
-                "raw": "my-raw-project",
-                "refined": "my-refined-project",
-                "staging": "my-staging-project",
-                "asset": "my-asset-project",
+                "bronze": "my-bronze-project",
+                "silver": "my-silver-project",
+                "gold": "my-gold-project",
             },
             "schemas": {
-                "staging": "staging",
-                "asset": "asset_layer",
+                "bronze": "bronze",
+                "silver": "silver",
+                "gold": "gold",
             },
         },
         "dbt": {
-            "staging_models": "models/staging",
-            "marts_models": "models/marts",
-            "asset_models": "models/asset_layer",
+            "bronze_models": "models/bronze",
+            "silver_models": "models/silver",
+            "gold_models": "models/gold",
             "seeds": "seeds",
         },
         "outputs": {

@@ -141,7 +141,7 @@ def get_gcp_project(config: Dict[str, Any], layer: str) -> str:
 
     Args:
         config: Configuration dictionary.
-        layer: Layer name (raw, refined, serving, staging, asset).
+        layer: Layer name (bronze, silver, gold).
 
     Returns:
         GCP project ID for the layer.
@@ -161,7 +161,7 @@ def get_dbt_path(config: Dict[str, Any], path_type: str) -> str:
 
     Args:
         config: Configuration dictionary.
-        path_type: Path type (staging_models, marts_models, asset_models, seeds).
+        path_type: Path type (bronze_models, silver_models, gold_models, seeds).
 
     Returns:
         DBT path string.
@@ -195,9 +195,7 @@ def get_output_path(config: Dict[str, Any], output_type: str) -> Path:
     return Path(path)
 
 
-def get_validation_threshold(
-    config: Dict[str, Any], threshold_type: str
-) -> float:
+def get_validation_threshold(config: Dict[str, Any], threshold_type: str) -> float:
     """
     Get validation threshold value.
 
@@ -244,12 +242,12 @@ def print_config_summary(config: Dict[str, Any]) -> None:
     print(f"Billing Project: {get_config_value(config, 'gcp.billing_project')}")
     print()
     print("GCP Projects:")
-    for layer in ["raw", "refined", "serving", "staging", "asset"]:
+    for layer in ["bronze", "silver", "gold"]:
         project = get_config_value(config, f"gcp.projects.{layer}", "(not set)")
         print(f"  {layer}: {project}")
     print()
     print("DBT Paths:")
-    for path_type in ["staging_models", "marts_models", "asset_models", "seeds"]:
+    for path_type in ["bronze_models", "silver_models", "gold_models", "seeds"]:
         path = get_config_value(config, f"dbt.{path_type}", "(not set)")
         print(f"  {path_type}: {path}")
     print("=" * 60)
