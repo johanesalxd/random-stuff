@@ -21,6 +21,8 @@ A generic, configurable framework for migrating DBT silver models to the gold la
    * This framework is optimized for the reasoning capabilities of Gemini 3 Pro.
 2. **DBT Project** with BigQuery connection
 3. **Python 3.8+**
+4. **uv** (Recommended for dependency management)
+   * `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ---
 
@@ -58,14 +60,39 @@ Use these to demonstrate the validation and migration workflow.
 
 ### Step 1: Setup
 
+#### 1.1 Install Dependencies
+We use `uv` for fast, reliable dependency management.
+
 ```bash
-cd dbt_migration_agents/sample_project
+# Install dependencies and create virtual environment
+uv sync --all-extras
+```
 
-# Copy and configure
-cp ../config/migration_config.example.yaml ../config/migration_config.yaml
-# Edit with your GCP project details
+#### 1.2 Configure Framework
+Run the interactive wizard to generate `config/migration_config.yaml`.
 
-# Generate DBT manifest
+```bash
+uv run configure.py
+```
+
+#### 1.3 Hydrate Sample Project
+If using the sample project, you must build the tables in BigQuery first so the agents can analyze them.
+
+```bash
+cd sample_project
+
+# Edit profiles.yml to point to your BigQuery project
+cp profiles.yml.example profiles.yml
+vim profiles.yml 
+
+# Install dbt packages
+dbt deps
+
+# Create the raw data and models (CRITICAL STEP)
+dbt seed
+dbt run
+
+# Generate the manifest for the agents
 dbt parse
 ```
 
@@ -128,25 +155,19 @@ This template provides 5 specialized AI agents that work together to:
 
 Copy the `dbt_migration_agents/` directory to your DBT project root.
 
-### 2. Configure
+### 2. Install & Configure
 
 ```bash
 cd dbt_migration_agents
 
-# Copy and edit the configuration file
-cp config/migration_config.example.yaml config/migration_config.yaml
+# Install dependencies
+uv sync
 
-# Edit with your project-specific values
-vim config/migration_config.yaml
+# Run setup wizard
+uv run configure.py
 ```
 
-### 3. Validate Configuration
-
-```bash
-python config/config_loader.py
-```
-
-### 4. Run Your First Migration
+### 3. Run Your First Migration
 
 Ask your agent:
 > "Analyze dependencies for models/marts/my_model.sql using config/migration_config.yaml"
