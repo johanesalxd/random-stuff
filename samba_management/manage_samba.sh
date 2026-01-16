@@ -25,6 +25,47 @@ is_running() {
 }
 
 #######################################
+# Ensure required Samba directories exist.
+# Creates the private directory needed for IPC communication.
+# Globals:
+#   SMBD
+# Arguments:
+#   None
+# Outputs:
+#   Writes status messages to stdout if directories are created
+# Returns:
+#   0 on success, 1 on failure
+#######################################
+ensure_directories() {
+  local real_smbd
+  local samba_base
+  local private_dir
+
+  # Resolve symlink to get actual Cellar path
+  real_smbd=$(readlink -f "${SMBD}" 2>/dev/null || realpath "${SMBD}" 2>/dev/null)
+  if [[ -z "${real_smbd}" ]]; then
+    echo "ERROR: Could not resolve path for ${SMBD}"
+    return 1
+  fi
+
+  # Get the Cellar base directory (e.g., /opt/homebrew/Cellar/samba/4.23.4)
+  samba_base=$(dirname "$(dirname "${real_smbd}")")
+  private_dir="${samba_base}/private"
+
+  if [[ ! -d "${private_dir}" ]]; then
+    echo "Creating missing directory: ${private_dir}"
+    if sudo mkdir -p "${private_dir}"; then
+      echo "Directory created successfully"
+    else
+      echo "ERROR: Failed to create directory: ${private_dir}"
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+#######################################
 # Start Samba services (smbd and nmbd).
 # Globals:
 #   SMBD
@@ -37,6 +78,11 @@ is_running() {
 #######################################
 start_samba() {
   echo "Starting Samba services..."
+
+  if ! ensure_directories; then
+    echo "Failed to ensure required directories exist"
+    return 1
+  fi
 
   if is_running "samba-dot-org-smbd"; then
     echo "smbd is already running"
