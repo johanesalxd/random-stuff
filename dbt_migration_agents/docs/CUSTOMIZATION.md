@@ -51,7 +51,7 @@ config/
 Use with `-c` flag:
 
 ```bash
-python lineage_analyzer/dbt_based/analyze_dbt_lineage.py model_name \
+uv run python lineage_analyzer/dbt_based/analyze_dbt_lineage.py model_name \
   -c config/migration_config.prod.yaml
 ```
 
