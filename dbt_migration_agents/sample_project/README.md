@@ -109,6 +109,12 @@ Demonstrates complex joins:
 
 ## Setup Instructions
 
+**🚀 QUICK START**: To set up this project for testing the agents, follow the **[Quick Start Demo](../README.md#quick-start-demo)** in the root directory.
+
+### Manual Setup (Reference Only)
+
+If you cannot use the quick start script:
+
 1. Copy profiles template:
    ```bash
    cp profiles.yml.example ~/.dbt/profiles.yml
