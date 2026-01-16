@@ -26,9 +26,18 @@ A generic, configurable framework for migrating DBT silver models to the gold la
 
 ---
 
-## Migration Goal
+## The Challenge: Data Sprawl
 
-This framework helps you **bypass unnecessary intermediate layers** in your data pipeline:
+Data pipelines often evolve into complex, unmanageable chains of intermediate tables.
+
+**The Problem**:
+- A single logical transformation is split across 3-4 separate "Silver" tables.
+- Lineage becomes a spaghetti mess (4+ hops to get to Gold).
+- Compute costs skyrocket as every intermediate step materializes data.
+- Debugging takes hours tracing back through layers.
+
+**The Solution**:
+This framework uses AI Agents to intelligently **consolidate** these chains into clean, efficient 2-hop pipelines (Bronze → Silver → Gold) while preserving 100% of the business logic.
 
 | Before (Broken) | After (Correct) |
 |-----------------|-----------------|
