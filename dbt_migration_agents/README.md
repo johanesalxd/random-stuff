@@ -1,6 +1,6 @@
-# DBT Migration Agents
+# DBT Migration Agents (OpenCode Edition)
 
-A generic, configurable framework for migrating DBT silver models to the gold layer using Claude Code agents and the Bronze/Silver/Gold medallion architecture.
+A generic, configurable framework for migrating DBT silver models to the gold layer using AI agents and the Bronze/Silver/Gold medallion architecture.
 
 ## TL;DR
 
@@ -10,7 +10,17 @@ A generic, configurable framework for migrating DBT silver models to the gold la
 - Before: Bronze → Silver_1 → Silver_2 → Silver_3 → Gold (complex)
 - After: Bronze → Silver → Gold (simplified)
 
-**How**: Run `/migrate-cookbook-generator` to generate analysis, PRD, and migration cookbook
+**How**: Ask the agent to run the migration workflow to generate analysis, PRD, and migration cookbook
+
+---
+
+## Prerequisites
+
+### Required Tools
+1. **OpenCode Agent** running **Gemini 3 Pro**
+   * This framework is optimized for the reasoning capabilities of Gemini 3 Pro.
+2. **DBT Project** with BigQuery connection
+3. **Python 3.8+**
 
 ---
 
@@ -61,10 +71,9 @@ dbt parse
 
 ### Step 2: Run Migration Generator
 
-```bash
-# In Claude Code, run the orchestrator
-/migrate-cookbook-generator models/gold/fct_orders_broken.sql my-project.my_dataset
-```
+Ask OpenCode (using Gemini 3 Pro):
+
+> "Follow the workflow in .agents/commands/migration_workflow.md to migrate models/gold/fct_orders_broken.sql targeting my-project.my_dataset"
 
 This generates:
 1. Migration Analysis (lineage and complexity)
@@ -78,7 +87,7 @@ Review the generated PRD at:
 prd_generator/outputs/fct_orders_broken_dbt_refactoring_prd.md
 ```
 
-When satisfied, respond: "Approved, proceed with cookbook generation"
+When satisfied, respond to the agent: "Approved, proceed with cookbook generation"
 
 ### Step 4: Execute Migration
 
@@ -86,7 +95,7 @@ When satisfied, respond: "Approved, proceed with cookbook generation"
 Execute migration following @code_refactor/outputs/gold_fct_orders_broken_cookbook.md
 ```
 
-Claude will:
+The agent will:
 1. Create consolidated gold model (stg_orders → fct_orders pattern)
 2. Compile and run
 3. Validate against the broken model
@@ -139,10 +148,8 @@ python config/config_loader.py
 
 ### 4. Run Your First Migration
 
-```bash
-# In Claude Code, run the orchestrator command
-/migrate-cookbook-generator models/marts/my_model.sql my-project.my_dataset
-```
+Ask your agent:
+> "Analyze dependencies for models/marts/my_model.sql using config/migration_config.yaml"
 
 ## Configuration
 
@@ -169,7 +176,7 @@ See `config/migration_config.example.yaml` for all available options.
 
 ```
 dbt_migration_agents/
-├── .claude/
+├── .agents/
 │   ├── agents/                 # Agent definitions
 │   │   ├── dbt_lineage_generator.md
 │   │   ├── lineage_analyzer.md
@@ -177,7 +184,7 @@ dbt_migration_agents/
 │   │   ├── validation_subagent.md
 │   │   └── migration_cookbook_generator.md
 │   └── commands/
-│       └── migrate-cookbook-generator.md
+│       └── migration_workflow.md
 ├── config/
 │   ├── migration_config.yaml   # Your configuration
 │   ├── migration_config.example.yaml
@@ -205,7 +212,7 @@ dbt_migration_agents/
 ## Workflow
 
 ```
-/migrate-cookbook-generator <model_path> <target_project.dataset>
+Migration Workflow
     │
     ├── Step 0: Load config, validate/generate lineage
     │
@@ -228,23 +235,6 @@ dbt_migration_agents/
         ├── Validate (validation_subagent)
         │   └── If failed: RCA → Refine SQL → Re-validate
         └── Document and confirm
-```
-
-## Prerequisites
-
-### Required
-
-- Claude Code CLI installed
-- DBT project with BigQuery connection
-- BigQuery access to source and target projects
-- Python 3.8+ with `google-cloud-bigquery`
-
-### Generate DBT Manifest
-
-Before running, ensure your DBT manifest is up to date:
-
-```bash
-dbt parse
 ```
 
 ## Agent Descriptions
@@ -281,22 +271,14 @@ Validates migrated tables with intelligent tests and RCA.
 
 ## Manual Agent Invocation
 
-You can run agents individually:
+You can run agents individually by prompting OpenCode:
 
-```bash
+```
 # Analyze dependencies
-Analyze dependencies for @models/gold/my_model.sql
-Using config: config/migration_config.yaml
+"Use the Task tool with .agents/agents/lineage_analyzer.md to analyze models/gold/my_model.sql"
 
 # Generate PRD
-Generate PRD from @prd_generator/outputs/my_model_migration_analysis.md
-targeting my-project.my_dataset
-Using config: config/migration_config.yaml
-
-# Validate a table
-Validate my-project.my_dataset.my_model against
-silver-project.silver.my_model
-Using config: config/migration_config.yaml
+"Use the Task tool with .agents/agents/prd_generator.md to generate a PRD from..."
 ```
 
 ## Customization
@@ -307,7 +289,7 @@ Edit `migration_validator/VALIDATION_COOKBOOK.md` to add custom test patterns.
 
 ### Modifying Agent Behavior
 
-Edit the agent definitions in `.claude/agents/` to customize behavior.
+Edit the agent definitions in `.agents/agents/` to customize behavior.
 
 ### Extending the Template
 
@@ -361,5 +343,6 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**Version**: 2.0 (Generic Template)
+**Version**: 2.0 (OpenCode Edition)
 **Last Updated**: 2025
+

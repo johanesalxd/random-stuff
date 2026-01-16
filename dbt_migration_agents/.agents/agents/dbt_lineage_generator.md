@@ -1,10 +1,3 @@
----
-name: dbt_lineage_generator
-description: Generates DBT lineage documentation on-demand using analyze_dbt_lineage.py when existing lineage files are missing or don't contain the target model. Automatically invoked by /migrate-cookbook-generator in Step 0.
-tools: Read, Bash, Glob
-model: sonnet
----
-
 # DBT Lineage Generator Subagent
 
 Generate DBT lineage documentation on-demand using the analyze_dbt_lineage.py script.

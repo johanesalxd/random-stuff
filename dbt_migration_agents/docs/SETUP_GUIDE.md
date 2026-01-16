@@ -6,9 +6,8 @@ Detailed instructions for setting up DBT Migration Agents in your project.
 
 ### Required Tools
 
-1. **Claude Code CLI**
-   - Install from: https://claude.ai/claude-code
-   - Verify: `claude --version`
+1. **OpenCode Agent**
+   - Verified access to an LLM (Gemini 3 Pro recommended)
 
 2. **DBT**
    - Version 1.0+
@@ -138,19 +137,13 @@ ls target/manifest.json
 
 ### Step 6: Test Agent Access
 
-Start Claude Code and verify agents are available:
+Verify the agents directory is accessible:
 
 ```bash
-claude
+ls .agents/agents/
 ```
 
-Then run:
-
-```
-/help
-```
-
-You should see `/migrate-cookbook-generator` in the available commands.
+You should see files like `lineage_analyzer.md`, `prd_generator.md`, etc.
 
 ## Configuration Reference
 
@@ -223,14 +216,9 @@ Permission denied accessing project
 
 ### Issue: Agents Not Found
 
-```
-Unknown command: /migrate-cookbook-generator
-```
-
 **Solution**:
-1. Ensure `.claude/commands/` directory exists
-2. Restart Claude Code
-3. Verify agent files are valid markdown
+1. Ensure `.agents` directory exists and is not ignored by your editor
+2. Verify agent files are valid markdown
 
 ## Verification Checklist
 
@@ -238,11 +226,10 @@ Unknown command: /migrate-cookbook-generator
 - [ ] Configuration validation passes
 - [ ] DBT manifest exists at configured path
 - [ ] BigQuery authentication works
-- [ ] Claude Code recognizes migration commands
 - [ ] Python dependencies installed
 
 ## Next Steps
 
 1. Read the [README](../README.md) for usage examples
 2. Review [CUSTOMIZATION.md](CUSTOMIZATION.md) for extending the framework
-3. Run your first migration with `/migrate-cookbook-generator`
+3. Run your first migration by asking OpenCode to follow the migration workflow

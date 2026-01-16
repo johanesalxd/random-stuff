@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dbt-migration-agents"
 version = "2.0.0"
-description = "Generic framework for migrating DBT staging models to gold layer using Claude Code agents"
+description = "Generic framework for migrating DBT staging models to gold layer using OpenCode agents"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Code Generators",
 ]
-keywords = ["dbt", "bigquery", "migration", "claude", "ai-agents"]
+keywords = ["dbt", "bigquery", "migration", "ai-agents", "opencode"]
 dependencies = [
     "google-cloud-bigquery>=3.0.0",
     "pyyaml>=6.0",
