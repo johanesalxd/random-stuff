@@ -59,32 +59,29 @@ python lineage_analyzer/dbt_based/analyze_dbt_lineage.py model_name \
 
 ### Modifying Agent Behavior
 
-Agent definitions are in `.claude/agents/`. Each file contains:
+Agent definitions are in `.agents/agents/`. Each file contains:
 
-1. **Frontmatter** - Name, description, tools, model
-2. **Instructions** - How the agent should behave
-3. **Examples** - Sample inputs and outputs
+1. **Instructions** - How the agent should behave
+2. **Examples** - Sample inputs and outputs
 
 ### Adding a New Agent
 
 1. Create the agent file:
 
 ```bash
-touch .claude/agents/my_custom_agent.md
+touch .agents/agents/my_custom_agent.md
 ```
 
-2. Add frontmatter:
+2. Add instructions:
 
 ```markdown
----
-name: my_custom_agent
-description: Description of what this agent does.
-tools: Read, Write, Bash
-model: sonnet
----
-```
+# My Custom Agent
 
-3. Add instructions following the pattern of existing agents.
+Description of what this agent does.
+
+## Instructions
+...
+```
 
 ### Customizing Prompts
 
@@ -218,40 +215,28 @@ def test_custom_business_rule():
     }
 ```
 
-## Adding New Commands
+## Adding New Workflows
 
-### Creating a Slash Command
+### Creating a Workflow
 
-1. Create command file:
+1. Create workflow file:
 
 ```bash
-touch .claude/commands/my-command.md
+touch .agents/commands/my-workflow.md
 ```
 
 2. Add content:
 
 ```markdown
----
-description: My custom command
-argument-hint: <arg1> <arg2>
-model: sonnet
----
+# My Custom Workflow
 
-# /my-command
-
-Description of what this command does.
-
-## Usage
-
-```bash
-/my-command <arg1> <arg2>
-```
+Description of what this workflow does.
 
 ## Workflow
 
 ### Step 1: [First Step]
 
-[Instructions]
+Use the `Task` tool to...
 
 ### Step 2: [Second Step]
 
@@ -260,7 +245,7 @@ Description of what this command does.
 
 ### Extending the Orchestrator
 
-Add steps to `/migrate-cookbook-generator`:
+Add steps to `/migration_workflow.md`:
 
 ```markdown
 ### Step 2.5: Custom Pre-PRD Validation
@@ -330,7 +315,7 @@ integrations:
 ### Naming Conventions
 
 - Agent files: `lowercase_with_underscores.md`
-- Commands: `kebab-case.md`
+- Workflow files: `kebab-case.md` or `snake_case.md`
 - Config keys: `snake_case`
 - Python functions: `snake_case`
 - Classes: `PascalCase`
