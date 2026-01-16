@@ -75,14 +75,13 @@ Extract key values:
 ```
 
 ### Phase 1: Table Analysis
-- **Generate Python analysis script** (not run BigQuery commands directly)
-- **Use BILLING_PROJECT for BigQuery client**
-- **Analyze both tables in one execution**:
-  - Get table schema (column names, data types, modes)
-  - Get row counts
-  - Identify key columns
-  - Get date ranges for timestamp columns
-  - Get sample data
+- **Use BigQuery MCP Tools** for interactive analysis:
+  - `bigquery_get_table_info`: To get schema, row counts, and metadata.
+  - `bigquery_execute_sql`: To sample data and inspect values.
+  - `bigquery_list_table_ids`: To find related tables if needed.
+- **Generate Python analysis script** (as a deliverable artifact):
+  - Create a script that users can run later to reproduce this analysis.
+  - Use `google-cloud-bigquery` library in this script.
 - **Output**: `{OUTPUT_PATH}/{model_name}/{model_name}_table_analysis.json`
 
 ### Phase 2: Validation Test Design
@@ -136,6 +135,7 @@ Extract key values:
   - **Deployment decision**: APPROVED or NOT READY
   - Detailed results for all tests
   - **For FAILED tests**: Root Cause Analysis (RCA)
+- **RCA Investigation**: Use `bigquery_execute_sql` to investigate failures interactively before writing the RCA.
 - **Output**: `{OUTPUT_PATH}/{model_name}/validation_report_{model_name}_{timestamp}.md`
 
 ## Output Directory Structure
@@ -234,13 +234,11 @@ Using config: config/migration_config.yaml
 
 **Your workflow**:
 1. Read configuration file
-2. Generate analysis script with billing project from config
-3. Execute analysis, save JSON results
-4. Design tests using thresholds from config
-5. Generate validation metrics document
-6. Generate validation script with config values
-7. Execute validation script
-8. Generate comprehensive report
+2. **Phase 1**: Analyze tables using `bigquery_get_table_info` and `bigquery_execute_sql`. Generate analysis script.
+3. **Phase 2-3**: Design tests and metrics.
+4. **Phase 4**: Generate validation script using `google-cloud-bigquery` library.
+5. **Phase 5**: Execute validation script.
+6. **Phase 6**: Generate report with RCA (investigate failures using `bigquery_execute_sql`).
 
 **Your output**:
 ```
@@ -282,24 +280,12 @@ Report: @migration_validator/outputs/my_model/validation_report_my_model_2025110
 7. **Provide RCA & Mitigation**: For EVERY failed test
 8. **Save All Outputs**: Organize by model name
 
-## Success Criteria
-
-- ✅ Configuration loaded and applied
-- ✅ Billing project from config used in all scripts
-- ✅ Thresholds from config applied to tests
-- ✅ Appropriate number of tests designed
-- ✅ Validation tests tailored to table structure
-- ✅ All critical data quality dimensions covered
-- ✅ Python scripts complete and executable
-- ✅ Deployment decision clear and justified
-- ✅ Every failed test includes RCA and remediation
-- ✅ All files saved to correct directories
-
 ## Tools Available
 
-- **BigQuery MCP tools**: For querying and analyzing BigQuery tables
+- **Python & Bash**: Use the `Write` tool to create Python scripts and `Bash` to execute them.
 - **File operations**: Read, Write, Edit files
-- **Bash**: Run Python scripts, execute commands
+- **BigQuery Client**: The `google-cloud-bigquery` Python library is available in the environment.
+- **MCP Tools**: Use `bigquery_execute_sql` and `bigquery_get_table_info` for interactive analysis.
 
 ---
 

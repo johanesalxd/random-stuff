@@ -4,7 +4,7 @@ argument-hint: <model_file_path> <target_project.dataset>
 model: sonnet
 ---
 
-# /migrate-cookbook-generator
+# Migration Workflow
 
 Orchestrates the generation of a PRD and migration cookbook for DBT model gold layer migration.
 
@@ -20,24 +20,21 @@ The orchestrator reads configuration from `config/migration_config.yaml` to dete
 
 ## Usage
 
-```bash
-/migrate-cookbook-generator <model_file_path> <target_project.dataset>
-```
+Ask the agent:
+> "Follow the workflow in .agents/commands/migration_workflow.md to migrate <model_file_path> targeting <target_project.dataset>"
 
 **Example**:
-```bash
-/migrate-cookbook-generator models/marts/reporting/survey/my_model.sql my-project.my_dataset
-```
+> "Follow the workflow in .agents/commands/migration_workflow.md to migrate models/marts/reporting/survey/my_model.sql targeting my-project.my_dataset"
 
 ## Description
 
-This command orchestrates a 5-step workflow:
+This workflow orchestrates a 5-step process:
 
 0. **Configuration Loading & Lineage Validation** (Load config, validate/generate lineage)
-1. **Analyze Dependencies** (Subagent 0: Lineage Analyzer)
-2. **Generate PRD** (Subagent 1: PRD Generator)
+1. **Analyze Dependencies** (Lineage Analyzer)
+2. **Generate PRD** (PRD Generator)
 3. **Manual Review & Approval** (User checkpoint)
-4. **Generate Migration Cookbook** (Subagent 3: Migration Cookbook Generator)
+4. **Generate Migration Cookbook** (Migration Cookbook Generator)
 
 ## Workflow
 
@@ -107,6 +104,8 @@ Proceeding to Step 1: Analyze Dependencies...
 
 **Invoke DBT Lineage Generator (when needed):**
 
+Use the `Task` tool with `subagent_type='general'` and the content of `.agents/agents/dbt_lineage_generator.md` as the prompt context.
+
 ```
 Invoke dbt_lineage_generator subagent:
 - Model name: {extracted_model_name}
@@ -122,14 +121,15 @@ Invoke dbt_lineage_generator subagent:
 
 ### Step 1: Analyze Dependencies
 
-Invoke Subagent 0 (Lineage Analyzer) with the provided model file path:
+Use the `Task` tool with `subagent_type='general'` and the content of `.agents/agents/lineage_analyzer.md` as the prompt context.
 
+Provide the following task description:
 ```
 Analyze dependencies for <model_file_path>
 Using config: config/migration_config.yaml
 ```
 
-**Subagent 0 will**:
+**Subagent will**:
 - Read the target DBT model file
 - Read configuration for project names and paths
 - Study DBT lineage documentation
@@ -159,8 +159,9 @@ Proceeding to PRD generation...
 
 ### Step 2: Generate PRD
 
-Invoke Subagent 1 (PRD Generator) with the migration analysis and target parameters:
+Use the `Task` tool with `subagent_type='general'` and the content of `.agents/agents/prd_generator.md` as the prompt context.
 
+Provide the following task description:
 ```
 Generate PRD from migration analysis:
 @prd_generator/outputs/{model_name}_migration_analysis.md
@@ -172,8 +173,8 @@ Using config: config/migration_config.yaml
 - Extract project: Split on '.' to get first part (e.g., `my-gcp-project`)
 - Extract dataset: Split on '.' to get second part (e.g., `my_dataset`)
 
-**Subagent 1 will**:
-- Read the migration analysis document from Subagent 0
+**Subagent will**:
+- Read the migration analysis document from Step 1
 - Read configuration for project names and architecture description
 - Extract model recommendations with priorities and complexity classifications
 - Parse business logic details for each model
@@ -230,8 +231,9 @@ You can:
 
 ### Step 4: Generate Migration Cookbook
 
-After user approval, invoke Subagent 3 (Migration Cookbook Generator):
+After user approval, use the `Task` tool with `subagent_type='general'` and the content of `.agents/agents/migration_cookbook_generator.md` as the prompt context.
 
+Provide the following task description:
 ```
 Generate migration cookbook from approved PRD:
 @prd_generator/outputs/{model_name}_dbt_refactoring_prd.md
@@ -239,7 +241,7 @@ targeting <target_project.dataset>
 Using config: config/migration_config.yaml
 ```
 
-**Subagent 3 will**:
+**Subagent will**:
 - Read the approved PRD
 - Read configuration for all project/path values
 - Extract all models, business logic, source mappings, priorities
@@ -262,7 +264,7 @@ Cookbook Details:
 Ready for Execution.
 
 Next Step:
-To start the migration, execute:
+To start the migration, ask me to:
 
 "Execute migration following @code_refactor/outputs/gold_{model_name}_cookbook.md"
 
@@ -295,73 +297,25 @@ This will start the sequential migration process where I will:
 
 ## Sub-Agents Invoked
 
-1. **dbt_lineage_generator**: `.claude/agents/dbt_lineage_generator.md` (invoked conditionally in Step 0)
-2. **Subagent 0**: `.claude/agents/lineage_analyzer.md` (Lineage Analyzer)
-3. **Subagent 1**: `.claude/agents/prd_generator.md` (PRD Generator)
-4. **Subagent 3**: `.claude/agents/migration_cookbook_generator.md` (Migration Cookbook Generator)
+1. **dbt_lineage_generator**: `.agents/agents/dbt_lineage_generator.md` (invoked conditionally in Step 0)
+2. **Lineage Analyzer**: `.agents/agents/lineage_analyzer.md` (Step 1)
+3. **PRD Generator**: `.agents/agents/prd_generator.md` (Step 2)
+4. **Migration Cookbook Generator**: `.agents/agents/migration_cookbook_generator.md` (Step 4)
 
-**Note**: Subagent 2 (validation_subagent.md) is NOT invoked by this command - it's invoked later during cookbook execution.
+**Note**: The Validation Subagent (`validation_subagent.md`) is NOT invoked by this workflow - it's invoked later during cookbook execution.
 
 ## User Control Points
 
 1. **PRD Review & Approval**: User must explicitly approve PRD before cookbook generation
 2. **Cookbook Execution**: User chooses when to execute the cookbook (not automatic)
 
-## Example Session
-
-```
-User: /migrate-cookbook-generator models/marts/reporting/survey/my_model.sql my-project.my_dataset
-
-Claude: [Step 0: Load Configuration & Validate Lineage]
-
-Claude: Loading configuration from config/migration_config.yaml...
-✅ Configuration valid
-
-Validating existing lineage files...
-✅ DBT lineage: Found model in lineage_dbt_my_model.md
-
-Proceeding to Step 1: Analyze Dependencies...
-
-Claude: [Invokes Subagent 0: Lineage Analyzer]
-
-Claude: Migration Analysis Generated: prd_generator/outputs/my_model_migration_analysis.md
-
-Analysis Summary:
-- Total Dependencies: 15 (10 staging, 4 marts, 1 seed)
-- Migration Scope: 8 models recommended for gold layer
-...
-
-Proceeding to PRD generation...
-
-Claude: [Invokes Subagent 1: PRD Generator]
-
-Claude: PRD Generated: prd_generator/outputs/my_model_dbt_refactoring_prd.md
-...
-
-Please review: @prd_generator/outputs/my_model_dbt_refactoring_prd.md
-
-Respond with "Approved" to proceed with cookbook generation.
-
-User: Approved
-
-Claude: [Invokes Subagent 3: Migration Cookbook Generator]
-
-Claude: Migration Cookbook Generated: code_refactor/outputs/gold_my_model_cookbook.md
-...
-
-Ready for execution.
-
-Next Step:
-"Execute migration following @code_refactor/outputs/gold_my_model_cookbook.md"
-```
-
 ## Important Notes
 
-1. **Configuration Required**: This command requires `config/migration_config.yaml` to be configured
+1. **Configuration Required**: This workflow requires `config/migration_config.yaml` to be configured
 2. **Manual Checkpoints**: Includes a mandatory manual review checkpoint for PRD approval
 3. **No Automatic Execution**: The cookbook is generated but NOT automatically executed
 4. **User Confirmation Required**: User must explicitly request cookbook execution
-5. **Validation Later**: The validation_subagent is invoked during cookbook execution, not by this command
+5. **Validation Later**: The validation_subagent is invoked during cookbook execution, not by this workflow
 
 ---
 
