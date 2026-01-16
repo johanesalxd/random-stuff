@@ -190,7 +190,6 @@ def collect_configuration() -> Dict[str, Any]:
     print("Enter paths for generated outputs.\n")
 
     config["outputs"] = {
-        "base_path": get_path_input("Base output path", "migration_outputs"),
         "lineage": get_path_input("Lineage outputs", "lineage_analyzer/outputs"),
         "prd": get_path_input("PRD outputs", "prd_generator/outputs"),
         "validation": get_path_input(
@@ -272,7 +271,6 @@ def generate_yaml(config: Dict[str, Any]) -> str:
             "",
             "# === OUTPUT PATHS ===",
             "outputs:",
-            f'  base_path: "{config["outputs"]["base_path"]}"',
             f'  lineage: "{config["outputs"]["lineage"]}"',
             f'  prd: "{config["outputs"]["prd"]}"',
             f'  validation: "{config["outputs"]["validation"]}"',
@@ -356,7 +354,6 @@ def run_with_defaults() -> Dict[str, Any]:
             "seeds": "seeds",
         },
         "outputs": {
-            "base_path": "migration_outputs",
             "lineage": "lineage_analyzer/outputs",
             "prd": "prd_generator/outputs",
             "validation": "migration_validator/outputs",

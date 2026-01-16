@@ -135,7 +135,6 @@ dbt:
   seeds: "sample_project/seeds"
 
 outputs:
-  base_path: "migration_outputs"
   lineage: "lineage_analyzer/outputs"
   prd: "prd_generator/outputs"
   validation: "migration_validator/outputs"
