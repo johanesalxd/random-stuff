@@ -134,7 +134,7 @@ Configuration is valid.
 
 ```bash
 # From your DBT project root
-dbt parse
+uv run dbt parse
 ```
 
 Verify manifest exists:
@@ -197,7 +197,7 @@ ImportError: No module named 'yaml'
 
 **Solution**:
 ```bash
-pip install pyyaml
+uv sync --all-extras
 ```
 
 ### Issue: Manifest Not Found
@@ -208,7 +208,7 @@ Manifest file not found at target/manifest.json
 
 **Solution**:
 ```bash
-dbt parse
+uv run dbt parse
 ```
 
 ### Issue: BigQuery Permission Denied
