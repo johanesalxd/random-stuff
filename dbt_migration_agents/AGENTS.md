@@ -84,8 +84,8 @@ This repository defines several agents (in `.agents/agents/`) that orchestrate t
 
 ### Rules for Modification
 - **Config:** Do not hardcode project-specific values. Use `config_loader.py` to fetch from `migration_config.yaml`.
-- **Output:** Agents write outputs to directories defined in `config/migration_config.yaml` (default: `migration_outputs/`).
-- **Safety:** Always validate paths and project IDs before using them (see `setup.py` validators).
+- **Output:** Agents write outputs to directories defined in `config/migration_config.yaml` (e.g., `lineage_analyzer/outputs/`).
+- **Safety:** Always validate paths and project IDs before using them (see `configure.py` validators).
 
 ## 4. Development Workflow
 
