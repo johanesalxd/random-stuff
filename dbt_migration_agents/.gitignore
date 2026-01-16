@@ -59,8 +59,6 @@ migration_validator/scripts/*_integration/
 code_refactor/outputs/*.md
 !code_refactor/outputs/.gitkeep
 
-migration_outputs/
-
 # IDE
 .idea/
 .vscode/
