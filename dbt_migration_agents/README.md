@@ -43,6 +43,106 @@ This framework helps you **bypass unnecessary intermediate layers** in your data
 
 ---
 
+## 🚀 Quick Start (Demo)
+
+Use this **copy-paste script** to set up the entire environment from scratch. It hydrates the sample project in BigQuery and configures the agents in one go.
+
+### Prerequisites
+1.  **Google Cloud Project**: You need a project ID (e.g., `my-playground-123`).
+2.  **Authentication**: Ensure you are logged in locally:
+    ```bash
+    gcloud auth application-default login
+    ```
+3.  **uv**: Install uv if you haven't already:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+### The "Golden Path" Script
+
+Copy the following script, replace `YOUR_PROJECT_ID` with your actual GCP project ID, and run it in your terminal.
+
+```bash
+# --- CONFIGURATION ---
+export PROJECT_ID="YOUR_PROJECT_ID"
+export LOCATION="US"
+
+# 1. Install Dependencies
+echo "Installing dependencies..."
+uv sync --all-extras
+
+# 2. Configure DBT Profile
+echo "Configuring DBT profile..."
+cd sample_project
+mkdir -p ~/.dbt
+
+cat <<EOF > profiles.yml
+sample_project:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: ${PROJECT_ID}
+      dataset: sample_gold
+      threads: 4
+      timeout_seconds: 300
+      location: ${LOCATION}
+      priority: interactive
+EOF
+
+# 3. Hydrate BigQuery (Build Tables)
+echo "Hydrating BigQuery environment..."
+uv run dbt deps
+uv run dbt seed --profiles-dir . --full-refresh
+uv run dbt run --profiles-dir . --full-refresh
+uv run dbt parse --profiles-dir .
+
+# 4. Configure Migration Agents
+echo "Configuring Migration Agents..."
+cd ..
+mkdir -p config
+
+cat <<EOF > config/migration_config.yaml
+project:
+  name: "sample_project"
+  manifest_path: "sample_project/target/manifest.json"
+
+gcp:
+  billing_project: "${PROJECT_ID}"
+  projects:
+    bronze: "${PROJECT_ID}"
+    silver: "${PROJECT_ID}"
+    gold: "${PROJECT_ID}"
+  schemas:
+    bronze: "sample_bronze"
+    silver: "sample_silver"
+    gold: "sample_gold"
+
+dbt:
+  bronze_models: "sample_project/models/bronze"
+  silver_models: "sample_project/models/silver"
+  gold_models: "sample_project/models/gold"
+  seeds: "sample_project/seeds"
+
+outputs:
+  base_path: "migration_outputs"
+  lineage: "lineage_analyzer/outputs"
+  prd: "prd_generator/outputs"
+  validation: "migration_validator/outputs"
+  cookbooks: "code_refactor/outputs"
+
+validation:
+  row_count_threshold: 0.001
+  null_threshold: 0.05
+EOF
+
+echo "✅ Setup Complete! You are ready to run the agent."
+echo "Try asking: 'Follow the workflow in .agents/commands/migration_workflow.md to migrate sample_project/models/gold/fct_orders_broken.sql targeting ${PROJECT_ID}.sample_gold'"
+```
+
+---
+
 ## Demo Scenarios
 
 The `sample_project/` includes broken scenarios for testing:
@@ -56,58 +156,22 @@ Use these to demonstrate the validation and migration workflow.
 
 ---
 
-## How to Execute
+## How to Execute (The Migration)
 
-### Step 1: Setup
+Once you have run the quick start script above, you are ready to migrate.
 
-#### 1.1 Install Dependencies
-We use `uv` for fast, reliable dependency management.
-
-```bash
-# Install dependencies and create virtual environment
-uv sync --all-extras
-```
-
-#### 1.2 Configure Framework
-Run the interactive wizard to generate `config/migration_config.yaml`.
-
-```bash
-uv run configure.py
-```
-
-#### 1.3 Hydrate Sample Project
-If using the sample project, you must build the tables in BigQuery first so the agents can analyze them.
-
-```bash
-cd sample_project
-
-# Edit profiles.yml to point to your BigQuery project
-cp profiles.yml.example profiles.yml
-vim profiles.yml 
-
-# Install dbt packages
-dbt deps
-
-# Create the raw data and models (CRITICAL STEP)
-dbt seed
-dbt run
-
-# Generate the manifest for the agents
-dbt parse
-```
-
-### Step 2: Run Migration Generator
+### Step 1: Run Migration Generator
 
 Ask OpenCode (using Gemini 3 Pro):
 
-> "Follow the workflow in .agents/commands/migration_workflow.md to migrate models/gold/fct_orders_broken.sql targeting my-project.my_dataset"
+> "Follow the workflow in .agents/commands/migration_workflow.md to migrate sample_project/models/gold/fct_orders_broken.sql targeting <YOUR_PROJECT_ID>.sample_gold"
 
 This generates:
 1. Migration Analysis (lineage and complexity)
 2. PRD (implementation plan with SQL examples)
 3. Migration Cookbook (step-by-step guide)
 
-### Step 3: Review and Approve PRD
+### Step 2: Review and Approve PRD
 
 Review the generated PRD at:
 ```
@@ -116,7 +180,7 @@ prd_generator/outputs/fct_orders_broken_dbt_refactoring_prd.md
 
 When satisfied, respond to the agent: "Approved, proceed with cookbook generation"
 
-### Step 4: Execute Migration
+### Step 3: Execute Migration
 
 ```
 Execute migration following @code_refactor/outputs/gold_fct_orders_broken_cookbook.md
@@ -129,7 +193,7 @@ The agent will:
 4. Apply automatic SQL refinement if validation fails
 5. Document results
 
-### Step 5: Validate Results
+### Step 4: Validate Results
 
 Both models should produce equivalent data:
 - `fct_orders_broken` (4 hops, reading from int_orders_final_broken)
@@ -149,26 +213,19 @@ This template provides 5 specialized AI agents that work together to:
 4. **Validate migrations** - Intelligent testing with RCA
 5. **Execute migrations** - One model at a time with feedback loops
 
-## Quick Start
+## Integration into Your Own Project
 
-### 1. Clone or Copy to Your Project
-
+### 1. Clone or Copy
 Copy the `dbt_migration_agents/` directory to your DBT project root.
 
 ### 2. Install & Configure
-
 ```bash
 cd dbt_migration_agents
-
-# Install dependencies
 uv sync
-
-# Run setup wizard
 uv run configure.py
 ```
 
 ### 3. Run Your First Migration
-
 Ask your agent:
 > "Analyze dependencies for models/marts/my_model.sql using config/migration_config.yaml"
 

@@ -1,5 +1,7 @@
 # Setup Guide
 
+> **Note**: For a quick start with the sample project, see the **[main README](../README.md#quick-start-demo)**. This guide provides detailed manual instructions for custom setups.
+
 Detailed instructions for setting up DBT Migration Agents in your project.
 
 ## Prerequisites
