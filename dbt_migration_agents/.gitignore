@@ -1,5 +1,12 @@
 # DBT Migration Agents - Git Ignore
 
+# Sample Project Artifacts
+sample_project/target/
+sample_project/dbt_packages/
+sample_project/logs/
+sample_project/profiles.yml
+sample_project/.user.yml
+
 # Configuration (contains project-specific values)
 config/migration_config.yaml
 
