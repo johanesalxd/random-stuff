@@ -292,7 +292,7 @@ Ready for review. Next: Generate PRD based on this analysis.
 
 **Agent Type**: Analysis & Documentation
 **Configuration**: config/migration_config.yaml
-**Invoked By**: User directly OR `/migrate-cookbook-generator` orchestrator (Step 1)
+**Invoked By**: User directly OR `.agents/commands/migration_workflow.md` orchestrator (Step 1)
 **Reference Guide**: `lineage_analyzer/LINEAGE_ANALYZER_COOKBOOK.md`
 **Output Format**: Markdown analysis document
 **Next Step**: User reviews analysis → PRD Generator uses analysis as input
