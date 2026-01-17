@@ -135,6 +135,8 @@ To run the complete migration process (Lineage -> PRD -> Cookbook):
 
 If you need to run specific agents individually, use the following patterns:
 
+> **Tip:** You can check `sample_results/` for "Golden Copy" examples of agent outputs (Analysis, PRD, Cookbook, Validation Report).
+
 **1. Lineage Analyzer**
 > "Use the Task tool with .agents/agents/lineage_analyzer.md to analyze dependencies for <model_file_path> using config/migration_config.yaml"
 
