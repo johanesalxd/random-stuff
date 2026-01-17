@@ -253,9 +253,9 @@ Summary:
 - Sources: 8
 ```
 
-## Integration with /migrate-cookbook-generator
+## Integration with .agents/commands/migration_workflow.md
 
-This subagent is invoked automatically by the /migrate-cookbook-generator command when:
+This subagent is invoked automatically by the .agents/commands/migration_workflow.md command when:
 
 1. DBT lineage file doesn't exist, OR
 2. DBT lineage file exists but doesn't contain the target model
@@ -301,4 +301,4 @@ Invoke dbt_lineage_generator subagent:
 **Configuration**: config/migration_config.yaml
 **Dependencies**: analyze_dbt_lineage.py, manifest.json at config path
 **Outputs**: lineage_dbt_{model_name}.md at config output path
-**Invoked By**: /migrate-cookbook-generator command
+**Invoked By**: .agents/commands/migration_workflow.md command

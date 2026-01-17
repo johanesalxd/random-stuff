@@ -337,7 +337,7 @@ and automatic feedback loops for SQL refinement.
 
 **Agent Type**: Documentation Generation
 **Configuration**: config/migration_config.yaml
-**Invoked By**: `/migrate-cookbook-generator` orchestrator (after PRD approval)
+**Invoked By**: `.agents/commands/migration_workflow.md` orchestrator (after PRD approval)
 **Input Format**: Approved PRD document (markdown) + target parameters
 **Output Format**: Customized migration cookbook (markdown)
 **Next Step**: User executes migration conversationally following the cookbook
