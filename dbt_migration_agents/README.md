@@ -162,6 +162,15 @@ The `sample_project/` includes broken scenarios for testing:
 
 Use these to demonstrate the validation and migration workflow.
 
+### Reference Artifacts (sample_results/)
+
+The `sample_results/` directory contains "Golden Copy" artifacts generated for the `fct_orders_broken` demo. Use these to verify your agent's outputs:
+
+- **Lineage**: `sample_results/lineage_analyzer/outputs/lineage_dbt_fct_orders_broken.md`
+- **PRD**: `sample_results/prd_generator/outputs/fct_orders_broken_dbt_refactoring_prd.md`
+- **Cookbook**: `sample_results/code_refactor/outputs/gold_fct_orders_broken_cookbook.md`
+- **Validation**: `sample_results/migration_validator/outputs/fct_orders_broken/`
+
 ---
 
 ## How to Execute (The Migration)
@@ -275,6 +284,11 @@ dbt_migration_agents/
 │   ├── migration_config.yaml   # Your configuration
 │   ├── migration_config.example.yaml
 │   └── config_loader.py        # Python config utilities
+├── sample_results/             # Reference outputs for the demo scenario
+│   ├── lineage_analyzer/
+│   ├── prd_generator/
+│   ├── code_refactor/
+│   └── migration_validator/
 ├── lineage_analyzer/
 │   ├── dbt_based/
 │   │   └── analyze_dbt_lineage.py
