@@ -1,0 +1,21 @@
+{
+  "new_table": {
+    "id": "johanesa-playground-326616.sample_gold.fct_orders_broken_migrated",
+    "rows": 7,
+    "bytes": 1469,
+    "partitioning": {
+      "field": "order_date",
+      "type": "DAY"
+    },
+    "clustering": ["customer_id", "order_status"],
+    "schema_columns": 27
+  },
+  "current_table": {
+    "id": "johanesa-playground-326616.sample_gold.fct_orders_broken",
+    "rows": 7,
+    "bytes": 1469,
+    "partitioning": null,
+    "clustering": null,
+    "schema_columns": 27
+  }
+}
