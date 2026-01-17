@@ -287,7 +287,7 @@ Ready for stakeholder review and approval.
 
 **Agent Type**: Documentation Generation
 **Configuration**: config/migration_config.yaml
-**Invoked By**: User directly OR `/migrate-cookbook-generator` orchestrator (Step 2)
+**Invoked By**: User directly OR `.agents/commands/migration_workflow.md` orchestrator (Step 2)
 **Input Requirements**: Migration analysis document + target parameters
 **Reference Guide**: `prd_generator/PRD_GENERATOR_COOKBOOK.md`
 **Output Format**: Markdown PRD document
