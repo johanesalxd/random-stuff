@@ -118,7 +118,7 @@ Before starting the analysis, ensure you have:
 - [ ] Access to `INFORMATION_SCHEMA.JOBS_BY_PROJECT` and `INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT`
 - [ ] Project ID where compute occurs
 - [ ] Region where compute occurs (e.g., `us`, `eu`, `asia-northeast1`)
-- [ ] AI assistant with MCP server access (bigquery-data-analytics, bigquery-conversational-analytics)
+- [ ] AI assistant with MCP server access (bigquery-data-analytics)
 
 ### Tool Priority: MCP First
 
