@@ -122,37 +122,22 @@ Before starting the analysis, ensure you have:
 
 ### Step-by-Step Instructions
 
-**Step 1: Prepare Your Request**
+**Step 1: Execute the Analysis**
 
-Provide your AI assistant with the following information:
+Ask the agent:
+> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project <PROJECT_ID> in <REGION>"
 
-```
-Based on the guidance in 'bq_finops_cookbook/finops_prompt.md', please help me analyze
-my project [YOUR_PROJECT_ID], which has compute and storage in the [YOUR_REGION] region.
+**Example**:
+> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project my-gcp-project in region-us"
 
-Please list your plan before execution.
-```
+The agent will automatically:
+1.  Run SQL queries against your project's INFORMATION_SCHEMA
+2.  Calculate stability and burstiness metrics
+3.  Analyze current reservations (if any)
+4.  Identify optimization opportunities
+5.  Generate detailed reports in the `analysis_results/` directory
 
-**Step 2: Review the Analysis Plan**
-
-The AI assistant will outline the analysis steps:
-- Step 0: Assess current configuration
-- Step 1: Analyze slot usage patterns
-- Step 2: Calculate workload metrics
-- Step 3: Recommend strategy
-- Step 4: Identify optimizations
-- Step 5: Generate reports
-
-**Step 3: Execute the Analysis**
-
-The AI assistant will:
-1. Run SQL queries against your project's INFORMATION_SCHEMA
-2. Calculate stability and burstiness metrics
-3. Analyze current reservations (if any)
-4. Identify optimization opportunities
-5. Generate detailed reports
-
-**Step 4: Review Generated Reports**
+**Step 2: Review Generated Reports**
 
 Reports will be created in the `analysis_results/` directory:
 - `00_current_configuration.md` - Current reservation setup (if applicable)
@@ -162,7 +147,7 @@ Reports will be created in the `analysis_results/` directory:
 - `04_optimization_opportunities.md` - Contention, expensive queries, performance insights
 - `05_final_recommendation.md` - Strategy and implementation plan
 
-**Step 5: Implement Recommendations**
+**Step 3: Implement Recommendations**
 
 Follow the implementation steps in the final recommendation report. This typically includes:
 - Creating or modifying reservations
