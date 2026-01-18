@@ -704,6 +704,8 @@ LIMIT 1000;
 ```
 
 #### File 6: `analysis_results/06_final_recommendation.md`
+**CRITICAL: Follow this exact heading structure. Do not skip sections. If a section is not applicable (e.g. Implementation Steps for On-Demand), explicitly state "No changes required".**
+
 ```markdown
 # Final Recommendation
 

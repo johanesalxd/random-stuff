@@ -1,25 +1,21 @@
 # Slot Usage Metrics (30-Day Analysis)
 
-## Percentile Distribution
-- **p10:** 0.0 slots
-- **p25:** 0.0 slots
-- **p50:** 0.0 slots (median)
-- **p75:** 0.0 slots
-- **p95:** 0.0 slots
-- **max:** 0.2 slots
-
-## Statistical Summary
-- **Average:** 0.0 slots
-- **Standard Deviation:** 0.0 slots
+## System-Wide Percentiles
+| Metric | Slots | Description |
+|:--- |:--- |:--- |
+| **P10** | 0.0 | Baseline usage (10% of time) |
+| **P25** | 0.0 | Lower quartile |
+| **P50** | 0.0 | Median usage |
+| **P75** | 0.0 | Upper quartile |
+| **P95** | 0.0 | Peak usage (excluding outliers) |
+| **Max** | 0.2 | Absolute maximum peak |
+| **Avg** | 0.0 | Average consumption |
+| **StdDev** | 0.0 | Variability |
 
 ## Workload Characterization
+| Metric | Value | Classification |
+|:--- |:--- |:--- |
+| **Stability (CV)** | NaN | **Ghost Town** |
+| **Burstiness** | NaN | **Ghost Town** |
 
-### Stability Metric
-- **Coefficient of Variation:** 0.0
-- **Classification:** Stable (Low Usage)
-- **Interpretation:** The workload is extremely light, with average usage effectively zero.
-
-### Burstiness Metric
-- **Burst Ratio (p95/p50):** N/A (Division by Zero)
-- **Classification:** Low
-- **Interpretation:** No significant bursts detected; usage is minimal.
+*Note: The usage levels are too low to calculate meaningful stability or burstiness metrics. The workload is effectively dormant.*
