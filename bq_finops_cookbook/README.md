@@ -120,6 +120,31 @@ Before starting the analysis, ensure you have:
 - [ ] Region where compute occurs (e.g., `us`, `eu`, `asia-northeast1`)
 - [ ] AI assistant with MCP server access (bigquery-data-analytics, bigquery-conversational-analytics)
 
+### Tool Priority: MCP First
+
+This agent is designed to use **MCP Tools** (`bigquery-data-analytics`) as the primary execution method for safety and structured output.
+- **Primary**: MCP Tools (`execute_sql`, `get_table_info`)
+- **Fallback**: `bq` CLI (if MCP is unavailable)
+
+## 🚀 Quick Start (Demo)
+
+Use this prompt to run a complete analysis on your project.
+
+### Prerequisites
+1.  **OpenCode Agent** running **Gemini 3 Pro**.
+2.  **Authentication**: `gcloud auth login` or valid MCP credentials.
+3.  **Permissions**: `bigquery.resourceViewer` on the target project.
+
+### Execution
+Ask the agent:
+> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project <YOUR_PROJECT_ID> in <REGION>"
+
+**Example:**
+> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project my-playground-123 in region-us"
+
+### Expected Output
+The agent will generate 7 reports in `analysis_results/` covering usage, cost, storage, and a final strategy recommendation.
+
 ### Step-by-Step Instructions
 
 **Step 1: Execute the Analysis**
