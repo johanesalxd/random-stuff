@@ -23,7 +23,8 @@ This workflow orchestrates a 5-step analysis process:
 2.  **Analyze Slot Metrics**: Calculate percentiles, stability, and burstiness.
 3.  **Identify Opportunities**: Find top consumers and optimization targets.
 4.  **Generate Recommendation**: Recommend a strategy (On-Demand, Baseline, Autoscaling, Hybrid).
-5.  **Generate Reports**: detailed markdown reports in `analysis_results/`.
+5.  **Storage & Cost Analysis**: Analyze storage costs and on-demand spend.
+6.  **Generate Reports**: Detailed markdown reports in `analysis_results/`.
 
 ## Workflow
 
@@ -52,6 +53,7 @@ Analysis Complete.
 - **Strategy**: [Strategy Name] (e.g., "Autoscaling Reservations")
 - **Confidence**: [High/Medium/Low]
 - **Key Metric**: [Mention one key metric, e.g., "CV = 1.5 indicates high variability"]
+- **Estimated Monthly Spend**: [Sum of Compute + Storage]
 
 **Reports Generated**:
 The following detailed reports have been generated in `analysis_results/`:
@@ -61,6 +63,7 @@ The following detailed reports have been generated in `analysis_results/`:
 4. `03_usage_patterns.md`
 5. `04_optimization_opportunities.md`
 6. `05_final_recommendation.md`
+7. `06_storage_and_cost.md`
 
 **Next Steps**:
 Please review the `05_final_recommendation.md` file for the specific implementation plan and commands.
@@ -73,5 +76,5 @@ Please review the `05_final_recommendation.md` file for the specific implementat
 
 ## Outputs
 
-1.  **Metric Reports**: `analysis_results/` (01-04)
+1.  **Metric Reports**: `analysis_results/` (01-04, 06)
 2.  **Final Recommendation**: `analysis_results/05_final_recommendation.md`
