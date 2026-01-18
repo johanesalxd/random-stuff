@@ -29,7 +29,6 @@ This workflow orchestrates a 5-step analysis process:
 ## Workflow
 
 ### Step 1: Initialize Analysis
-
 Use the `Task` tool with `subagent_type='general'` and the content of `.agents/agents/finops_agent.md` as the prompt context.
 
 Provide the following task description:
@@ -62,11 +61,11 @@ The following detailed reports have been generated in `analysis_results/`:
 3. `02_top_consumers.md`
 4. `03_usage_patterns.md`
 5. `04_optimization_opportunities.md`
-6. `05_final_recommendation.md`
-7. `06_storage_and_cost.md`
+6. `05_storage_and_cost.md`
+7. `06_final_recommendation.md`
 
 **Next Steps**:
-Please review the `05_final_recommendation.md` file for the specific implementation plan and commands.
+Please review the `06_final_recommendation.md` file for the specific implementation plan and commands.
 ```
 
 ## Parameters
@@ -76,5 +75,5 @@ Please review the `05_final_recommendation.md` file for the specific implementat
 
 ## Outputs
 
-1.  **Metric Reports**: `analysis_results/` (01-04, 06)
-2.  **Final Recommendation**: `analysis_results/05_final_recommendation.md`
+1.  **Metric Reports**: `analysis_results/` (00-05)
+2.  **Final Recommendation**: `analysis_results/06_final_recommendation.md`

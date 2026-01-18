@@ -126,6 +126,11 @@ This agent is designed to use **MCP Tools** (`bigquery-data-analytics`) as the p
 - **Primary**: MCP Tools (`execute_sql`, `get_table_info`)
 - **Fallback**: `bq` CLI (if MCP is unavailable)
 
+### Pricing Configuration
+
+The agent uses a default On-Demand pricing of **$6.25 per TB** (US Multi-region).
+If your project is in a different region, you can customize this rate by editing `.agents/agents/finops_agent.md` and modifying the constant in **Query 4.2**.
+
 ## 🚀 Quick Start (Demo)
 
 Use this prompt to run a complete analysis on your project.
@@ -170,7 +175,8 @@ Reports will be created in the `analysis_results/` directory:
 - `02_top_consumers.md` - Project breakdown
 - `03_usage_patterns.md` - Hourly/daily patterns
 - `04_optimization_opportunities.md` - Contention, expensive queries, performance insights
-- `05_final_recommendation.md` - Strategy and implementation plan
+- `05_storage_and_cost.md` - Storage analysis and on-demand cost estimation
+- `06_final_recommendation.md` - Strategy and implementation plan
 
 **Step 3: Implement Recommendations**
 
@@ -191,7 +197,8 @@ analysis_results/
 ├── 02_top_consumers.md
 ├── 03_usage_patterns.md
 ├── 04_optimization_opportunities.md
-└── 05_final_recommendation.md
+├── 05_storage_and_cost.md
+└── 06_final_recommendation.md
 ```
 
 Each report provides detailed analysis and actionable recommendations. See the generated files for complete details.
