@@ -1,7 +1,6 @@
 ---
 description: Orchestrates generation of PRD and migration cookbook for DBT gold layer migration
 argument-hint: <model_file_path> <target_project.dataset>
-model: sonnet
 ---
 
 # Migration Workflow
