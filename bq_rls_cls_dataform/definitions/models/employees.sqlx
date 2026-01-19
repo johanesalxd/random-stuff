@@ -2,7 +2,20 @@ config {
   type: "table",
   schema: dataform.projectConfig.defaultSchema,
   name: "employees",
-  description: "Employee data with sensitive columns for RLS and CLS demo"
+  description: "Employee data with sensitive columns for RLS and CLS demo",
+  assertions: {
+    uniqueKey: ["employee_id"],
+    nonNull: ["employee_id", "name", "department"]
+  },
+  columns: {
+    employee_id: "Unique identifier for the employee",
+    name: "Full name of the employee",
+    email: "Corporate email address (Sensitive: Masked for non-admins)",
+    department: "Department name, used for Row Level Security filtering",
+    salary: "Annual salary (Sensitive: Masked as NULL for non-admins)",
+    ssn: "Social Security Number (Sensitive: Masked as SHA256 for non-admins)",
+    bank_account: "Bank account number (Sensitive: Access blocked for non-admins)"
+  }
 }
 
 SELECT
