@@ -16,7 +16,7 @@ config {
 -- ------------------------------------------------------------
 
 CREATE OR REPLACE ROW ACCESS POLICY admin_full_access
-ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ON ${ref("employees")}
 GRANT TO ('${dataform.projectConfig.vars.admin_group}')
 FILTER USING (TRUE);
 
@@ -26,6 +26,6 @@ FILTER USING (TRUE);
 -- ------------------------------------------------------------
 
 CREATE OR REPLACE ROW ACCESS POLICY sales_department_access
-ON `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ON ${ref("employees")}
 GRANT TO ('${dataform.projectConfig.vars.sales_group}')
 FILTER USING (department = 'Sales');

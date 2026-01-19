@@ -26,7 +26,7 @@ OPTIONS (
   masking_expression="SHA256"
 );
 
-ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER TABLE ${ref("employees")}
 ALTER COLUMN ssn SET OPTIONS (
   data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy'}"]
 );
@@ -50,7 +50,7 @@ OPTIONS (
   masking_expression="DEFAULT_MASKING_VALUE"
 );
 
-ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER TABLE ${ref("employees")}
 ALTER COLUMN email SET OPTIONS (
   data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy'}"]
 );
@@ -74,7 +74,7 @@ OPTIONS (
   masking_expression="ALWAYS_NULL"
 );
 
-ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER TABLE ${ref("employees")}
 ALTER COLUMN salary SET OPTIONS (
   data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy'}"]
 );
@@ -97,7 +97,7 @@ OPTIONS (
   data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-ALTER TABLE `${dataform.projectConfig.vars.project}.${dataform.projectConfig.vars.dataset}.employees`
+ALTER TABLE ${ref("employees")}
 ALTER COLUMN bank_account SET OPTIONS (
   data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.bank_account_access_policy'}"]
 );
