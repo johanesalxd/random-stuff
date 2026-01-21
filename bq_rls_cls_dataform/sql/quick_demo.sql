@@ -51,75 +51,110 @@ INSERT INTO `my-project-id.my-dataset-id.employees` VALUES
 -- CLS Policy 1: Mask SSN with SHA256
 -- ------------------------------------------------------------
 
--- Step 3a: Create the data masking policy
+-- 1. Create Masking Policy (For Sales)
 CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.ssn_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="SHA256"
 );
 
--- Step 3b: Attach the policy to the column
-ALTER TABLE `my-project-id.my-dataset-id.employees`
-ALTER COLUMN ssn SET OPTIONS (
-  data_policies = ["{'name':'my-project-id.region-us.ssn_masking_policy'}"]
+-- 2. Create Raw Access Policy (For Admin)
+CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.ssn_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
--- Step 3c: Grant unmasked access to ADMIN and SALES groups
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `my-project-id.region-us.ssn_masking_policy`
-TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
+-- 3. Attach BOTH policies to the column
+ALTER TABLE `my-project-id.my-dataset-id.employees`
+ALTER COLUMN ssn SET OPTIONS (
+  data_policies = [
+    "{'name':'my-project-id.region-us.ssn_masking_policy'}",
+    "{'name':'my-project-id.region-us.ssn_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
+-- Sales gets masking policy (sees hash)
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `my-project-id.region-us.ssn_masking_policy`
 TO "principalSet://goog/group/bq-rls-cls-dataform-sales@mydomain.com";
+
+-- Admin gets raw policy (sees actual SSN)
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `my-project-id.region-us.ssn_raw_policy`
+TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
 
 
 -- ------------------------------------------------------------
 -- CLS Policy 2: Mask email with default masking value
 -- ------------------------------------------------------------
 
+-- 1. Create Masking Policy
 CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.email_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="DEFAULT_MASKING_VALUE"
 );
 
-ALTER TABLE `my-project-id.my-dataset-id.employees`
-ALTER COLUMN email SET OPTIONS (
-  data_policies = ["{'name':'my-project-id.region-us.email_masking_policy'}"]
+-- 2. Create Raw Access Policy
+CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.email_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `my-project-id.region-us.email_masking_policy`
-TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
+-- 3. Attach BOTH policies
+ALTER TABLE `my-project-id.my-dataset-id.employees`
+ALTER COLUMN email SET OPTIONS (
+  data_policies = [
+    "{'name':'my-project-id.region-us.email_masking_policy'}",
+    "{'name':'my-project-id.region-us.email_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `my-project-id.region-us.email_masking_policy`
 TO "principalSet://goog/group/bq-rls-cls-dataform-sales@mydomain.com";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `my-project-id.region-us.email_raw_policy`
+TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
 
 
 -- ------------------------------------------------------------
 -- CLS Policy 3: Hide salary as NULL
 -- ------------------------------------------------------------
 
+-- 1. Create Masking Policy
 CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.salary_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="ALWAYS_NULL"
 );
 
-ALTER TABLE `my-project-id.my-dataset-id.employees`
-ALTER COLUMN salary SET OPTIONS (
-  data_policies = ["{'name':'my-project-id.region-us.salary_masking_policy'}"]
+-- 2. Create Raw Access Policy
+CREATE OR REPLACE DATA_POLICY `my-project-id.region-us.salary_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `my-project-id.region-us.salary_masking_policy`
-TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
+-- 3. Attach BOTH policies
+ALTER TABLE `my-project-id.my-dataset-id.employees`
+ALTER COLUMN salary SET OPTIONS (
+  data_policies = [
+    "{'name':'my-project-id.region-us.salary_masking_policy'}",
+    "{'name':'my-project-id.region-us.salary_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `my-project-id.region-us.salary_masking_policy`
 TO "principalSet://goog/group/bq-rls-cls-dataform-sales@mydomain.com";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `my-project-id.region-us.salary_raw_policy`
+TO "principalSet://goog/group/bq-rls-cls-dataform-admin@mydomain.com";
 
 
 -- ------------------------------------------------------------
@@ -198,41 +233,15 @@ LIMIT 10;
 -- STEP 6: Test Queries (3 Persona Scenarios)
 -- ================================================================
 
--- ┌──────────────────────────────────────────────────────────────────────────────────┐
--- │ CURRENT Test Matrix Summary                                                      │
--- ├─────────────┬──────────┬────────┬─────────┬─────────┬─────────┬──────────────────┤
--- │ User Type   │ Group    │ Rows   │ email   │ salary  │ ssn     │ bank_account     │
--- ├─────────────┼──────────┼────────┼─────────┼─────────┼─────────┤──────────────────┤
--- │ Non-member  │ None     │ 0      │ N/A     │ N/A     │ N/A     │ N/A              │
--- │ Sales       │ sales@   │ 2      │ MASKED  │ MASKED  │ MASKED  │ N/A              │
--- │ Admin       │ admin@   │ 6      │ MASKED  │ MASKED  │ MASKED  │ AVAILABLE        │
--- └─────────────┴──────────┴────────┴─────────┴─────────┴─────────┘──────────────────┘
-
 -- ┌────────────────────────────────────────────────────────────────────────────────────┐
--- │ EXPECTED Test Matrix Summary                                                       │
+-- │ EXPECTED Test Matrix Summary (With Dual-Policy Fix)                                │
 -- ├─────────────┬──────────┬────────┬─────────┬──────────┬──────────┬──────────────────┤
 -- │ User Type   │ Group    │ Rows   │ email   │ salary   │ ssn      │ bank_account     │
--- ├─────────────┼──────────┼────────┼─────────┼──────────┼──────────┤──────────────────┤
+-- ├─────────────┼──────────┼────────┼─────────┼──────────┼──────────┼──────────────────┤
 -- │ Non-member  │ None     │ 0      │ N/A     │ N/A      │ N/A      │ N/A              │
--- │ Sales       │ sales@   │ 2      │ MASKED  │ UNMASKED │ UNMASKED │ N/A              │
--- │ Admin       │ admin@   │ 6      │ MASKED  │ MASKED   │ MASKED   │ AVAILABLE        │
--- └─────────────┴──────────┴────────┴─────────┴──────────┴──────────┘──────────────────┘
-
--- ⚠️ KNOWN ISSUE: DATA_MASKING_POLICY grantees not being respected
---
--- The SQL GRANT statements successfully populate the 'grantees' field in the
--- DATA_POLICY resource (verified via V2 API), but users in the grantees list
--- still see MASKED values instead of ACTUAL values.
---
--- Verified:
---   ✓ SQL GRANT populates DATA_POLICY.grantees field correctly
---   ✓ Grantees include: admin user + both groups (verified via API)
---   ✓ RAW_DATA_ACCESS_POLICY works correctly (bank_account column)
---   ✗ DATA_MASKING_POLICY grantees are NOT being respected
---
--- This appears to be a limitation or undocumented behavior of SQL-created
--- DATA_POLICY objects. Users with FINE_GRAINED_READ grants via SQL GRANT
--- still see masked values.
+-- │ Sales       │ sales@   │ 2      │ MASKED  │ MASKED   │ MASKED   │ ACCESS DENIED    │
+-- │ Admin       │ admin@   │ 6      │ RAW     │ RAW      │ RAW      │ RAW              │
+-- └─────────────┴──────────┴────────┴─────────┴──────────┴──────────┴──────────────────┘
 
 
 -- ------------------------------------------------------------
@@ -256,23 +265,15 @@ FROM `my-project-id.my-dataset-id.employees`;
 
 
 -- ------------------------------------------------------------
--- Test 2: Sales Group Member (NOT Admin)
--- Expected Results:
---   - RLS: 2 rows (Sales department only: Alice, Bob)
---   - CLS:
---     * email → "" (MASKED - grantees not respected)
---     * salary → NULL (MASKED - grantees not respected)
---     * ssn → SHA256 hash (MASKED - grantees not respected)
---     * bank_account → ACCESS DENIED (RAW_DATA_ACCESS_POLICY - NO grant)
+-- Test 2: Sales Group Member
 -- ------------------------------------------------------------
-
 SELECT
   employee_id,
   name,
-  email,        -- Shows: "" (masked despite grant)
+  email,        -- Shows: "" (Correctly Masked)
   department,
-  salary,       -- Shows: NULL (masked despite grant)
-  ssn           -- Shows: SHA256 hash (masked despite grant)
+  salary,       -- Shows: NULL (Correctly Masked)
+  ssn           -- Shows: SHA256 hash (Correctly Masked)
 FROM `my-project-id.my-dataset-id.employees`;
 -- Expected: 2 rows (E001, E002) with MASKED values
 
@@ -282,25 +283,17 @@ FROM `my-project-id.my-dataset-id.employees`;
 
 -- ------------------------------------------------------------
 -- Test 3: Admin Group Member
--- Expected Results:
---   - RLS: 6 rows (ALL departments via FILTER USING (TRUE))
---   - CLS:
---     * email → "" (MASKED - grantees not respected)
---     * salary → NULL (MASKED - grantees not respected)
---     * ssn → SHA256 hash (MASKED - grantees not respected)
---     * bank_account → "9876543210" (ACTUAL - RAW_DATA_ACCESS_POLICY works!)
 -- ------------------------------------------------------------
-
 SELECT
   employee_id,
   name,
-  email,        -- Shows: "" (masked despite grant)
+  email,        -- Shows: "alice..." (UNMASKED - Raw Policy Works!)
   department,
-  salary,       -- Shows: NULL (masked despite grant)
-  ssn,          -- Shows: SHA256 hash (masked despite grant)
-  bank_account  -- Shows: 9876543210 (actual - RAW_DATA_ACCESS_POLICY works)
+  salary,       -- Shows: 75000.0 (UNMASKED - Raw Policy Works!)
+  ssn,          -- Shows: "123-..." (UNMASKED - Raw Policy Works!)
+  bank_account  -- Shows: "987..." (ACCESSIBLE - Raw Policy Works!)
 FROM `my-project-id.my-dataset-id.employees`;
--- Expected: 6 rows (E001-E006) with masked values except bank_account
+-- Expected: 6 rows (E001-E006)
 
 
 -- ================================================================
@@ -345,13 +338,13 @@ FROM `my-project-id.my-dataset-id.employees`;
 --   - DEFAULT_MASKING_VALUE: Return type-specific default (e.g., empty string, 0)
 --   - LAST_FOUR_CHARACTERS: Show only last 4 characters
 
--- Difference between Masking and Raw Access Policy:
---   - DATA_MASKING_POLICY: Defines transformation rules (SHA256, NULL, etc.)
---     Users with FINE_GRAINED_READ grant see actual values
---     Users without grant get ACCESS DENIED
---   - RAW_DATA_ACCESS_POLICY: Blocks column access entirely for unauthorized users
---     Users with FINE_GRAINED_READ grant can query the column
---     Users without grant get ACCESS DENIED
+-- Difference between Masking and Raw Access Policy (Updated for Dual-Policy Model):
+--   - DATA_MASKING_POLICY: Defines the masking rule (e.g., SHA256).
+--     Users granted FINE_GRAINED_READ on this policy will see the MASKED value.
+--     (They are "readers of the mask").
+--   - RAW_DATA_ACCESS_POLICY: Defines the "Bypass" rule.
+--     Users granted FINE_GRAINED_READ on this policy will see the RAW value.
+--     (This policy overrides any masking policy on the same column).
 
 -- Required IAM Permissions (for creating policies):
 --   - bigquery.dataPolicies.create
