@@ -59,34 +59,10 @@ An employee directory with sensitive information where:
 | Column | Non-Member | Sales Group | Admin Group |
 |--------|-----------|-------------|-------------|
 | **Rows visible** | 0 | 2 (Sales only) | 6 (All) |
-| `email` | ❌ Error | MASKED * | MASKED * |
-| `salary` | ❌ Error | MASKED (NULL) * | MASKED (NULL) * |
-| `ssn` | ❌ Error | MASKED (SHA256) * | MASKED (SHA256) * |
+| `email` | ❌ Error | MASKED | ✅ Actual Value |
+| `salary` | ❌ Error | MASKED (NULL) | ✅ Actual Value |
+| `ssn` | ❌ Error | MASKED (SHA256) | ✅ Actual Value |
 | `bank_account` | ❌ Error | ❌ Error | ✅ Actual Value |
-
-\* **Known Issue**: See below
-
-## Known Issues
-
-### DATA_MASKING_POLICY Grantees Not Respected
-
-**Issue:** Users with `FINE_GRAINED_READ` grants via SQL `GRANT` statements still see MASKED values instead of ACTUAL values for DATA_MASKING_POLICY columns.
-
-**Verified:**
-- ✅ SQL GRANT statements successfully populate the `grantees` field in DATA_POLICY (confirmed via V2 API)
-- ✅ RAW_DATA_ACCESS_POLICY works correctly (bank_account column shows actual values for admin)
-- ❌ DATA_MASKING_POLICY grantees are NOT being respected (users see masked values despite grants)
-
-**Impact:**
-- RLS works as expected
-- RAW_DATA_ACCESS_POLICY works as expected
-- DATA_MASKING_POLICY applies masking to ALL users regardless of GRANT statements
-
-**Workaround:**
-- For columns that need selective access control (not just masking), use RAW_DATA_ACCESS_POLICY
-- This blocks access entirely for unauthorized users and shows actual values for granted users
-
-**Status:** This appears to be a limitation or undocumented behavior of SQL-created DATA_POLICY objects. The issue has been documented in the quick_demo.sql file.
 
 ## Project Structure
 
@@ -223,9 +199,9 @@ SELECT * FROM `my-project-id.my-dataset-id.employees`;
 SELECT
   employee_id,
   name,
-  email,        -- Shows "" (masked - known issue)
-  salary,       -- Shows NULL (masked - known issue)
-  ssn           -- Shows SHA256 hash (masked - known issue)
+  email,        -- Shows "" (masked)
+  salary,       -- Shows NULL (masked)
+  ssn           -- Shows SHA256 hash (masked)
 FROM `my-project-id.my-dataset-id.employees`;
 -- Returns 2 rows with masked values
 ```
@@ -235,12 +211,12 @@ FROM `my-project-id.my-dataset-id.employees`;
 SELECT
   employee_id,
   name,
-  email,        -- Shows "" (masked - known issue)
-  salary,       -- Shows NULL (masked - known issue)
-  ssn,          -- Shows SHA256 hash (masked - known issue)
-  bank_account  -- Shows actual value (RAW_DATA_ACCESS_POLICY works!)
+  email,        -- Shows actual email (Raw Access Policy)
+  salary,       -- Shows actual salary (Raw Access Policy)
+  ssn,          -- Shows actual SSN (Raw Access Policy)
+  bank_account  -- Shows actual value (Raw Access Policy)
 FROM `my-project-id.my-dataset-id.employees`;
--- Returns 6 rows with masked values except bank_account
+-- Returns 6 rows with ALL actual values
 ```
 
 ### Test Raw Data Access Policy
