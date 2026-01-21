@@ -20,72 +20,110 @@ config {
 -- CLS Policy 1: Mask SSN with SHA256
 -- ------------------------------------------------------------
 
+-- 1. Create Masking Policy (For Sales)
 CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="SHA256"
 );
 
-ALTER TABLE ${ref("employees")}
-ALTER COLUMN ssn SET OPTIONS (
-  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy'}"]
+-- 2. Create Raw Access Policy (For Admin)
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
-TO "${dataform.projectConfig.vars.admin_principal}";
+-- 3. Attach BOTH policies to the column
+ALTER TABLE ${ref("employees")}
+ALTER COLUMN ssn SET OPTIONS (
+  data_policies = [
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy'}",
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
+-- Sales gets masking policy (sees hash)
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_masking_policy`
 TO "${dataform.projectConfig.vars.sales_principal}";
+
+-- Admin gets raw policy (sees actual SSN)
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.ssn_raw_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
 
 
 -- ------------------------------------------------------------
 -- CLS Policy 2: Mask email with default masking value
 -- ------------------------------------------------------------
 
+-- 1. Create Masking Policy
 CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="DEFAULT_MASKING_VALUE"
 );
 
-ALTER TABLE ${ref("employees")}
-ALTER COLUMN email SET OPTIONS (
-  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy'}"]
+-- 2. Create Raw Access Policy
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
-TO "${dataform.projectConfig.vars.admin_principal}";
+-- 3. Attach BOTH policies
+ALTER TABLE ${ref("employees")}
+ALTER COLUMN email SET OPTIONS (
+  data_policies = [
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy'}",
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_masking_policy`
 TO "${dataform.projectConfig.vars.sales_principal}";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.email_raw_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
 
 
 -- ------------------------------------------------------------
 -- CLS Policy 3: Hide salary as NULL
 -- ------------------------------------------------------------
 
+-- 1. Create Masking Policy
 CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
 OPTIONS (
   data_policy_type="DATA_MASKING_POLICY",
   masking_expression="ALWAYS_NULL"
 );
 
-ALTER TABLE ${ref("employees")}
-ALTER COLUMN salary SET OPTIONS (
-  data_policies = ["{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy'}"]
+-- 2. Create Raw Access Policy
+CREATE OR REPLACE DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_raw_policy`
+OPTIONS (
+  data_policy_type="RAW_DATA_ACCESS_POLICY"
 );
 
-GRANT FINE_GRAINED_READ
-ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
-TO "${dataform.projectConfig.vars.admin_principal}";
+-- 3. Attach BOTH policies
+ALTER TABLE ${ref("employees")}
+ALTER COLUMN salary SET OPTIONS (
+  data_policies = [
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy'}",
+    "{'name':'${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_raw_policy'}"
+  ]
+);
 
+-- 4. Grant Permissions
 GRANT FINE_GRAINED_READ
 ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_masking_policy`
 TO "${dataform.projectConfig.vars.sales_principal}";
+
+GRANT FINE_GRAINED_READ
+ON DATA_POLICY `${dataform.projectConfig.vars.project}.region-${dataform.projectConfig.vars.location}.salary_raw_policy`
+TO "${dataform.projectConfig.vars.admin_principal}";
 
 
 -- ------------------------------------------------------------
