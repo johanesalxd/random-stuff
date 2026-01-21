@@ -90,7 +90,7 @@ WHERE
 This project specifically implements security controls.
 
 *   **RLS (Row Level Security):** Implemented via `ROW ACCESS POLICY`.
-*   **CLS (Column Level Security):** Implemented via `DATA POLICY` (masking) and explicit `GRANT` statements.
+*   **CLS (Column Level Security):** Implemented via **Dual-Policy Model**: `DATA_MASKING_POLICY` (for general access) and `RAW_DATA_ACCESS_POLICY` (for privileged access) attached to the same column.
 *   **Sensitive Data:**
     *   Respect existing masking policies.
     *   Do not expose sensitive columns (like `ssn`, `salary`, `bank_account`) in new views without appropriate tags or masking.
