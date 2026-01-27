@@ -7,6 +7,7 @@ readonly SMBD="/opt/homebrew/sbin/samba-dot-org-smbd"
 readonly NMBD="/opt/homebrew/sbin/nmbd"
 readonly CONFIG="/opt/homebrew/etc/samba/smb.conf"
 readonly LOG_DIR="/var/log/samba"
+readonly PDBEDIT="/opt/homebrew/bin/pdbedit"
 
 #######################################
 # Check if a process is running.
@@ -237,6 +238,39 @@ view_logs() {
 }
 
 #######################################
+# Check Samba user database and display instructions.
+# Globals:
+#   PDBEDIT
+# Arguments:
+#   None
+# Outputs:
+#   Writes user information and instructions to stdout
+#######################################
+check_users() {
+  echo "=== Checking Samba User Database ==="
+  echo ""
+
+  if [[ ! -x "${PDBEDIT}" ]]; then
+    echo "ERROR: pdbedit not found at ${PDBEDIT}"
+    return 1
+  fi
+
+  echo "Current Samba users:"
+  sudo "${PDBEDIT}" -L 2>&1
+
+  echo ""
+  echo "=== System Users (pi and johanesalxd) ==="
+  dscl . -list /Users | grep -E "^(pi|johanesalxd)$"
+
+  echo ""
+  echo "To add a user to Samba, run:"
+  echo "  sudo smbpasswd -a <username>"
+  echo ""
+  echo "Example:"
+  echo "  sudo smbpasswd -a pi"
+}
+
+#######################################
 # Display usage information.
 # Globals:
 #   None
@@ -247,7 +281,7 @@ view_logs() {
 #######################################
 show_usage() {
   cat << EOF
-Usage: $(basename "$0") {start|stop|restart|status|logs}
+Usage: $(basename "$0") {start|stop|restart|status|logs|users}
 
 Commands:
   start   - Start smbd and nmbd services
@@ -255,10 +289,12 @@ Commands:
   restart - Restart both services
   status  - Check if services are running
   logs    - View recent server logs
+  users   - Check Samba user database and show instructions
 
 Examples:
   $(basename "$0") start
   $(basename "$0") status
+  $(basename "$0") users
 EOF
 }
 
@@ -267,7 +303,7 @@ EOF
 # Globals:
 #   None
 # Arguments:
-#   Command to execute (start|stop|restart|status|logs)
+#   Command to execute (start|stop|restart|status|logs|users)
 # Outputs:
 #   Writes command results to stdout
 #######################################
@@ -294,6 +330,9 @@ main() {
       ;;
     logs)
       view_logs
+      ;;
+    users)
+      check_users
       ;;
     *)
       echo "Error: Unknown command '${command}'"
