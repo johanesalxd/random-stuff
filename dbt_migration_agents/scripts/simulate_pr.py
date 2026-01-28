@@ -12,6 +12,8 @@ def run_command(command):
     if result.returncode != 0:
         print(f"❌ Command failed:\n{result.stderr}")
         return False
+    if result.stderr:
+        print(f"⚠️  Warnings:\n{result.stderr}")
     print("✅ Success")
     return True
 
@@ -35,6 +37,13 @@ def main():
     # Ensure dbt uses the local profiles.yml
     os.environ["DBT_PROFILES_DIR"] = "."
 
+    # Unset GOOGLE_APPLICATION_CREDENTIALS to force Oauth (gcloud auth)
+    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+        print(
+            "⚠️  Unsetting GOOGLE_APPLICATION_CREDENTIALS to use active gcloud session."
+        )
+        del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+
     # 2. Establish Baseline (PROD)
     print("\n--- Step 2: Establishing Baseline (Simulating PROD) ---")
     print("Building 'fct_orders_broken' into 'sample_gold' dataset...")
@@ -55,8 +64,13 @@ def main():
 
     # 4. Trigger AI Validation
     print("\n--- Step 4: AI Validation Agent ---")
-    prod_table = f"{project_id}.sample_gold.fct_orders_broken"
-    pr_table = f"{project_id}.sample_gold_ci.fct_orders"
+
+    # NOTE: The generate_schema_name macro ignores the target schema,
+    # so both tables end up in 'sample_gold'.
+    dataset_name = "sample_gold"
+
+    prod_table = f"{project_id}.{dataset_name}.fct_orders_broken"
+    pr_table = f"{project_id}.{dataset_name}.fct_orders"
 
     print(f"🕵️‍♂️ Validating PR Table: {pr_table}")
     print(f"📉 Against Baseline:   {prod_table}")

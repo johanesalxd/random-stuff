@@ -76,7 +76,7 @@ def generate_validation_script(prod_table, pr_table):
     # Initialize Vertex AI
     # Defaults to "us-central1" if not set, but usually safe to assume from env
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or prod_table.split(".")[0]
-    vertexai.init(project=project_id, location="us-central1")
+    vertexai.init(project=project_id, location="global")
 
     model = GenerativeModel("gemini-3-pro-preview")
     response = model.generate_content(full_prompt)
