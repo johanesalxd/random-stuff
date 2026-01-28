@@ -1,6 +1,6 @@
 {
   "new_table": {
-    "id": "johanesa-playground-326616.sample_gold.fct_orders_broken_migrated",
+    "id": "sample-project.sample_gold.fct_orders_broken_migrated",
     "rows": 7,
     "bytes": 1469,
     "partitioning": {
@@ -11,7 +11,7 @@
     "schema_columns": 27
   },
   "current_table": {
-    "id": "johanesa-playground-326616.sample_gold.fct_orders_broken",
+    "id": "sample-project.sample_gold.fct_orders_broken",
     "rows": 7,
     "bytes": 1469,
     "partitioning": null,

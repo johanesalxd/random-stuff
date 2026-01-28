@@ -4,8 +4,8 @@
 **Status**: ✅ APPROVED FOR DEPLOYMENT
 
 ## Executive Summary
-- **Optimized Table**: `johanesa-playground-326616.sample_gold.fct_orders_broken_migrated`
-- **Current Table**: `johanesa-playground-326616.sample_gold.fct_orders_broken`
+- **Optimized Table**: `sample-project.sample_gold.fct_orders_broken_migrated`
+- **Current Table**: `sample-project.sample_gold.fct_orders_broken`
 - **Total Tests**: 3
 - **Passed**: 3
 - **Failed**: 0

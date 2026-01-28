@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 import sys
-from google.cloud import bigquery
+
 from google.api_core.exceptions import GoogleAPICallError
+from google.cloud import bigquery
+
 
 def run_validation():
     # Configuration
     # PROD = Baseline (Existing/Broken), PR = Candidate (New/Fix)
-    PROD_TABLE_ID = "johanesa-playground-326616.sample_gold.fct_orders_broken"
-    PR_TABLE_ID = "johanesa-playground-326616.sample_gold.fct_orders"
-    
+    PROD_TABLE_ID = "sample-project.sample_gold.fct_orders_broken"
+    PR_TABLE_ID = "sample-project.sample_gold.fct_orders"
+
     # Thresholds
     ROW_COUNT_THRESHOLD = 0.01  # 1%
     METRIC_THRESHOLD = 0.01     # 1%
@@ -47,13 +49,13 @@ def run_validation():
         msg = f"Schema mismatch: Columns in PROD but missing in PR: {missing_cols}"
         print(f"  ❌ {msg}")
         errors.append(msg)
-    
+
     # Check for type mismatches
     type_mismatch = []
     for col in set(prod_schema.keys()).intersection(set(pr_schema.keys())):
         if prod_schema[col] != pr_schema[col]:
             type_mismatch.append(f"{col} ({prod_schema[col]} != {pr_schema[col]})")
-    
+
     if type_mismatch:
         msg = f"Schema mismatch: Column type differences: {type_mismatch}"
         print(f"  ❌ {msg}")
@@ -84,7 +86,7 @@ def run_validation():
     # 3. Primary Key Uniqueness (PR Table)
     print(f"\n[Test 3] Primary Key Uniqueness ({PRIMARY_KEY})...")
     pk_query = f"""
-        SELECT 
+        SELECT
             COUNT(*) as total_rows,
             COUNT(DISTINCT {PRIMARY_KEY}) as unique_keys
         FROM `{PR_TABLE_ID}`
@@ -92,7 +94,7 @@ def run_validation():
     try:
         pk_job = client.query(pk_query)
         pk_res = list(pk_job.result())[0]
-        
+
         if pk_res.total_rows != pk_res.unique_keys:
             duplicates = pk_res.total_rows - pk_res.unique_keys
             msg = f"Found {duplicates} duplicate records based on PK '{PRIMARY_KEY}' in PR table."
@@ -107,10 +109,10 @@ def run_validation():
 
     # 4. Numeric Metrics Comparison
     print("\n[Test 4] Numeric Metrics Comparison (SUM)...")
-    
+
     # Construct query to get sums for both tables
     metric_cols_select = ", ".join([f"SUM({c}) as {c}" for c in NUMERIC_COLUMNS])
-    
+
     def get_metrics(table_id):
         sql = f"SELECT {metric_cols_select} FROM `{table_id}`"
         return list(client.query(sql).result())[0]
@@ -122,7 +124,7 @@ def run_validation():
         for col in NUMERIC_COLUMNS:
             val_prod = getattr(prod_metrics, col) or 0
             val_pr = getattr(pr_metrics, col) or 0
-            
+
             # Avoid division by zero
             if val_prod == 0:
                 if val_pr == 0:

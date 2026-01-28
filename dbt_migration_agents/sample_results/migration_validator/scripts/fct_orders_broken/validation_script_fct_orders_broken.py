@@ -1,11 +1,12 @@
-from google.cloud import bigquery
 import sys
 from datetime import datetime
 
+from google.cloud import bigquery
+
 # Config
-BILLING_PROJECT = "johanesa-playground-326616"
-NEW_TABLE = "johanesa-playground-326616.sample_gold.fct_orders_broken_migrated"
-OLD_TABLE = "johanesa-playground-326616.sample_gold.fct_orders_broken"
+BILLING_PROJECT = "sample-project"
+NEW_TABLE = "sample-project.sample_gold.fct_orders_broken_migrated"
+OLD_TABLE = "sample-project.sample_gold.fct_orders_broken"
 ROW_THRESHOLD = 0.001
 
 client = bigquery.Client(project=BILLING_PROJECT)
