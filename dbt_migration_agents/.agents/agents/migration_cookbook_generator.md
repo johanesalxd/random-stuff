@@ -187,7 +187,7 @@ TOTAL_MODELS: [N]
 **Customized**:
 ```yaml
 SOURCE_PROJECT: "sample_project"
-TARGET_GCP_PROJECT: "johanesa-playground-326616"
+TARGET_GCP_PROJECT: "sample-project"
 TARGET_DATASET: "sample_gold"
 TOTAL_MODELS: 4
 ```
@@ -205,7 +205,7 @@ TOTAL_MODELS: 4
 ```markdown
 | # | Model Name | Source Type | Silver Source | Business Logic |
 |---|------------|-------------|---------------|----------------|
-| 1 | stg_orders | Silver | `johanesa-playground-326616.sample_silver.stg_orders` | Deduplication, status mapping, currency conversion |
+| 1 | stg_orders | Silver | `sample-project.sample_silver.stg_orders` | Deduplication, status mapping, currency conversion |
 ```
 
 ### 4. Validation Delegation
@@ -221,8 +221,8 @@ Using config: config/migration_config.yaml
 **Customized**:
 ```
 Use the validation_subagent to validate:
-- New table: `johanesa-playground-326616.sample_gold.stg_orders`
-- Current table: `johanesa-playground-326616.sample_silver.stg_orders`
+- New table: `sample-project.sample_gold.stg_orders`
+- Current table: `sample-project.sample_silver.stg_orders`
 Using config: config/migration_config.yaml
 ```
 

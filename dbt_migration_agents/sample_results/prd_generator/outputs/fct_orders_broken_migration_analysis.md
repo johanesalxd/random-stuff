@@ -62,7 +62,7 @@ A consolidated Silver model, `stg_orders`, already exists and implements the sup
 ## 4. Migration Recommendations
 
 ### Priority 1: Foundation (Silver Layer Verification)
-Ensure `stg_orders`, `stg_customers`, and `stg_products` are deployed and validated in the Silver layer (Project: `johanesa-playground-326616`).
+Ensure `stg_orders`, `stg_customers`, and `stg_products` are deployed and validated in the Silver layer (Project: `sample-project`).
 - **Action:** Verify `stg_orders` row counts match `int_orders_final_broken` (should be identical or better due to deduplication).
 
 ### Priority 2: Refactor Gold Model

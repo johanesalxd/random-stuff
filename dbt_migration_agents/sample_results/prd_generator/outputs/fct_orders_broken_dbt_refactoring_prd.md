@@ -3,7 +3,7 @@
 **Status:** Draft
 **Date:** 2026-01-16
 **Author:** AI Agent
-**Target:** `johanesa-playground-326616.sample_gold`
+**Target:** `sample-project.sample_gold`
 
 ## 1. Executive Summary
 
@@ -22,9 +22,9 @@
 ## 2. Background & Context
 
 ### Architecture
-- **Bronze:** `johanesa-playground-326616.sample_bronze` (Raw)
-- **Silver:** `johanesa-playground-326616.sample_silver` (Transformed/Cleaned)
-- **Gold:** `johanesa-playground-326616.sample_gold` (Curated/Fact)
+- **Bronze:** `sample-project.sample_bronze` (Raw)
+- **Silver:** `sample-project.sample_silver` (Transformed/Cleaned)
+- **Gold:** `sample-project.sample_gold` (Curated/Fact)
 
 ### Current State
 `fct_orders_broken` currently consumes data from `int_orders_final_broken`, which is the end of a chain of 3 single-purpose transformations. This pattern is inefficient and identified as "broken" in the codebase.
@@ -48,8 +48,8 @@
 
 ### Migration Strategy
 - **Type:** Refactor (Change Source)
-- **Source:** `johanesa-playground-326616.sample_silver.stg_orders`
-- **Target:** `johanesa-playground-326616.sample_gold.fct_orders_broken`
+- **Source:** `sample-project.sample_silver.stg_orders`
+- **Target:** `sample-project.sample_gold.fct_orders_broken`
 
 ### Models
 | Model | Action | Source | Target |
@@ -75,13 +75,13 @@ WITH orders AS (
 
 **NEW (Refactored):**
 ```sql
--- Target: johanesa-playground-326616.sample_gold.fct_orders_broken
+-- Target: sample-project.sample_gold.fct_orders_broken
 -- Source: {{ ref('stg_orders') }}
 
 {{ config(
     materialized='table',
     tags=['gold', 'curated', 'fact', 'orders', 'broken', 'demo'],
-    project='johanesa-playground-326616',
+    project='sample-project',
     schema='sample_gold'
 ) }}
 
@@ -203,8 +203,8 @@ SELECT * FROM final
 ### Row Count Check
 ```sql
 SELECT
-    (SELECT COUNT(*) FROM `johanesa-playground-326616.sample_silver.stg_orders`) as stg_count,
-    (SELECT COUNT(*) FROM `johanesa-playground-326616.sample_silver.int_orders_final_broken`) as broken_count
+    (SELECT COUNT(*) FROM `sample-project.sample_silver.stg_orders`) as stg_count,
+    (SELECT COUNT(*) FROM `sample-project.sample_silver.int_orders_final_broken`) as broken_count
 ```
 
 ### Data Integrity

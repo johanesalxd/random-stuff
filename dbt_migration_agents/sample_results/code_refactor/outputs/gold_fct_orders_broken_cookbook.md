@@ -32,13 +32,13 @@ Before using this template, ensure the config file is properly set up with your 
 The `fct_orders_broken` model currently consumes data from `int_orders_final_broken`, which is the end of a chain of 3 single-purpose transformations (`int_orders_cleaned_broken` → `int_orders_enriched_broken` → `int_orders_final_broken`). This pattern is inefficient and identified as "broken".
 
 ### Solution
-Refactor `fct_orders_broken` to consume data directly from `stg_orders` (in `johanesa-playground-326616.sample_silver`), which encapsulates all the logic of the broken chain in a single, efficient step.
+Refactor `fct_orders_broken` to consume data directly from `stg_orders` (in `sample-project.sample_silver`), which encapsulates all the logic of the broken chain in a single, efficient step.
 
 ### Data Architecture (Bronze/Silver/Gold Medallion)
 ```
-johanesa-playground-326616   → Bronze layer (raw ingestion)
-johanesa-playground-326616   → Silver layer (SOURCE - transformed)
-johanesa-playground-326616   → Gold layer (TARGET - curated)
+sample-project   → Bronze layer (raw ingestion)
+sample-project   → Silver layer (SOURCE - transformed)
+sample-project   → Gold layer (TARGET - curated)
 ```
 
 ## Quick Reference
@@ -48,12 +48,12 @@ johanesa-playground-326616   → Gold layer (TARGET - curated)
 ```yaml
 # Project Configuration (from config/migration_config.yaml)
 SOURCE_PROJECT: "sample_project"
-TARGET_GCP_PROJECT: "johanesa-playground-326616"
+TARGET_GCP_PROJECT: "sample-project"
 TARGET_DATASET: "sample_gold"
-SILVER_GCP_PROJECT: "johanesa-playground-326616"
-GOLD_PROJECT: "johanesa-playground-326616"
+SILVER_GCP_PROJECT: "sample-project"
+GOLD_PROJECT: "sample-project"
 GOLD_SCHEMA: "sample_gold"
-BILLING_PROJECT: "johanesa-playground-326616"
+BILLING_PROJECT: "sample-project"
 
 # Migration Scope (from PRD)
 TOTAL_MODELS: 1
@@ -80,7 +80,7 @@ Result: Validated Gold Layer Model
 
 | # | Model Name | Source Type | Silver Source | Target | Business Logic |
 |---|------------|-------------|---------------|--------|----------------|
-| 1 | fct_orders_broken | Silver | `johanesa-playground-326616.sample_silver.stg_orders` | `johanesa-playground-326616.sample_gold` | Refactor to use stg_orders directly |
+| 1 | fct_orders_broken | Silver | `sample-project.sample_silver.stg_orders` | `sample-project.sample_gold` | Refactor to use stg_orders directly |
 
 ## Prerequisites
 
@@ -103,8 +103,8 @@ graph LR
 - [x] PRD approved by stakeholders
 
 ### Required Access
-- BigQuery permissions for `johanesa-playground-326616` (target gold layer project)
-- BigQuery read permissions for `johanesa-playground-326616` (silver)
+- BigQuery permissions for `sample-project` (target gold layer project)
+- BigQuery read permissions for `sample-project` (silver)
 - DBT CLI access
 
 ---
@@ -131,11 +131,11 @@ project:
   name: "sample_project"
 
 gcp:
-  billing_project: "johanesa-playground-326616"
+  billing_project: "sample-project"
   projects:
-    bronze: "johanesa-playground-326616"
-    silver: "johanesa-playground-326616"
-    gold: "johanesa-playground-326616"
+    bronze: "sample-project"
+    silver: "sample-project"
+    gold: "sample-project"
 ```
 
 ### Step 0.3: Verify PRD Exists
@@ -182,13 +182,13 @@ ls -la sample_project/models/gold/
     },
     cluster_by=["customer_id", "order_status"],
     tags=["gold", "curated", "fact", "orders", "broken", "demo"],
-    project="johanesa-playground-326616",
+    project="sample-project",
     schema="sample_gold"
 ) }}
 
 {#
   Gold Model: fct_orders_broken
-  Source: johanesa-playground-326616.sample_silver.stg_orders
+  Source: sample-project.sample_silver.stg_orders
   Business Logic: Refactored to eliminate reliance on broken intermediate chain.
   Created: 2026-01-16
 #}
@@ -301,7 +301,7 @@ uv run dbt run --select fct_orders_broken_migrated
 
 **Verify in BigQuery**:
 ```sql
-SELECT COUNT(*) FROM `johanesa-playground-326616.sample_gold.fct_orders_broken_migrated`
+SELECT COUNT(*) FROM `sample-project.sample_gold.fct_orders_broken_migrated`
 ```
 
 ### Step 2.3: Intelligent Validation (Delegate to Subagent)
@@ -310,8 +310,8 @@ SELECT COUNT(*) FROM `johanesa-playground-326616.sample_gold.fct_orders_broken_m
 
 ```
 Use the validation_subagent to validate:
-- New table: `johanesa-playground-326616.sample_gold.fct_orders_broken_migrated`
-- Current table: `johanesa-playground-326616.sample_gold.fct_orders_broken`
+- New table: `sample-project.sample_gold.fct_orders_broken_migrated`
+- Current table: `sample-project.sample_gold.fct_orders_broken`
 Using config: config/migration_config.yaml
 ```
 
@@ -365,8 +365,8 @@ When validation fails, the subagent provides RCA and remediation SQL.
 5. **Re-validate**:
    ```
    Use the validation_subagent to validate:
-   - New table: `johanesa-playground-326616.sample_gold.fct_orders_broken_migrated`
-   - Current table: `johanesa-playground-326616.sample_gold.fct_orders_broken`
+   - New table: `sample-project.sample_gold.fct_orders_broken_migrated`
+   - Current table: `sample-project.sample_gold.fct_orders_broken`
    Using config: config/migration_config.yaml
    ```
 
@@ -395,9 +395,9 @@ Add entry to `code_refactor/outputs/MIGRATION_NOTES.md`:
 ### Model Details
 - **Source Model**: `sample_project/models/silver/stg_orders.sql`
 - **Gold Model**: `sample_project/models/gold/fct_orders_broken.sql`
-- **Target Project**: johanesa-playground-326616
+- **Target Project**: sample-project
 - **Target Schema**: sample_gold
-- **Source Data**: `johanesa-playground-326616.sample_silver.stg_orders`
+- **Source Data**: `sample-project.sample_silver.stg_orders`
 
 ### Issues Encountered
 [None / Description of issues and resolution]
@@ -447,8 +447,8 @@ Before updating downstream models, validate end-to-end:
 -- Compare silver vs gold layer counts
 SELECT
   'fct_orders_broken' AS model,
-  (SELECT COUNT(*) FROM `johanesa-playground-326616.sample_silver.stg_orders`) AS silver_count,
-  (SELECT COUNT(*) FROM `johanesa-playground-326616.sample_gold.fct_orders_broken`) AS gold_count
+  (SELECT COUNT(*) FROM `sample-project.sample_silver.stg_orders`) AS silver_count,
+  (SELECT COUNT(*) FROM `sample-project.sample_gold.fct_orders_broken`) AS gold_count
 ```
 
 ---
@@ -518,7 +518,7 @@ Change references if necessary.
 
 **Solution**:
 1. Verify BigQuery permissions
-2. Check billing project is correct: `johanesa-playground-326616`
+2. Check billing project is correct: `sample-project`
 3. Request access if needed
 
 ---
@@ -581,10 +581,10 @@ All configurable values come from `config/migration_config.yaml`:
 | Placeholder | Config Path | Description |
 |-------------|-------------|-------------|
 | `sample_project` | `project.name` | DBT project name |
-| `johanesa-playground-326616` | `gcp.billing_project` | Billing project |
-| `johanesa-playground-326616` | `gcp.projects.bronze` | Bronze layer (raw) |
-| `johanesa-playground-326616` | `gcp.projects.silver` | Silver layer (transformed) |
-| `johanesa-playground-326616` | `gcp.projects.gold` | Gold layer (curated) |
+| `sample-project` | `gcp.billing_project` | Billing project |
+| `sample-project` | `gcp.projects.bronze` | Bronze layer (raw) |
+| `sample-project` | `gcp.projects.silver` | Silver layer (transformed) |
+| `sample-project` | `gcp.projects.gold` | Gold layer (curated) |
 | `sample_silver` | `gcp.schemas.silver` | Silver schema |
 | `sample_gold` | `gcp.schemas.gold` | Gold schema |
 | `sample_project/models/silver` | `dbt.silver_models` | Silver model path |
