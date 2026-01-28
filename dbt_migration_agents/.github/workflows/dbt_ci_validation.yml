@@ -1,0 +1,40 @@
+name: AI Validation CI/CD
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Required for WIF
+
+jobs:
+  validate-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          # Replace with your actual Workload Identity Provider and Service Account
+          # workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
+          # service_account: 'my-service-account@my-project.iam.gserviceaccount.com'
+          # For demo purposes, we assume standard auth or skipping if not configured
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}' # Alternative to WIF
+          
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Setup Python & Install Dependencies
+        run: |
+          uv sync --all-extras
+      
+      - name: Run Validation Simulation
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          # This runs the simulation script which builds dbt models and triggers the AI agent
+          # Note: In a real PR, you might just run the runner against changed models
+          uv run python scripts/simulate_pr.py
