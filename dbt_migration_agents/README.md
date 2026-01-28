@@ -2,6 +2,21 @@
 
 A generic, configurable framework for migrating DBT silver models to the gold layer using AI agents and the Bronze/Silver/Gold medallion architecture.
 
+## 🤖 AI-Driven CI/CD
+
+Automate your PR reviews with the **AI Validation Agent**. This workflow integrates into your CI/CD pipeline to:
+1.  **Build** the PR version of your models.
+2.  **Compare** them against the Production baseline.
+3.  **Validate** data parity using dynamically generated Python tests powered by **Gemini 3 Pro**.
+
+### Quick Simulation
+You can test this workflow locally without pushing code:
+```bash
+# Simulates a PR (Prod vs Fix) and runs the AI Agent
+uv run python scripts/simulate_pr.py
+```
+*See [docs/ci_cd_workflow.md](docs/ci_cd_workflow.md) for architecture details.*
+
 ## TL;DR
 
 **Goal**: Simplify DBT data pipelines by consolidating unnecessary intermediate Silver layers
