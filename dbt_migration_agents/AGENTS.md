@@ -146,3 +146,22 @@ If you need to run specific agents individually, use the following patterns:
 **3. Validation Subagent**
 > "Use the Task tool with .agents/agents/validation_subagent.md to validate <new_table> against <old_table>. Use BigQuery MCP tools for analysis."
 
+## 8. CI/CD Integration
+
+You can automate the **Validation Subagent** within your CI/CD pipeline to verify PR changes.
+
+### Quick Simulation
+To simulate the CI process locally (building Prod vs PR versions and running AI validation):
+
+```bash
+uv run python scripts/simulate_pr.py
+```
+
+### GitHub Actions
+A reference workflow is available at `.github/workflows/dbt_ci_validation.yml`. It demonstrates:
+1. Authenticating to Google Cloud (WIF).
+2. Installing dependencies (`uv`).
+3. Running the AI validation script.
+
+See `docs/ci_cd_workflow.md` for the complete architecture.
+
