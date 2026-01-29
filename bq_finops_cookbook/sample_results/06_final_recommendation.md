@@ -3,7 +3,7 @@
 ## Strategy: Option A: Stay On-Demand (PAYG)
 
 ### Reasoning
-Based on the 30-day analysis of project `johanesa-playground-326616`, the workload is **negligible**.
+Based on the 30-day analysis of project `demo-project`, the workload is **negligible**.
 *   **Average Slot Usage**: 0.0 slots
 *   **Peak Usage (Max)**: 0.2 slots
 *   **Total Slot Hours**: 0.4 hours (approx. < $0.05 value)

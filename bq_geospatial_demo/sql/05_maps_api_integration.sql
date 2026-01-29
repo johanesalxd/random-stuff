@@ -16,13 +16,13 @@
 -- Run this once to register the Cloud Function as a BigQuery function
 -- Replace the placeholders with your actual values
 
-CREATE OR REPLACE FUNCTION `johanesa-playground-326616.demo_dataset.optimize_route`(
+CREATE OR REPLACE FUNCTION `demo-project.demo_dataset.optimize_route`(
   stops_json STRING
 )
 RETURNS STRING
-REMOTE WITH CONNECTION `johanesa-playground-326616.us.gmaps_conn`
+REMOTE WITH CONNECTION `demo-project.us.gmaps_conn`
 OPTIONS (
-  endpoint = 'https://us-central1-johanesa-playground-326616.cloudfunctions.net/optimize-route',
+  endpoint = 'https://us-central1-demo-project.cloudfunctions.net/optimize-route',
   max_batching_rows = 1
 );
 
@@ -108,7 +108,7 @@ WITH
     SELECT
       zone_id,
       waypoints,
-      `johanesa-playground-326616.demo_dataset.optimize_route`(TO_JSON_STRING(waypoints)) AS maps_response
+      `demo-project.demo_dataset.optimize_route`(TO_JSON_STRING(waypoints)) AS maps_response
     FROM api_input
   ),
 
