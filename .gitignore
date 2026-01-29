@@ -34,3 +34,6 @@ env/
 
 # Internal Google-specific content
 internal/
+
+# Python version management
+.python-version
