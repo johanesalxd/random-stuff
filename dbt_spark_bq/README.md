@@ -58,7 +58,7 @@ jupyter notebook dbt_spark_dataproc_demo.ipynb
 #### 1. Set Configuration
 
 ```bash
-export PROJECT_ID="johanesa-playground-326616"
+export PROJECT_ID="demo-project"
 export REGION="us-central1"
 export ZONE="us-central1-a"
 export CLUSTER_NAME="dbt-spark-demo-cluster"
@@ -175,7 +175,7 @@ for table in tables:
     df = spark.table(f"default.{table}")
     df.write \
         .format("bigquery") \
-        .option("table", f"johanesa-playground-326616.jaffle_shop_demo.{table}") \
+        .option("table", f"demo-project.jaffle_shop_demo.{table}") \
         .option("temporaryGcsBucket", "johanesa-dbt-spark-demo") \
         .mode("overwrite") \
         .save()
