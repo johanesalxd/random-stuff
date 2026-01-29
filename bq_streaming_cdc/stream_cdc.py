@@ -2,8 +2,7 @@ import logging
 import time
 from typing import Any, Dict, List, Type
 
-from google.cloud import bigquery
-from google.cloud import bigquery_storage_v1
+from google.cloud import bigquery, bigquery_storage_v1
 from google.cloud.bigquery_storage_v1 import types
 from google.protobuf import descriptor_pb2, descriptor_pool, message, message_factory
 
@@ -152,7 +151,7 @@ class BigQueryCDCWriter:
 
 
 def main():
-    PROJECT_ID = "johanesa-playground-326616"
+    PROJECT_ID = "demo-project"
     DATASET_ID = "demo_dataset"
     TABLE_ID = "cdc_demo"
 
