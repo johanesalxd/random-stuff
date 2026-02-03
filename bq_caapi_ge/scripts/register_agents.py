@@ -13,15 +13,25 @@ load_dotenv()
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 APP_ID = os.getenv("GEMINI_APP_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
+OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
 
-def register_agent(display_name: str, description: str, agent_card: dict) -> None:
+def register_agent(
+    display_name: str,
+    description: str,
+    agent_card: dict,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+) -> None:
     """Register an A2A agent with Gemini Enterprise via REST API.
 
     Args:
         display_name: The name to display in the UI.
         description: A brief description of the agent.
         agent_card: The A2A protocol agent card.
+        client_id: OAuth 2.0 client ID for identity passthrough.
+        client_secret: OAuth 2.0 client secret for identity passthrough.
     """
     print(f"Registering {display_name}...")
 
@@ -43,6 +53,18 @@ def register_agent(display_name: str, description: str, agent_card: dict) -> Non
         "description": description,
         "a2aAgentDefinition": {"jsonAgentCard": json.dumps(agent_card)},
     }
+
+    if client_id and client_secret:
+        payload["authorizationConfig"] = {
+            "a2aAuthorization": {
+                "serverSideOauth2": {
+                    "clientId": client_id,
+                    "clientSecret": client_secret,
+                    "authorizationUri": f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fstatic%2Foauth%2Foauth.html&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fbigquery&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent",
+                    "tokenUri": "https://oauth2.googleapis.com/token",
+                }
+            }
+        }
 
     cmd = [
         "curl",
@@ -91,6 +113,8 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
+        client_id=OAUTH_CLIENT_ID,
+        client_secret=OAUTH_CLIENT_SECRET,
     )
 
     # 2. Inventory Agent
@@ -110,4 +134,6 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
+        client_id=OAUTH_CLIENT_ID,
+        client_secret=OAUTH_CLIENT_SECRET,
     )
