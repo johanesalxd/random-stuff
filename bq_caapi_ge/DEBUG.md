@@ -78,3 +78,5 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 ## Reference Documents
 - [A2A Protocol Specification](https://a2a-protocol.org/)
 - [Gemini Enterprise A2A Registration](https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-a2a-agent)
+- [A2A Quickstart Notebook](https://github.com/a2aproject/a2a-samples/blob/main/notebooks/a2a_quickstart.ipynb)
+- [A2A Python Samples](https://github.com/a2aproject/a2a-samples/tree/main/samples/python)
