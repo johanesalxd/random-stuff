@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 APP_ID = os.getenv("GEMINI_APP_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
@@ -107,7 +108,7 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        auth_resource="projects/605626490127/locations/global/authorizations/bq-caapi-oauth",
+        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/bq-caapi-oauth",
     )
 
     # 2. Inventory Agent
@@ -132,5 +133,5 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        auth_resource="projects/605626490127/locations/global/authorizations/bq-caapi-oauth-inventory",
+        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/bq-caapi-oauth-inventory",
     )
