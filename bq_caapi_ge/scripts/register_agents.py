@@ -21,8 +21,7 @@ def register_agent(
     display_name: str,
     description: str,
     agent_card: dict,
-    client_id: str | None = None,
-    client_secret: str | None = None,
+    auth_resource: str | None = None,
 ) -> None:
     """Register an A2A agent with Gemini Enterprise via REST API.
 
@@ -30,8 +29,7 @@ def register_agent(
         display_name: The name to display in the UI.
         description: A brief description of the agent.
         agent_card: The A2A protocol agent card.
-        client_id: OAuth 2.0 client ID for identity passthrough.
-        client_secret: OAuth 2.0 client secret for identity passthrough.
+        auth_resource: The full path to an authorization resource.
     """
     print(f"Registering {display_name}...")
 
@@ -54,17 +52,8 @@ def register_agent(
         "a2aAgentDefinition": {"jsonAgentCard": json.dumps(agent_card)},
     }
 
-    if client_id and client_secret:
-        payload["authorizationConfig"] = {
-            "a2aAuthorization": {
-                "serverSideOauth2": {
-                    "clientId": client_id,
-                    "clientSecret": client_secret,
-                    "authorizationUri": f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fstatic%2Foauth%2Foauth.html&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fbigquery&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent",
-                    "tokenUri": "https://oauth2.googleapis.com/token",
-                }
-            }
-        }
+    if auth_resource:
+        payload["authorizationConfig"] = {"agentAuthorization": auth_resource}
 
     cmd = [
         "curl",
@@ -108,13 +97,17 @@ if __name__ == "__main__":
             "version": "1.0.0",
             "capabilities": {},
             "skills": [
-                {"id": "chat", "name": "Chat", "description": "Chat with analyst"}
+                {
+                    "id": "chat",
+                    "name": "Chat",
+                    "description": "Chat with analyst",
+                    "tags": [],
+                }
             ],
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        client_id=OAUTH_CLIENT_ID,
-        client_secret=OAUTH_CLIENT_SECRET,
+        auth_resource="projects/605626490127/locations/global/authorizations/bq-caapi-oauth",
     )
 
     # 2. Inventory Agent
@@ -129,11 +122,15 @@ if __name__ == "__main__":
             "version": "1.0.0",
             "capabilities": {},
             "skills": [
-                {"id": "chat", "name": "Chat", "description": "Chat with analyst"}
+                {
+                    "id": "chat",
+                    "name": "Chat",
+                    "description": "Chat with analyst",
+                    "tags": [],
+                }
             ],
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        client_id=OAUTH_CLIENT_ID,
-        client_secret=OAUTH_CLIENT_SECRET,
+        auth_resource="projects/605626490127/locations/global/authorizations/bq-caapi-oauth-inventory",
     )
