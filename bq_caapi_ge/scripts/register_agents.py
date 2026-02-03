@@ -1,6 +1,7 @@
 """Utility for registering A2A agents in Gemini Enterprise."""
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -9,6 +10,13 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
@@ -34,14 +42,18 @@ def register_agent(
         agent_card: The A2A protocol agent card.
         auth_resource: The full path to an authorization resource.
     """
-    print(f"Registering {display_name}...")
+    logger.info(f"Registering {display_name}...")
 
     # We use curl to call the REST API as it's easier to handle the v1alpha endpoint
-    token = (
-        subprocess.check_output(["gcloud", "auth", "print-access-token"])
-        .decode()
-        .strip()
-    )
+    try:
+        token = (
+            subprocess.check_output(["gcloud", "auth", "print-access-token"])
+            .decode()
+            .strip()
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to get gcloud access token. Ensure you are authenticated.")
+        raise RuntimeError("Authentication failed") from e
 
     url = (
         f"https://{LOCATION}-discoveryengine.googleapis.com/v1alpha/"
@@ -60,6 +72,7 @@ def register_agent(
 
     cmd = [
         "curl",
+        "-s",
         "-X",
         "POST",
         "-H",
@@ -73,15 +86,26 @@ def register_agent(
         json.dumps(payload),
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
-        print(f"Success! Response: {result.stdout}")
+        response_json = json.loads(result.stdout)
+        if "error" in response_json:
+            logger.error(
+                f"Registration failed for {display_name}: {response_json['error']}"
+            )
+        else:
+            logger.info(
+                f"Successfully registered {display_name}: {response_json.get('name')}"
+            )
     else:
-        print(f"Failed! Error: {result.stderr}")
+        logger.error(
+            f"Failed to execute registration command for {display_name}: {result.stderr}"
+        )
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
+        logger.error("No base URL provided.")
         print("Usage: python register_agents.py <BRIDGE_BASE_URL>")
         print("Example: python register_agents.py https://xyz.ngrok-free.app")
         sys.exit(1)
