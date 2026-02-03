@@ -6,6 +6,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from google.cloud import geminidataanalytics_v1beta as geminidataanalytics
+from google.oauth2 import credentials as oauth_credentials
 
 # Load environment variables
 load_dotenv()
@@ -56,22 +57,34 @@ AGENTS = {
 }
 
 
-def get_ca_client() -> geminidataanalytics.DataChatServiceClient:
-    """Return a DataChatServiceClient instance."""
+def get_ca_client(
+    token: str | None = None,
+) -> geminidataanalytics.DataChatServiceClient:
+    """Return a DataChatServiceClient instance.
+
+    If a token is provided, use it for authentication (OAuth passthrough).
+    Otherwise, fallback to Application Default Credentials.
+    """
+    if token:
+        creds = oauth_credentials.Credentials(token=token)
+        return geminidataanalytics.DataChatServiceClient(credentials=creds)
     return geminidataanalytics.DataChatServiceClient()
 
 
-async def proxy_to_ca_api(agent_id: str, user_query: str) -> str:
+async def proxy_to_ca_api(
+    agent_id: str, user_query: str, token: str | None = None
+) -> str:
     """Proxy a user query to the Conversational Analytics API.
 
     Args:
         agent_id: The ID of the data agent to use.
         user_query: The natural language query from the user.
+        token: Optional user access token for identity passthrough.
 
     Returns:
         The text response from the agent.
     """
-    client = get_ca_client()
+    client = get_ca_client(token=token)
     parent = f"projects/{PROJECT_ID}/locations/{LOCATION}"
 
     # Create the user message
@@ -111,6 +124,14 @@ async def proxy_to_ca_api(agent_id: str, user_query: str) -> str:
     return full_text
 
 
+def get_token_from_header(request: Request) -> str | None:
+    """Extract bearer token from Authorization header."""
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+    return None
+
+
 # --- A2A Endpoints for Orders Agent ---
 
 
@@ -134,13 +155,16 @@ async def orders_card(request: Request) -> dict:
 @app.post("/orders/chat")
 async def orders_chat(request: Request) -> dict:
     """Handle chat requests for the Orders agent."""
+    token = get_token_from_header(request)
     body = await request.json()
     user_message = body.get("message", {}).get("text", "")
 
     if not user_message:
         raise HTTPException(status_code=400, detail="No message provided")
 
-    response_text = await proxy_to_ca_api(AGENTS["orders"]["id"], user_message)
+    response_text = await proxy_to_ca_api(
+        AGENTS["orders"]["id"], user_message, token=token
+    )
 
     return {"message": {"text": response_text}}
 
@@ -168,13 +192,16 @@ async def inventory_card(request: Request) -> dict:
 @app.post("/inventory/chat")
 async def inventory_chat(request: Request) -> dict:
     """Handle chat requests for the Inventory agent."""
+    token = get_token_from_header(request)
     body = await request.json()
     user_message = body.get("message", {}).get("text", "")
 
     if not user_message:
         raise HTTPException(status_code=400, detail="No message provided")
 
-    response_text = await proxy_to_ca_api(AGENTS["inventory"]["id"], user_message)
+    response_text = await proxy_to_ca_api(
+        AGENTS["inventory"]["id"], user_message, token=token
+    )
 
     return {"message": {"text": response_text}}
 
