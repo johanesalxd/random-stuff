@@ -107,6 +107,22 @@ sequenceDiagram
     uv run python scripts/register_agents.py https://<your-public-url>
     ```
 
+## Sample Queries
+
+You can test the specialized capabilities of each agent using the following sample questions:
+
+### Agent A: Order & User Analyst
+*   "How many orders are in the 'Complete' status?"
+*   "Who are the top 5 users by total lifetime spend?"
+*   "What is the average number of items per order?"
+*   "Show me the distribution of order statuses for the last month."
+
+### Agent B: Inventory & Product Analyst
+*   "What is the name and price of the product with ID 1?"
+*   "Which distribution center currently holds the most inventory?"
+*   "How many products are in the 'Accessories' category?"
+*   "List 10 products that have a retail price greater than $100."
+
 ## Deployment
 
 ### Cloud Run (Production)
