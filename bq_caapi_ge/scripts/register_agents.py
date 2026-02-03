@@ -16,6 +16,8 @@ APP_ID = os.getenv("GEMINI_APP_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
+AUTH_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
+AUTH_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
 
 def register_agent(
@@ -108,7 +110,7 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/bq-caapi-oauth",
+        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_ORDERS}",
     )
 
     # 2. Inventory Agent
@@ -133,5 +135,5 @@ if __name__ == "__main__":
             "defaultInputModes": ["text/plain"],
             "defaultOutputModes": ["text/plain"],
         },
-        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/bq-caapi-oauth-inventory",
+        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_INVENTORY}",
     )
