@@ -1,5 +1,6 @@
 """Cleanup utility for removing specific agents and listing all agents with details."""
 
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -7,6 +8,13 @@ from google.cloud import geminidataanalytics_v1beta as geminidataanalytics
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
@@ -23,12 +31,12 @@ def cleanup_agents(
     """
     for agent_id in agent_ids:
         name = client.data_agent_path(PROJECT_ID, LOCATION, agent_id)
-        print(f"Deleting agent: {agent_id}...")
+        logger.info(f"Deleting agent: {agent_id}...")
         try:
             client.delete_data_agent(name=name)
-            print(f"Successfully deleted {agent_id}")
+            logger.info(f"Successfully deleted {agent_id}")
         except Exception as e:
-            print(f"Failed to delete {agent_id}: {e}")
+            logger.error(f"Failed to delete {agent_id}: {e}", exc_info=True)
 
 
 def list_all_agents_with_details(
@@ -39,33 +47,34 @@ def list_all_agents_with_details(
     Args:
         client: DataAgentServiceClient instance.
     """
-    print("\n--- Current Data Agents in Project ---")
+    logger.info("--- Current Data Agents in Project ---")
     request = geminidataanalytics.ListDataAgentsRequest(
         parent=f"projects/{PROJECT_ID}/locations/{LOCATION}",
     )
     page_result = client.list_data_agents(request=request)
 
     for agent in page_result:
-        print(f"\n[Agent ID: {agent.name.split('/')[-1]}]")
-        print(f"Display Name: {agent.display_name or 'N/A'}")
-        print(f"Description: {agent.description or 'No description'}")
+        agent_id = agent.name.split("/")[-1]
+        logger.info(f"Agent ID: {agent_id}")
+        logger.info(f"Display Name: {agent.display_name or 'N/A'}")
+        logger.info(f"Description: {agent.description or 'No description'}")
 
         ctx = agent.data_analytics_agent.published_context
-        print(f"System Instruction: {ctx.system_instruction[:100]}...")
+        logger.info(f"System Instruction: {ctx.system_instruction[:100]}...")
 
         if ctx.datasource_references.bq:
             tables = [
                 f"{t.dataset_id}.{t.table_id}"
                 for t in ctx.datasource_references.bq.table_references
             ]
-            print(f"Tables: {', '.join(tables)}")
+            logger.info(f"Tables: {', '.join(tables)}")
 
         if ctx.datasource_references.looker:
             explores = [
                 f"{e.lookml_model}.{e.explore}"
                 for e in ctx.datasource_references.looker.explore_references
             ]
-            print(f"Looker Explores: {', '.join(explores)}")
+            logger.info(f"Looker Explores: {', '.join(explores)}")
 
 
 if __name__ == "__main__":

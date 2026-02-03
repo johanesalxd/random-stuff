@@ -1,5 +1,6 @@
 """Admin tools for managing Conversational Analytics agents."""
 
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -8,6 +9,13 @@ from google.protobuf import field_mask_pb2
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
@@ -39,7 +47,7 @@ def update_agent_a(client: geminidataanalytics.DataAgentServiceClient) -> None:
     Args:
         client: DataAgentServiceClient instance.
     """
-    print(f"Updating Agent A: {AGENT_A_ID}...")
+    logger.info(f"Updating Agent A: {AGENT_A_ID}...")
     tables = ["users", "orders", "order_items", "events"]
     bq_refs = get_bq_refs(tables)
 
@@ -74,7 +82,7 @@ def update_agent_a(client: geminidataanalytics.DataAgentServiceClient) -> None:
 
     operation = client.update_data_agent(request=request)
     result = operation.result()
-    print(f"Agent A updated successfully: {result.name}")
+    logger.info(f"Agent A updated successfully: {result.name}")
 
 
 def create_agent_b(client: geminidataanalytics.DataAgentServiceClient) -> None:
@@ -83,7 +91,7 @@ def create_agent_b(client: geminidataanalytics.DataAgentServiceClient) -> None:
     Args:
         client: DataAgentServiceClient instance.
     """
-    print(f"Creating Agent B: {AGENT_B_ID}...")
+    logger.info(f"Creating Agent B: {AGENT_B_ID}...")
     tables = ["products", "inventory_items", "distribution_centers"]
     bq_refs = get_bq_refs(tables)
 
@@ -115,12 +123,13 @@ def create_agent_b(client: geminidataanalytics.DataAgentServiceClient) -> None:
     try:
         operation = client.create_data_agent(request=request)
         result = operation.result()
-        print(f"Agent B created successfully: {result.name}")
+        logger.info(f"Agent B created successfully: {result.name}")
     except Exception as e:
         if "already exists" in str(e).lower():
-            print("Agent B already exists, skipping creation.")
+            logger.info("Agent B already exists, skipping creation.")
         else:
-            raise e
+            logger.error(f"Failed to create Agent B: {e}", exc_info=True)
+            raise
 
 
 def list_agents(client: geminidataanalytics.DataAgentServiceClient) -> None:
@@ -129,14 +138,14 @@ def list_agents(client: geminidataanalytics.DataAgentServiceClient) -> None:
     Args:
         client: DataAgentServiceClient instance.
     """
-    print("\nListing all agents:")
+    logger.info("Listing all agents in project...")
     request = geminidataanalytics.ListDataAgentsRequest(
         parent=f"projects/{PROJECT_ID}/locations/{LOCATION}",
     )
     page_result = client.list_data_agents(request=request)
     for agent in page_result:
-        print(f"- ID: {agent.name.split('/')[-1]}")
-        print(f"  Description: {agent.description}")
+        agent_id = agent.name.split("/")[-1]
+        logger.info(f"Agent Found - ID: {agent_id}, Description: {agent.description}")
 
 
 if __name__ == "__main__":

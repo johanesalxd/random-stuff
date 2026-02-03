@@ -1,5 +1,6 @@
 """A2A Bridge for Gemini Data Analytics agents."""
 
+import logging
 import os
 
 import uvicorn
@@ -10,6 +11,13 @@ from google.oauth2 import credentials as oauth_credentials
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
@@ -118,8 +126,8 @@ async def proxy_to_ca_api(
                 parts = response.system_message.text.parts
                 full_text += "".join(parts)
     except Exception as e:
-        print(f"Error proxying to CA API: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error proxying to CA API: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal agent error") from e
 
     return full_text
 
@@ -178,12 +186,12 @@ async def orders_chat(request: Request) -> dict:
     """Handle chat requests for the Orders agent."""
     token = get_token_from_header(request)
     body = await request.json()
-    print(f"Received /orders/chat request: {body}")
+    logger.info("Received /orders/chat request")
 
     user_message = extract_user_query(body)
 
     if not user_message:
-        print("Failed to extract query from body")
+        logger.warning("Failed to extract query from request body")
         raise HTTPException(status_code=400, detail="No message provided")
 
     response_text = await proxy_to_ca_api(
@@ -218,12 +226,12 @@ async def inventory_chat(request: Request) -> dict:
     """Handle chat requests for the Inventory agent."""
     token = get_token_from_header(request)
     body = await request.json()
-    print(f"Received /inventory/chat request: {body}")
+    logger.info("Received /inventory/chat request")
 
     user_message = extract_user_query(body)
 
     if not user_message:
-        print("Failed to extract query from body")
+        logger.warning("Failed to extract query from request body")
         raise HTTPException(status_code=400, detail="No message provided")
 
     response_text = await proxy_to_ca_api(
