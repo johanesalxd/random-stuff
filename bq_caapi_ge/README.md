@@ -80,9 +80,20 @@ sequenceDiagram
     ```
 
 3.  **Setup Backend Agents:**
-    ```bash
-    uv run python scripts/admin_tools.py
-    ```
+
+    Choose the scenario that matches your current state:
+
+    *   **Scenario A: Demo Setup (Recommended)**
+        You have one agent created in the BigQuery Console (Agent A) and need to create the second agent (Agent B) programmatically while updating Agent A's context.
+        ```bash
+        uv run python scripts/admin_tools.py
+        ```
+
+    *   **Scenario B: Agents Already Exist**
+        If you have already created both agents manually in the BigQuery Console or have run the setup script previously:
+        1.  **Skip** the `admin_tools.py` script.
+        2.  Ensure your `.env` file contains the correct IDs for `AGENT_ORDERS_ID` and `AGENT_INVENTORY_ID`.
+        3.  Proceed to Step 4.
 
 4.  **Run the Bridge:**
     ```bash
