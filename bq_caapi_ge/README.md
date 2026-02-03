@@ -10,17 +10,17 @@ The following diagram illustrates how user queries flow from the Gemini Enterpri
 sequenceDiagram
     participant User
     participant GE as Gemini Enterprise
-    participant Bridge as A2A Bridge (FastAPI)
-    participant CA as Conversational Analytics API
+    participant Bridge as A2A Bridge
+    participant CA as CA API
     participant BQ as BigQuery
 
     User->>GE: Asks a data question
-    GE->>Bridge: POST /chat (A2A Protocol)
-    Bridge->>CA: client.chat() (SDK)
-    CA->>BQ: Executes generated SQL
-    BQ-->>CA: Returns raw data
-    CA-->>Bridge: Returns natural language answer
-    Bridge-->>GE: Returns JSON response
+    GE->>Bridge: POST /chat
+    Bridge->>CA: client.chat()
+    CA->>BQ: Executes SQL
+    BQ-->>CA: Returns data
+    CA-->>Bridge: Returns answer
+    Bridge-->>GE: Returns JSON
     GE-->>User: Displays answer
 ```
 
