@@ -106,5 +106,42 @@ sequenceDiagram
     uv run python scripts/register_agents.py https://<your-public-url>
     ```
 
+## Deployment
+
+### Cloud Run (Production)
+
+The bridge is designed to be deployed to **Google Cloud Run** using **Cloud Build**. This demo uses **OAuth Passthrough**, allowing BigQuery to see the actual user identity.
+
+1.  **Deploy to Cloud Run:**
+    ```bash
+    gcloud run deploy bq-caapi-bridge \
+      --source . \
+      --region us-central1 \
+      --allow-unauthenticated \
+      --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id,GOOGLE_CLOUD_LOCATION=global,AGENT_ORDERS_ID=your-id,AGENT_INVENTORY_ID=your-id,BIGQUERY_DATASET_ID=thelook_ecommerce
+    ```
+
+2.  **Register with OAuth:**
+    The `register_agents.py` script automatically configures the OAuth handshake if the authorization resources are created.
+    ```bash
+    uv run python scripts/register_agents.py https://<your-cloud-run-url>
+    ```
+
+## Security & Identity
+
+### OAuth Passthrough
+This demo implements **User Identity Passthrough**. When a user chats with the agent in Gemini Enterprise:
+1.  Gemini Enterprise performs an OAuth handshake with the user.
+2.  The user's access token is passed to the **A2A Bridge**.
+3.  The Bridge initializes the CA API client using this token.
+4.  BigQuery executes the query using the **User's Identity**, enabling Row-Level Security (RLS) and audit logging.
+
+### IAM Notes
+*   **Demo Simplicity:** For this demo, the Service Account and Users are assumed to have `Project Editor` or equivalent permissions.
+*   **Production Best Practice:** In a real-world scenario, you should implement **Least Privilege**:
+    *   **Service Account:** Should only have `Discovery Engine Admin` (for registration) and `Cloud Run Invoker`.
+    *   **Users:** Should have `BigQuery Data Viewer` and `Conversational Analytics User` roles.
+*   **Public Ingress:** The Cloud Run service is currently `--allow-unauthenticated` so Gemini Enterprise can reach it. For production, consider using Google Cloud API Gateway or specialized ingress controls.
+
 ## Code Standards
 This project follows the Google Python Style Guide and utilizes `ruff` for linting and formatting. Documentation follows `JSDoc`/`Docstring` requirements as specified in the project's global standards.
