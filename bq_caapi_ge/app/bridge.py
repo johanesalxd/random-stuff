@@ -132,6 +132,27 @@ def get_token_from_header(request: Request) -> str | None:
     return None
 
 
+def extract_user_query(body: dict) -> str:
+    """Extract the user's question from various possible A2A JSON structures."""
+    # Pattern 1: {"message": {"text": "..."}}
+    if text := body.get("message", {}).get("text"):
+        return text
+
+    # Pattern 2: {"messages": [{"role": "user", "content": "..."}]}
+    if messages := body.get("messages"):
+        last_msg = messages[-1]
+        if content := last_msg.get("content"):
+            return content
+        if text := last_msg.get("text"):
+            return text
+
+    # Pattern 3: Top-level text
+    if text := body.get("text"):
+        return text
+
+    return ""
+
+
 # --- A2A Endpoints for Orders Agent ---
 
 
@@ -157,9 +178,12 @@ async def orders_chat(request: Request) -> dict:
     """Handle chat requests for the Orders agent."""
     token = get_token_from_header(request)
     body = await request.json()
-    user_message = body.get("message", {}).get("text", "")
+    print(f"Received /orders/chat request: {body}")
+
+    user_message = extract_user_query(body)
 
     if not user_message:
+        print("Failed to extract query from body")
         raise HTTPException(status_code=400, detail="No message provided")
 
     response_text = await proxy_to_ca_api(
@@ -194,9 +218,12 @@ async def inventory_chat(request: Request) -> dict:
     """Handle chat requests for the Inventory agent."""
     token = get_token_from_header(request)
     body = await request.json()
-    user_message = body.get("message", {}).get("text", "")
+    print(f"Received /inventory/chat request: {body}")
+
+    user_message = extract_user_query(body)
 
     if not user_message:
+        print("Failed to extract query from body")
         raise HTTPException(status_code=400, detail="No message provided")
 
     response_text = await proxy_to_ca_api(
