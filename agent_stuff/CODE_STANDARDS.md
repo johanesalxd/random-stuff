@@ -576,11 +576,11 @@ def test_format_name_raises_error_with_empty_input():
 
 | Language | Framework | Test Naming | Key Pattern |
 |----------|-----------|-------------|-------------|
-| **Go** | `testing` | `TestFunctionName` | Table-driven tests with `t.Run()` |
+| **Go** | `testing` | `TestFunctionName` | Table-driven tests with `t.Run()` and Example functions (`func ExampleXxx`) |
 | **Java** | JUnit | `testMethod_scenario` | `@Test`, `@Before`, `@After` annotations |
 | **JS/TS** | Jest/Mocha | `describe`/`it` blocks | Mock with `jest.fn()`, async/await testing |
 
-**Go:** Use struct slices for test cases, subtests for scenarios
+**Go:** Use struct slices for test cases, subtests for scenarios, and Example functions for testable documentation.
 **Java:** Use `@Before` for setup, meaningful assertion messages
 **JS/TS:** Use `beforeEach`/`afterEach`, mock external dependencies
 
