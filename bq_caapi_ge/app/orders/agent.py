@@ -8,7 +8,7 @@ from google.adk.tools.data_agent import DataAgentCredentialsConfig, DataAgentToo
 # Load configuration from environment
 AGENT_ORDERS_ID = os.getenv("AGENT_ORDERS_ID", "agent-orders-id-placeholder")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-id-placeholder")
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3-flash-preview")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
 # Construct the full resource name of the Data Agent
 DATA_AGENT_NAME = f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_ORDERS_ID}"

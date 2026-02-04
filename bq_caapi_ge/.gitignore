@@ -10,3 +10,6 @@ requirements.txt
 # Per-agent environment files (contain secrets)
 app/orders/.env
 app/inventory/.env
+
+# ADK deployment temp folders
+*_tmp*/
