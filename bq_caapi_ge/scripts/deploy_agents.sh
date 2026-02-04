@@ -42,30 +42,24 @@ echo ""
 # Configuration
 PROJECT_ID="johanesa-playground-326616"
 LOCATION="us-central1"
-ORDERS_AGENT_ID="2600902452085522432"
-INVENTORY_AGENT_ID="4581360388221698048"
 
 echo -e "${YELLOW}=== Deployment Configuration ===${NC}"
 echo "  Project ID: $PROJECT_ID"
 echo "  Location: $LOCATION"
-echo "  Orders Agent ID: $ORDERS_AGENT_ID"
-echo "  Inventory Agent ID: $INVENTORY_AGENT_ID"
+echo "  Mode: Create new agents"
 echo ""
 
-# Function to deploy an agent
+# Function to deploy an agent (creates new agent if no ID provided)
 deploy_agent() {
     local agent_dir=$1
     local display_name=$2
-    local agent_id=$3
     
     echo -e "${YELLOW}Deploying $display_name...${NC}"
     
     uv run adk deploy agent_engine "$agent_dir" \
         --project="$PROJECT_ID" \
         --region="$LOCATION" \
-        --display_name="$display_name" \
-        --agent_engine_id="$agent_id" \
-        --env_file=.env
+        --display_name="$display_name"
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ $display_name deployed successfully${NC}"
@@ -78,11 +72,11 @@ deploy_agent() {
 
 # Deploy Orders Agent
 echo -e "${YELLOW}=== Step 1: Deploying Orders Agent ===${NC}"
-deploy_agent "app/orders" "Orders Analyst" "$ORDERS_AGENT_ID"
+deploy_agent "app/orders" "Orders Analyst"
 
 # Deploy Inventory Agent
 echo -e "${YELLOW}=== Step 2: Deploying Inventory Agent ===${NC}"
-deploy_agent "app/inventory" "Inventory Analyst" "$INVENTORY_AGENT_ID"
+deploy_agent "app/inventory" "Inventory Analyst"
 
 echo -e "${GREEN}=== Deployment Complete ===${NC}"
 echo ""

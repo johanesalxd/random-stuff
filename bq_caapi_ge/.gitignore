@@ -6,3 +6,7 @@ __pycache__/
 .adk/
 requirements.txt
 *.db
+
+# Per-agent environment files (contain secrets)
+app/orders/.env
+app/inventory/.env
