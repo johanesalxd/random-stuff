@@ -35,7 +35,7 @@ sequenceDiagram
 ├── scripts/
 │   ├── admin_tools.py      # Data Agent lifecycle management
 │   ├── cleanup_and_list.py # Agent cleanup and inspection utility
-│   └── register_agents.py  # (Pending Update) Registration utility
+│   └── register_agents.py  # (Pending Update) Registration utility for GE
 ├── docs/
 │   └── reference/          # API references and links
 ├── .env                    # Local environment variables
@@ -53,7 +53,7 @@ sequenceDiagram
 ### 2. ADK Agents
 *   `app/orders/agent.py`: A specialized `LlmAgent` equipped with `DataAgentToolset` to answer questions about orders and users.
 *   `app/inventory/agent.py`: A specialized `LlmAgent` for inventory and products.
-*   **Authentication**: Uses Application Default Credentials (ADC) by default.
+*   **Authentication**: Configured to use Application Default Credentials (ADC) with `cloud-platform` scope.
 
 ## Getting Started
 
@@ -101,6 +101,22 @@ sequenceDiagram
     adk web app
     ```
     Open your browser at the URL provided (usually `http://localhost:8080` or similar).
+
+## Sample Queries
+
+You can test the specialized capabilities of each agent using the following sample questions:
+
+### Agent A: Order & User Analyst
+*   "How many orders are in the 'Complete' status?"
+*   "Who are the top 5 users by total lifetime spend?"
+*   "What is the average number of items per order?"
+*   "Show me the distribution of order statuses for the last month."
+
+### Agent B: Inventory & Product Analyst
+*   "What is the name and price of the product with ID 1?"
+*   "Which distribution center currently holds the most inventory?"
+*   "How many products are in the 'Accessories' category?"
+*   "List 10 products that have a retail price greater than $100."
 
 ## Deployment
 
