@@ -36,8 +36,6 @@ sequenceDiagram
 │   ├── admin_tools.py      # Data Agent lifecycle management
 │   ├── cleanup_and_list.py # Agent cleanup and inspection utility
 │   └── register_agents.py  # (Pending Update) Registration utility for GE
-├── docs/
-│   └── reference/          # API references and links
 ├── .env                    # Local environment variables
 └── README.md               # Project documentation
 ```
@@ -53,7 +51,7 @@ sequenceDiagram
 ### 2. ADK Agents
 *   `app/orders/agent.py`: A specialized `LlmAgent` equipped with `DataAgentToolset` to answer questions about orders and users.
 *   `app/inventory/agent.py`: A specialized `LlmAgent` for inventory and products.
-*   **Authentication**: Configured to use Application Default Credentials (ADC) with `cloud-platform` scope.
+*   **Authentication**: Supports both Application Default Credentials (ADC) for local testing and OAuth (Identity Passthrough) for production.
 
 ## Getting Started
 
@@ -76,6 +74,11 @@ sequenceDiagram
     cp .env.example .env
     ```
     Ensure `MODEL_NAME` is set to your preferred model (e.g., `gemini-3-flash-preview`).
+
+    **Important Environment Variables:**
+    *   `GOOGLE_GENAI_USE_VERTEXAI=TRUE`: Forces Vertex AI mode (required).
+    *   `OAUTH_CLIENT_ID` & `OAUTH_CLIENT_SECRET`: Required for Identity Passthrough in production.
+    *   `GOOGLE_CLOUD_PROJECT` & `GOOGLE_CLOUD_LOCATION`: Your GCP project details.
 
 3.  **Setup Backend Agents:**
     If you haven't created the Data Agents yet:
@@ -120,8 +123,14 @@ You can test the specialized capabilities of each agent using the following samp
 
 ## Deployment
 
-Deployment is handled via the `adk deploy` command.
-*(Detailed deployment instructions coming soon)*
+Deployment is handled via the `adk deploy` command. This project targets **Vertex AI Agent Engine**.
+
+```bash
+# Example: Deploying the Orders agent
+adk deploy agent_engine app/orders --display_name "Orders Analyst"
+```
+
+Detailed registration instructions for Gemini Enterprise can be found in the [official documentation](https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-adk-agent).
 
 ## Code Standards
 This project follows the Google Python Style Guide and utilizes `ruff` for linting and formatting.
