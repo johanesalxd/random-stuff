@@ -44,8 +44,7 @@ sequenceDiagram
 │   ├── admin_tools.py      # Data Agent lifecycle management (Backend)
 │   ├── setup_auth.py       # Creates OAuth Resources for GE Registration
 │   ├── register_agents.py  # Registers Deployed Agents with GE
-│   ├── deploy_agents.sh    # Automated deployment script
-│   └── final_verify.sh     # Verification script for deployed agents
+│   └── deploy_agents.sh    # Automated deployment script
 ├── .env                    # Environment variables for local development
 ├── .env.example            # Template for environment configuration
 ├── pyproject.toml          # Project dependencies
@@ -227,26 +226,21 @@ uv run python scripts/register_agents.py \
   --inventory-resource <INVENTORY_RESOURCE_NAME_FROM_STEP_2>
 ```
 
-### Step 5: Verify Deployment
-
-Wait 1-2 minutes for agents to initialize, then run:
-
-```bash
-bash scripts/final_verify.sh
-```
-
-**Expected output:**
-```
---- Testing Orders Analyst ---
-✓ Session creation works
-✓ Query execution works (streaming events received)
-
---- Testing Inventory Analyst ---
-✓ Session creation works
-✓ Query execution works (streaming events received)
-```
+### Step 5: Test the Deployment
 
 Access your **Gemini Enterprise** web app to see "Order & User Analyst" and "Inventory & Product Analyst" in the agent selector.
+
+**To verify agents are running:**
+
+```bash
+# Check agent status
+gcloud logging read \
+  'resource.type="aiplatform.googleapis.com/ReasoningEngine" 
+   AND resource.labels.reasoning_engine_id="<YOUR_AGENT_ID>"' \
+  --project=$GOOGLE_CLOUD_PROJECT --limit=20
+```
+
+Look for "Application startup complete" messages with no errors.
 
 ## Sample Queries
 
