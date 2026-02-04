@@ -33,10 +33,12 @@ sequenceDiagram
 │   ├── orders/             # Order Analyst Agent (ADK)
 │   │   ├── agent.py        # Agent definition + DataAgentToolset
 │   │   ├── requirements.txt # Production dependencies
+│   │   ├── .env            # Runtime environment variables (for deployment)
 │   │   └── __init__.py
 │   └── inventory/          # Inventory Analyst Agent (ADK)
 │       ├── agent.py        # Agent definition + DataAgentToolset
 │       ├── requirements.txt # Production dependencies
+│       ├── .env            # Runtime environment variables (for deployment)
 │       └── __init__.py
 ├── scripts/
 │   ├── admin_tools.py      # Data Agent lifecycle management (Backend)
@@ -44,7 +46,7 @@ sequenceDiagram
 │   ├── register_agents.py  # Registers Deployed Agents with GE
 │   ├── deploy_agents.sh    # Automated deployment script
 │   └── final_verify.sh     # Verification script for deployed agents
-├── .env                    # Environment variables (single source of truth)
+├── .env                    # Environment variables for local development
 ├── .env.example            # Template for environment configuration
 ├── pyproject.toml          # Project dependencies
 └── README.md               # This file
@@ -101,6 +103,32 @@ MODEL_NAME=gemini-3-flash-preview
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 ```
 
+**Create per-agent `.env` files for deployment:**
+
+Each agent directory needs its own `.env` file with runtime variables:
+
+```bash
+# app/orders/.env
+cat > app/orders/.env << EOF
+GOOGLE_CLOUD_PROJECT=your-project-id
+AGENT_ORDERS_ID=your-orders-data-agent-id
+OAUTH_CLIENT_ID=your-oauth-client-id
+OAUTH_CLIENT_SECRET=your-oauth-client-secret
+MODEL_NAME=gemini-3-flash-preview
+EOF
+
+# app/inventory/.env
+cat > app/inventory/.env << EOF
+GOOGLE_CLOUD_PROJECT=your-project-id
+AGENT_INVENTORY_ID=your-inventory-data-agent-id
+OAUTH_CLIENT_ID=your-oauth-client-id
+OAUTH_CLIENT_SECRET=your-oauth-client-secret
+MODEL_NAME=gemini-3-flash-preview
+EOF
+```
+
+**Important:** These per-agent `.env` files contain secrets and are gitignored. They're required for the ADK to inject environment variables into the Agent Engine runtime.
+
 ### 3. Setup Backend Data Agents
 
 Create the Data Agents (backend services that talk to BigQuery):
@@ -145,37 +173,38 @@ Use the automated deployment script:
 bash scripts/deploy_agents.sh
 ```
 
+This script will:
+1. Read environment variables from the root `.env`
+2. Deploy both agents using their respective `.env` files in `app/orders/` and `app/inventory/`
+3. Output the Reasoning Engine resource names for registration
+
 **Or deploy manually:**
 
 ```bash
-# Load environment variables
-export $(cat .env | xargs)
-
-# Deploy Orders Agent
+# Deploy Orders Agent (uses app/orders/.env for runtime variables)
 uv run adk deploy agent_engine app/orders \
-  --project=$GOOGLE_CLOUD_PROJECT \
+  --project=your-project-id \
   --region=us-central1 \
-  --display_name="Orders Analyst" \
-  --env_file=.env
+  --display_name="Orders Analyst"
 
-# Deploy Inventory Agent
+# Deploy Inventory Agent (uses app/inventory/.env for runtime variables)
 uv run adk deploy agent_engine app/inventory \
-  --project=$GOOGLE_CLOUD_PROJECT \
+  --project=your-project-id \
   --region=us-central1 \
-  --display_name="Inventory Analyst" \
-  --env_file=.env
+  --display_name="Inventory Analyst"
 ```
 
-**Note:** Save the Resource Name from the output (e.g., `projects/.../reasoningEngines/...`).
+**Important:** The ADK automatically discovers the `.env` file in each agent directory and injects those variables into the Agent Engine runtime. This is how OAuth credentials are passed to the deployed agents.
+
+**Note:** Save the Resource Name from the output (e.g., `projects/123/locations/us-central1/reasoningEngines/456`).
 
 **To update existing agents:**
 ```bash
 uv run adk deploy agent_engine app/orders \
-  --project=$GOOGLE_CLOUD_PROJECT \
+  --project=your-project-id \
   --region=us-central1 \
   --display_name="Orders Analyst" \
-  --agent_engine_id=<EXISTING_AGENT_ID> \
-  --env_file=.env
+  --agent_engine_id=<EXISTING_AGENT_ID>
 ```
 
 ### Step 3: Setup Authorization Resources
@@ -288,9 +317,12 @@ gcloud logging read \
 
 1. **OAuth Identity Passthrough:** The agents use OAuth client credentials to enable the Conversational Analytics API to access BigQuery as the end user. This ensures data access respects user permissions.
 
-2. **Single .env File:** The project uses a single `.env` file at the root for all configuration. The `--env_file=.env` flag ensures this configuration is used during deployment.
+2. **Environment Variable Management:**
+   - **Root `.env`**: Used for local development and scripts (admin_tools, setup_auth, register_agents)
+   - **Per-agent `.env`**: Used by ADK to inject runtime environment variables into Agent Engine deployments
+   - The per-agent `.env` files are required because the ADK reads them during deployment and configures the Agent Engine container with those variables
 
-3. **No Module-Level Auth:** The agents do NOT call `google.auth.default()` at import time. This prevents timeout issues in cloud environments and ensures proper lazy credential loading.
+3. **Runtime Credentials:** OAuth credentials (`OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`) must be present in the per-agent `.env` files. The ADK passes these to the Agent Engine runtime, where they're used by `DataAgentCredentialsConfig` to enable identity passthrough.
 
 ## Development
 
