@@ -1,32 +1,36 @@
 from __future__ import annotations
 
 import os
+import google.auth
 
 from google.adk.agents import Agent
-from google.adk.tools.data_agent import DataAgentToolset
+from google.adk.models.google_llm import Gemini
+from google.adk.tools.data_agent import DataAgentToolset, DataAgentCredentialsConfig
 
 
 # Load configuration from environment
-# These variables should be set in the environment or .env file.
 AGENT_ORDERS_ID = os.getenv("AGENT_ORDERS_ID", "agent-orders-id-placeholder")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-id-placeholder")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3-flash-preview")
 
 # Construct the full resource name of the Data Agent
-# The location for CA API is typically 'global'.
 DATA_AGENT_NAME = f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_ORDERS_ID}"
 
-# Initialize the Data Agent Toolset
-# This toolset provides the 'ask_data_agent' tool which proxies queries to the CA API.
-# By default, it uses ADC (Application Default Credentials).
-data_agent_toolset = DataAgentToolset()
+# Get default credentials with the correct scope
+creds, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+)
+
+# Initialize the Data Agent Toolset with the scoped credentials
+data_agent_toolset = DataAgentToolset(
+    credentials_config=DataAgentCredentialsConfig(credentials=creds)
+)
 
 # Define the Orders Agent
-# This agent acts as a natural language interface to the backend Data Agent.
 root_agent = Agent(
     name="orders_analyst",
-    model=MODEL_NAME,
+    model=Gemini(model=MODEL_NAME),
     instruction=f"""
     You are the Order & User Analyst.
     Your goal is to answer user questions about orders, items, and customer profiles.

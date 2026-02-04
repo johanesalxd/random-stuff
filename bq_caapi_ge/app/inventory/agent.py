@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import google.auth
 
 from google.adk.agents import Agent
-from google.adk.tools.data_agent import DataAgentToolset
+from google.adk.models.google_llm import Gemini
+from google.adk.tools.data_agent import DataAgentToolset, DataAgentCredentialsConfig
 
 
 # Load configuration from environment
@@ -17,13 +19,20 @@ DATA_AGENT_NAME = (
     f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_INVENTORY_ID}"
 )
 
-# Initialize the Data Agent Toolset
-data_agent_toolset = DataAgentToolset()
+# Get default credentials with the correct scope
+creds, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+)
+
+# Initialize the Data Agent Toolset with the scoped credentials
+data_agent_toolset = DataAgentToolset(
+    credentials_config=DataAgentCredentialsConfig(credentials=creds)
+)
 
 # Define the Inventory Agent
 root_agent = Agent(
     name="inventory_analyst",
-    model=MODEL_NAME,
+    model=Gemini(model=MODEL_NAME),
     instruction=f"""
     You are the Inventory & Product Analyst.
     Your goal is to answer user questions about stock levels, product catalog, and distribution.
