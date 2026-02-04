@@ -1,10 +1,10 @@
 # Gemini Conversational Analytics ADK Demo
 
-This project demonstrates how to bridge Google Cloud's **Conversational Analytics API** with **Google ADK Agents**.
+This project demonstrates how to deploy **Google ADK Agents** that bridge Google Cloud's **Conversational Analytics API** with **Gemini Enterprise**.
 
 ## Architecture Overview
 
-The system uses standard **Google ADK Agents** that leverage the `DataAgentToolset` to communicate with backend Data Agents in BigQuery.
+The system uses standard **Google ADK Agents** that leverage the `DataAgentToolset` to communicate with backend Data Agents in BigQuery. The agents are deployed to **Vertex AI Agent Engine** and registered with **Gemini Enterprise**.
 
 ```mermaid
 sequenceDiagram
@@ -29,39 +29,27 @@ sequenceDiagram
 ```text
 ├── app/
 │   ├── orders/             # Order Analyst Agent (ADK)
-│   │   └── agent.py        # Agent definition + DataAgentToolset
+│   │   ├── agent.py        # Agent definition + DataAgentToolset
+│   │   └── requirements.txt # Prod dependencies
 │   └── inventory/          # Inventory Analyst Agent (ADK)
-│       └── agent.py        # Agent definition + DataAgentToolset
+│       ├── agent.py        # Agent definition + DataAgentToolset
+│       └── requirements.txt # Prod dependencies
 ├── scripts/
-│   ├── admin_tools.py      # Data Agent lifecycle management
-│   ├── cleanup_and_list.py # Agent cleanup and inspection utility
-│   └── register_agents.py  # (Pending Update) Registration utility for GE
+│   ├── admin_tools.py      # Data Agent lifecycle management (Backend)
+│   ├── setup_auth.py       # Creates OAuth Resources for GE Registration
+│   └── register_agents.py  # Registers Deployed Agents with GE
 ├── .env                    # Local environment variables
 └── README.md               # Project documentation
 ```
 
-## Core Components
+## Prerequisites
 
-### 1. Admin & Setup
-*   `scripts/admin_tools.py`: Configures the backend Data Agents. It splits the `thelook_ecommerce` dataset into two specialized agents:
-    *   **Agent A**: Orders & Users
-    *   **Agent B**: Inventory & Products
-*   `scripts/cleanup_and_list.py`: Utility to list all agents and their configurations or delete unnecessary ones.
-
-### 2. ADK Agents
-*   `app/orders/agent.py`: A specialized `LlmAgent` equipped with `DataAgentToolset` to answer questions about orders and users.
-*   `app/inventory/agent.py`: A specialized `LlmAgent` for inventory and products.
-*   **Authentication**: Supports both Application Default Credentials (ADC) for local testing and OAuth (Identity Passthrough) for production.
-
-## Getting Started
-
-### Prerequisites
 *   Python 3.11+
 *   `uv` (package manager)
 *   Google Cloud Project with Gemini Data Analytics and Discovery Engine APIs enabled.
 *   `gcloud` CLI installed and authenticated (`gcloud auth application-default login`).
 
-### Setup
+## Setup & Local Development
 
 1.  **Install dependencies:**
     ```bash
@@ -73,21 +61,15 @@ sequenceDiagram
     ```bash
     cp .env.example .env
     ```
-    Ensure `MODEL_NAME` is set to your preferred model (e.g., `gemini-3-flash-preview`).
-
-    **Important Environment Variables:**
-    *   `GOOGLE_GENAI_USE_VERTEXAI=TRUE`: Forces Vertex AI mode (required).
-    *   `OAUTH_CLIENT_ID` & `OAUTH_CLIENT_SECRET`: Required for Identity Passthrough in production.
-    *   `GOOGLE_CLOUD_PROJECT` & `GOOGLE_CLOUD_LOCATION`: Your GCP project details.
 
 3.  **Setup Backend Agents:**
-    If you haven't created the Data Agents yet:
+    If you haven't created the Data Agents yet (the backend services that talk to BigQuery):
     ```bash
     uv run python scripts/admin_tools.py
     ```
-    Otherwise, ensure `AGENT_ORDERS_ID` and `AGENT_INVENTORY_ID` in `.env` match your existing agents.
+    Ensure `AGENT_ORDERS_ID` and `AGENT_INVENTORY_ID` in `.env` match the output.
 
-4.  **Run Locally (CLI):**
+4.  **Run Locally:**
     Chat with the Orders agent directly in your terminal:
     ```bash
     # Ensure environment variables are loaded
@@ -97,13 +79,53 @@ sequenceDiagram
     adk run app/orders
     ```
 
-5.  **Run Locally (Web UI):**
-    Launch the local web interface to test all agents:
-    ```bash
-    export $(cat .env | xargs)
-    adk web app
-    ```
-    Open your browser at the URL provided (usually `http://localhost:8080` or similar).
+## Production Deployment Roadmap
+
+To deploy these agents to **Gemini Enterprise**, follow these steps:
+
+### 1. Preparation
+Ensure you have exported your dependencies to the agent folders so the cloud builder can install them.
+```bash
+uv export --no-hashes --format requirements-txt > requirements.txt
+cp requirements.txt app/orders/requirements.txt
+cp requirements.txt app/inventory/requirements.txt
+```
+
+### 2. Deploy to Vertex AI Agent Engine
+Deploy the agent code to the managed runtime.
+```bash
+# Deploy Orders Agent
+uv run adk deploy agent_engine app/orders \
+  --project=$GOOGLE_CLOUD_PROJECT \
+  --region=$GOOGLE_CLOUD_LOCATION \
+  --display_name="Orders Analyst"
+
+# Deploy Inventory Agent
+uv run adk deploy agent_engine app/inventory \
+  --project=$GOOGLE_CLOUD_PROJECT \
+  --region=$GOOGLE_CLOUD_LOCATION \
+  --display_name="Inventory Analyst"
+```
+**Note:** Save the `Resource Name` output from these commands (e.g., `projects/.../reasoningEngines/...`).
+
+### 3. Setup Authorization Resources
+Create the OAuth resources required for the agents to access data on behalf of the user.
+```bash
+uv run python scripts/setup_auth.py
+```
+This script reads `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from your `.env` and creates resources specified by `AUTH_RESOURCE_ORDERS` and `AUTH_RESOURCE_INVENTORY`.
+
+### 4. Register with Gemini Enterprise
+Register the deployed Agent Engine resources with Gemini Enterprise using the auth resources created above.
+
+```bash
+uv run python scripts/register_agents.py \
+  --orders-resource <ORDERS_RESOURCE_NAME_FROM_STEP_2> \
+  --inventory-resource <INVENTORY_RESOURCE_NAME_FROM_STEP_2>
+```
+
+### 5. Verification
+Go to your **Gemini Enterprise** web app. You should now see "Order & User Analyst" and "Inventory & Product Analyst" in the agent selector.
 
 ## Sample Queries
 
@@ -120,17 +142,3 @@ You can test the specialized capabilities of each agent using the following samp
 *   "Which distribution center currently holds the most inventory?"
 *   "How many products are in the 'Accessories' category?"
 *   "List 10 products that have a retail price greater than $100."
-
-## Deployment
-
-Deployment is handled via the `adk deploy` command. This project targets **Vertex AI Agent Engine**.
-
-```bash
-# Example: Deploying the Orders agent
-adk deploy agent_engine app/orders --display_name "Orders Analyst"
-```
-
-Detailed registration instructions for Gemini Enterprise can be found in the [official documentation](https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-adk-agent).
-
-## Code Standards
-This project follows the Google Python Style Guide and utilizes `ruff` for linting and formatting.
