@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import subprocess
-import sys
 
 from dotenv import load_dotenv
 
@@ -22,8 +21,6 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 APP_ID = os.getenv("GEMINI_APP_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
-OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 AUTH_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
 AUTH_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
@@ -124,15 +121,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    # Construct Agent Engine Query URLs
-    # Format: https://{LOCATION}-aiplatform.googleapis.com/v1/{RESOURCE_NAME}:query
-    # Note: These URLs are constructed but not used directly in the current register_agent call
-    # because ADK registration uses the resource name directly.
-    orders_url = (
-        f"https://{LOCATION}-aiplatform.googleapis.com/v1/{args.orders_resource}:query"
-    )
-    inventory_url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/{args.inventory_resource}:query"
 
     # 1. Orders Agent
     register_agent(
