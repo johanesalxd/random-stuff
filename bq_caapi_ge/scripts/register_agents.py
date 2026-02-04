@@ -31,15 +31,15 @@ AUTH_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory"
 def register_agent(
     display_name: str,
     description: str,
-    agent_card: dict,
+    reasoning_engine_resource: str,
     auth_resource: str | None = None,
 ) -> None:
-    """Register an A2A agent with Gemini Enterprise via REST API.
+    """Register an ADK agent with Gemini Enterprise via REST API.
 
     Args:
         display_name: The name to display in the UI.
         description: A brief description of the agent.
-        agent_card: The A2A protocol agent card.
+        reasoning_engine_resource: The full resource name of the deployed Agent Engine.
         auth_resource: The full path to an authorization resource.
     """
     logger.info(f"Registering {display_name}...")
@@ -61,14 +61,17 @@ def register_agent(
         f"engines/{APP_ID}/assistants/default_assistant/agents"
     )
 
+    # Construct payload for ADK Agent (Agent Engine)
     payload = {
         "displayName": display_name,
         "description": description,
-        "a2aAgentDefinition": {"jsonAgentCard": json.dumps(agent_card)},
+        "adkAgentDefinition": {
+            "provisionedReasoningEngine": {"reasoningEngine": reasoning_engine_resource}
+        },
     }
 
     if auth_resource:
-        payload["authorizationConfig"] = {"agentAuthorization": auth_resource}
+        payload["authorizationConfig"] = {"toolAuthorizations": [auth_resource]}
 
     cmd = [
         "curl",
@@ -104,36 +107,38 @@ def register_agent(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        logger.error("No base URL provided.")
-        print("Usage: python register_agents.py <BRIDGE_BASE_URL>")
-        print("Example: python register_agents.py https://xyz.ngrok-free.app")
-        sys.exit(1)
+    import argparse
 
-    base_url = sys.argv[1].rstrip("/")
+    parser = argparse.ArgumentParser(
+        description="Register agents with Gemini Enterprise."
+    )
+    parser.add_argument(
+        "--orders-resource",
+        required=True,
+        help="Reasoning Engine resource name for Orders Agent",
+    )
+    parser.add_argument(
+        "--inventory-resource",
+        required=True,
+        help="Reasoning Engine resource name for Inventory Agent",
+    )
+
+    args = parser.parse_args()
+
+    # Construct Agent Engine Query URLs
+    # Format: https://{LOCATION}-aiplatform.googleapis.com/v1/{RESOURCE_NAME}:query
+    # Note: These URLs are constructed but not used directly in the current register_agent call
+    # because ADK registration uses the resource name directly.
+    orders_url = (
+        f"https://{LOCATION}-aiplatform.googleapis.com/v1/{args.orders_resource}:query"
+    )
+    inventory_url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/{args.inventory_resource}:query"
 
     # 1. Orders Agent
     register_agent(
         "Order & User Analyst",
         "Expert in customer journeys and order tracking.",
-        {
-            "protocolVersion": "0.3.0",
-            "name": "Order & User Analyst",
-            "description": "Analyze orders and user events.",
-            "url": f"{base_url}/orders/chat",
-            "version": "1.0.0",
-            "capabilities": {},
-            "skills": [
-                {
-                    "id": "chat",
-                    "name": "Chat",
-                    "description": "Chat with analyst",
-                    "tags": [],
-                }
-            ],
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["text/plain"],
-        },
+        args.orders_resource,
         auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_ORDERS}",
     )
 
@@ -141,23 +146,6 @@ if __name__ == "__main__":
     register_agent(
         "Inventory & Product Analyst",
         "Expert in stock levels and product catalog.",
-        {
-            "protocolVersion": "0.3.0",
-            "name": "Inventory & Product Analyst",
-            "description": "Analyze stock and products.",
-            "url": f"{base_url}/inventory/chat",
-            "version": "1.0.0",
-            "capabilities": {},
-            "skills": [
-                {
-                    "id": "chat",
-                    "name": "Chat",
-                    "description": "Chat with analyst",
-                    "tags": [],
-                }
-            ],
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["text/plain"],
-        },
+        args.inventory_resource,
         auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_INVENTORY}",
     )
