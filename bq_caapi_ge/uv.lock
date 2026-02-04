@@ -83,11 +83,8 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "google-adk" },
-    { name = "google-auth" },
     { name = "google-cloud-geminidataanalytics" },
     { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -98,11 +95,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "google-adk", specifier = ">=1.23.0" },
-    { name = "google-auth", specifier = ">=2.48.0" },
     { name = "google-cloud-geminidataanalytics", specifier = ">=0.9.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "requests", specifier = ">=2.32.3" },
 ]
 
 [package.metadata.requires-dev]

@@ -3,13 +3,11 @@ from __future__ import annotations
 import os
 
 from google.adk.agents import Agent
-from google.adk.models.google_llm import Gemini
 from google.adk.tools.data_agent import DataAgentCredentialsConfig, DataAgentToolset
 
 # Load configuration from environment
 AGENT_INVENTORY_ID = os.getenv("AGENT_INVENTORY_ID", "agent-inventory-id-placeholder")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-id-placeholder")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3-flash-preview")
 
 # Construct the full resource name of the Data Agent
@@ -39,18 +37,7 @@ data_agent_toolset = DataAgentToolset(credentials_config=creds_config)
 root_agent = Agent(
     name="inventory_analyst",
     model=MODEL_NAME,
-    instruction=f"""
-    You are the Inventory & Product Analyst.
-    Your goal is to answer user questions about stock levels, product catalog, and distribution.
-
-    You have access to a specialized Data Agent tool.
-    ALWAYS use the `ask_data_agent` tool to answer questions.
-
-    When calling `ask_data_agent`, you MUST use the following agent name:
-    {DATA_AGENT_NAME}
-
-    Do not invent answers. If the tool returns data, summarize it clearly for the user.
-    """,
+    instruction=f"You are the Inventory & Product Analyst. Use the ask_data_agent tool with agent name: {DATA_AGENT_NAME}",
     tools=[data_agent_toolset],
     description="Expert in stock levels, product catalog, and distribution logistics.",
 )
