@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 
-import google.auth
 from google.adk.agents import Agent
 from google.adk.models.google_llm import Gemini
 from google.adk.tools.data_agent import DataAgentCredentialsConfig, DataAgentToolset
@@ -18,24 +17,22 @@ DATA_AGENT_NAME = (
     f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_INVENTORY_ID}"
 )
 
-# Get default credentials with the correct scope
-scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-client_id = os.getenv("OAUTH_CLIENT_ID")
-client_secret = os.getenv("OAUTH_CLIENT_SECRET")
+# OAuth Identity Passthrough Configuration (REQUIRED for Gemini Enterprise)
+# These credentials enable the Data Agent to access BigQuery as the end user
+OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
+OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
+SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
-if client_id and client_secret:
-    # Use OAuth flow for Identity Passthrough
-    creds_config = DataAgentCredentialsConfig(
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=scopes,
-    )
-else:
-    # Use Application Default Credentials (ADC) for local/service account auth
-    creds, _ = google.auth.default(scopes=scopes)
-    creds_config = DataAgentCredentialsConfig(credentials=creds)
+# Configure credentials for OAuth identity passthrough
+# The DataAgentToolset will use these to set up the OAuth flow
+# when called from Gemini Enterprise
+creds_config = DataAgentCredentialsConfig(
+    client_id=OAUTH_CLIENT_ID,
+    client_secret=OAUTH_CLIENT_SECRET,
+    scopes=SCOPES,
+)
 
-# Initialize the Data Agent Toolset with the scoped credentials
+# Initialize the Data Agent Toolset with OAuth passthrough configuration
 data_agent_toolset = DataAgentToolset(credentials_config=creds_config)
 
 # Define the Inventory Agent

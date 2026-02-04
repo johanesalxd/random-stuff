@@ -1,28 +1,30 @@
 # Gemini Conversational Analytics ADK Demo
 
-This project demonstrates how to deploy **Google ADK Agents** that bridge Google Cloud's **Conversational Analytics API** with **Gemini Enterprise**.
+This project demonstrates how to deploy **Google ADK Agents** that bridge Google Cloud's **Conversational Analytics API** with **Gemini Enterprise** using OAuth identity passthrough.
 
 ## Architecture Overview
 
-The system uses standard **Google ADK Agents** that leverage the `DataAgentToolset` to communicate with backend Data Agents in BigQuery. The agents are deployed to **Vertex AI Agent Engine** and registered with **Gemini Enterprise**.
+The system uses **Google ADK Agents** that leverage the `DataAgentToolset` to communicate with backend Data Agents in BigQuery. The agents are deployed to **Vertex AI Agent Engine** and registered with **Gemini Enterprise** for OAuth identity passthrough.
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant GE as Gemini Enterprise / ADK Web
+    participant GE as Gemini Enterprise
     participant ADK as ADK Agent (Orders/Inventory)
-    participant CA as CA API
+    participant CA as Conversational Analytics API
     participant BQ as BigQuery
 
-    User->>GE: Asks a data question
-    GE->>ADK: Sends message
+    User->>GE: Asks a data question (with OAuth)
+    GE->>ADK: Sends message (OAuth context)
     ADK->>CA: ask_data_agent(query)
-    CA->>BQ: Executes SQL
+    CA->>BQ: Executes SQL (as user)
     BQ-->>CA: Returns data
     CA-->>ADK: Returns answer
     ADK-->>GE: Returns JSON response
     GE-->>User: Displays answer
 ```
+
+**Key Feature:** OAuth identity passthrough ensures queries execute with the end user's BigQuery permissions, not a service account.
 
 ## Project Structure
 
@@ -30,93 +32,165 @@ sequenceDiagram
 ├── app/
 │   ├── orders/             # Order Analyst Agent (ADK)
 │   │   ├── agent.py        # Agent definition + DataAgentToolset
-│   │   └── requirements.txt # Prod dependencies
+│   │   ├── requirements.txt # Production dependencies
+│   │   └── __init__.py
 │   └── inventory/          # Inventory Analyst Agent (ADK)
 │       ├── agent.py        # Agent definition + DataAgentToolset
-│       └── requirements.txt # Prod dependencies
+│       ├── requirements.txt # Production dependencies
+│       └── __init__.py
 ├── scripts/
 │   ├── admin_tools.py      # Data Agent lifecycle management (Backend)
 │   ├── setup_auth.py       # Creates OAuth Resources for GE Registration
-│   └── register_agents.py  # Registers Deployed Agents with GE
-├── .env                    # Local environment variables
-└── README.md               # Project documentation
+│   ├── register_agents.py  # Registers Deployed Agents with GE
+│   ├── deploy_agents.sh    # Automated deployment script
+│   └── final_verify.sh     # Verification script for deployed agents
+├── .env                    # Environment variables (single source of truth)
+├── .env.example            # Template for environment configuration
+├── pyproject.toml          # Project dependencies
+└── README.md               # This file
 ```
 
 ## Prerequisites
 
-*   Python 3.11+
-*   `uv` (package manager)
-*   Google Cloud Project with Gemini Data Analytics and Discovery Engine APIs enabled.
-*   `gcloud` CLI installed and authenticated (`gcloud auth application-default login`).
+1. **Python 3.11+** and **uv** package manager
+2. **Google Cloud Project** with the following APIs enabled:
+   - Vertex AI API
+   - Conversational Analytics API (Gemini Data Analytics)
+   - Discovery Engine API
+   - BigQuery API
+3. **OAuth 2.0 Client Credentials:**
+   - Create OAuth 2.0 credentials in Google Cloud Console
+   - Note the Client ID and Client Secret
+4. **gcloud CLI** installed and authenticated:
+   ```bash
+   gcloud auth application-default login
+   gcloud auth login
+   ```
+5. **Gemini Enterprise App** (for registration in step 4)
 
 ## Setup & Local Development
 
-1.  **Install dependencies:**
-    ```bash
-    uv sync
-    ```
+### 1. Install Dependencies
 
-2.  **Configure Environment:**
-    Copy `.env.example` to `.env` and fill in your project details.
-    ```bash
-    cp .env.example .env
-    ```
+```bash
+uv sync
+```
 
-3.  **Setup Backend Agents:**
-    If you haven't created the Data Agents yet (the backend services that talk to BigQuery):
-    ```bash
-    uv run python scripts/admin_tools.py
-    ```
-    Ensure `AGENT_ORDERS_ID` and `AGENT_INVENTORY_ID` in `.env` match the output.
+### 2. Configure Environment
 
-4.  **Run Locally:**
-    Chat with the Orders agent directly in your terminal:
-    ```bash
-    # Ensure environment variables are loaded
-    export $(cat .env | xargs)
-    
-    # Run the interactive CLI
-    adk run app/orders
-    ```
+Copy `.env.example` to `.env` and fill in your project details:
 
-## Production Deployment Roadmap
+```bash
+cp .env.example .env
+```
 
-To deploy these agents to **Gemini Enterprise**, follow these steps:
+**Required variables in `.env`:**
+```bash
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_PROJECT_NUMBER=your-project-number
+GOOGLE_CLOUD_LOCATION=global
+BIGQUERY_DATASET_ID=thelook_ecommerce
+AGENT_ORDERS_ID=your-orders-data-agent-id
+AGENT_INVENTORY_ID=your-inventory-data-agent-id
+GEMINI_APP_ID=your-gemini-app-id
+OAUTH_CLIENT_ID=your-oauth-client-id
+OAUTH_CLIENT_SECRET=your-oauth-client-secret
+AUTH_RESOURCE_ORDERS=bq-caapi-oauth
+AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
+MODEL_NAME=gemini-3-flash-preview
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+```
 
-### 1. Preparation
-Ensure you have exported your dependencies to the agent folders so the cloud builder can install them.
+### 3. Setup Backend Data Agents
+
+Create the Data Agents (backend services that talk to BigQuery):
+
+```bash
+uv run python scripts/admin_tools.py
+```
+
+Ensure `AGENT_ORDERS_ID` and `AGENT_INVENTORY_ID` in `.env` match the agent IDs from the output.
+
+### 4. Test Locally
+
+Chat with an agent directly in your terminal:
+
+```bash
+# Load environment variables
+export $(cat .env | xargs)
+
+# Run the interactive CLI
+adk run app/orders
+```
+
+## Production Deployment
+
+Deploy agents to **Gemini Enterprise** using the following workflow:
+
+### Step 1: Prepare Dependencies
+
+Export dependencies to agent directories:
+
 ```bash
 uv export --no-hashes --format requirements-txt > requirements.txt
 cp requirements.txt app/orders/requirements.txt
 cp requirements.txt app/inventory/requirements.txt
 ```
 
-### 2. Deploy to Vertex AI Agent Engine
-Deploy the agent code to the managed runtime.
+### Step 2: Deploy to Vertex AI Agent Engine
+
+Use the automated deployment script:
+
 ```bash
+bash scripts/deploy_agents.sh
+```
+
+**Or deploy manually:**
+
+```bash
+# Load environment variables
+export $(cat .env | xargs)
+
 # Deploy Orders Agent
 uv run adk deploy agent_engine app/orders \
   --project=$GOOGLE_CLOUD_PROJECT \
-  --region=$GOOGLE_CLOUD_LOCATION \
-  --display_name="Orders Analyst"
+  --region=us-central1 \
+  --display_name="Orders Analyst" \
+  --env_file=.env
 
 # Deploy Inventory Agent
 uv run adk deploy agent_engine app/inventory \
   --project=$GOOGLE_CLOUD_PROJECT \
-  --region=$GOOGLE_CLOUD_LOCATION \
-  --display_name="Inventory Analyst"
+  --region=us-central1 \
+  --display_name="Inventory Analyst" \
+  --env_file=.env
 ```
-**Note:** Save the `Resource Name` output from these commands (e.g., `projects/.../reasoningEngines/...`).
 
-### 3. Setup Authorization Resources
-Create the OAuth resources required for the agents to access data on behalf of the user.
+**Note:** Save the Resource Name from the output (e.g., `projects/.../reasoningEngines/...`).
+
+**To update existing agents:**
+```bash
+uv run adk deploy agent_engine app/orders \
+  --project=$GOOGLE_CLOUD_PROJECT \
+  --region=us-central1 \
+  --display_name="Orders Analyst" \
+  --agent_engine_id=<EXISTING_AGENT_ID> \
+  --env_file=.env
+```
+
+### Step 3: Setup Authorization Resources
+
+Create OAuth resources for identity passthrough:
+
 ```bash
 uv run python scripts/setup_auth.py
 ```
-This script reads `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from your `.env` and creates resources specified by `AUTH_RESOURCE_ORDERS` and `AUTH_RESOURCE_INVENTORY`.
 
-### 4. Register with Gemini Enterprise
-Register the deployed Agent Engine resources with Gemini Enterprise using the auth resources created above.
+This creates authorization resources using `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from `.env`.
+
+### Step 4: Register with Gemini Enterprise
+
+Register deployed agents with Gemini Enterprise:
 
 ```bash
 uv run python scripts/register_agents.py \
@@ -124,21 +198,119 @@ uv run python scripts/register_agents.py \
   --inventory-resource <INVENTORY_RESOURCE_NAME_FROM_STEP_2>
 ```
 
-### 5. Verification
-Go to your **Gemini Enterprise** web app. You should now see "Order & User Analyst" and "Inventory & Product Analyst" in the agent selector.
+### Step 5: Verify Deployment
+
+Wait 1-2 minutes for agents to initialize, then run:
+
+```bash
+bash scripts/final_verify.sh
+```
+
+**Expected output:**
+```
+--- Testing Orders Analyst ---
+✓ Session creation works
+✓ Query execution works (streaming events received)
+
+--- Testing Inventory Analyst ---
+✓ Session creation works
+✓ Query execution works (streaming events received)
+```
+
+Access your **Gemini Enterprise** web app to see "Order & User Analyst" and "Inventory & Product Analyst" in the agent selector.
 
 ## Sample Queries
 
-You can test the specialized capabilities of each agent using the following sample questions:
+Test the agents with these sample questions:
 
-### Agent A: Order & User Analyst
-*   "How many orders are in the 'Complete' status?"
-*   "Who are the top 5 users by total lifetime spend?"
-*   "What is the average number of items per order?"
-*   "Show me the distribution of order statuses for the last month."
+### Order & User Analyst
+- "How many orders are in the 'Complete' status?"
+- "Who are the top 5 users by total lifetime spend?"
+- "What is the average number of items per order?"
+- "Show me the distribution of order statuses for the last month."
 
-### Agent B: Inventory & Product Analyst
-*   "What is the name and price of the product with ID 1?"
-*   "Which distribution center currently holds the most inventory?"
-*   "How many products are in the 'Accessories' category?"
-*   "List 10 products that have a retail price greater than $100."
+### Inventory & Product Analyst
+- "What is the name and price of the product with ID 1?"
+- "Which distribution center currently holds the most inventory?"
+- "How many products are in the 'Accessories' category?"
+- "List 10 products that have a retail price greater than $100."
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue: `async_stream_query` method not found**
+- **Cause:** Agent failed to initialize properly during deployment
+- **Solution:** Check cloud logs for import errors or timeouts
+- **Check logs:**
+  ```bash
+  gcloud logging read \
+    'resource.type="aiplatform.googleapis.com/ReasoningEngine"' \
+    --project=$GOOGLE_CLOUD_PROJECT --limit=50
+  ```
+
+**Issue: OAuth authentication errors**
+- **Cause:** Missing or incorrect OAuth credentials
+- **Solution:** Verify `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` in `.env`
+- **Check:** Ensure OAuth client is authorized for the required scopes
+
+**Issue: Queries fail with permission errors**
+- **Cause:** User doesn't have BigQuery access
+- **Solution:** OAuth passthrough requires users to have appropriate BigQuery permissions
+- **Note:** The agent runs queries as the end user, not a service account
+
+**Issue: Local testing fails with credential errors**
+- **Cause:** Environment variables not loaded
+- **Solution:** Always load `.env` before running locally:
+  ```bash
+  export $(cat .env | xargs)
+  ```
+
+### Viewing Agent Logs
+
+**Orders Agent:**
+```bash
+gcloud logging read \
+  'resource.type="aiplatform.googleapis.com/ReasoningEngine" 
+   AND resource.labels.reasoning_engine_id="<ORDERS_AGENT_ID>"' \
+  --project=$GOOGLE_CLOUD_PROJECT --limit=50
+```
+
+**Inventory Agent:**
+```bash
+gcloud logging read \
+  'resource.type="aiplatform.googleapis.com/ReasoningEngine" 
+   AND resource.labels.reasoning_engine_id="<INVENTORY_AGENT_ID>"' \
+  --project=$GOOGLE_CLOUD_PROJECT --limit=50
+```
+
+### Key Architecture Notes
+
+1. **OAuth Identity Passthrough:** The agents use OAuth client credentials to enable the Conversational Analytics API to access BigQuery as the end user. This ensures data access respects user permissions.
+
+2. **Single .env File:** The project uses a single `.env` file at the root for all configuration. The `--env_file=.env` flag ensures this configuration is used during deployment.
+
+3. **No Module-Level Auth:** The agents do NOT call `google.auth.default()` at import time. This prevents timeout issues in cloud environments and ensures proper lazy credential loading.
+
+## Development
+
+### Running Tests
+
+```bash
+# Verify agent initialization locally
+export $(cat .env | xargs)
+uv run python -c "from app.orders.agent import root_agent; print(root_agent.name)"
+```
+
+### Code Style
+
+The project uses `ruff` for linting:
+
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+## License
+
+This is a demonstration project for educational purposes.
