@@ -1,0 +1,21 @@
+# Jekyll Configuration for GitHub Pages
+
+# Exclude directories containing dbt/Jinja template syntax
+# These files use {{ }} syntax which conflicts with Jekyll's Liquid templating
+exclude:
+  - dbt_migration_agents/
+  - vendor/
+  - .bundle/
+  - .git/
+  - node_modules/
+  - Gemfile
+  - Gemfile.lock
+  - "*.pyc"
+  - __pycache__/
+  - .env
+  - .env.*
+  - "*.lock"
+  - pyproject.toml
+
+# GitHub Pages settings
+theme: jekyll-theme-primer
