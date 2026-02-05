@@ -13,3 +13,6 @@ app/inventory/.env
 
 # ADK deployment temp folders
 *_tmp*/
+
+# Test web app virtual environment
+test_web/.venv/

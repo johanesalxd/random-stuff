@@ -1,15 +1,13 @@
 #!/bin/bash
 
 # Deployment script for ADK Agents to Vertex AI Agent Engine
-# This script redeploys the agents with the fixed OAuth passthrough configuration
 
 set -e
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${GREEN}=== ADK Agent Deployment Script ===${NC}"
 echo ""
@@ -30,26 +28,17 @@ if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
 fi
 
 if [ -z "$OAUTH_CLIENT_ID" ] || [ -z "$OAUTH_CLIENT_SECRET" ]; then
-    echo -e "${RED}ERROR: OAuth credentials not set (OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET)${NC}"
+    echo -e "${RED}ERROR: OAuth credentials not set${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Environment variables loaded${NC}"
+echo -e "${GREEN}Environment loaded${NC}"
 echo "  Project: $GOOGLE_CLOUD_PROJECT"
-echo "  OAuth Client ID: ${OAUTH_CLIENT_ID:0:30}..."
 echo ""
 
-# Configuration
-PROJECT_ID="johanesa-playground-326616"
+PROJECT_ID="$GOOGLE_CLOUD_PROJECT"
 LOCATION="us-central1"
 
-echo -e "${YELLOW}=== Deployment Configuration ===${NC}"
-echo "  Project ID: $PROJECT_ID"
-echo "  Location: $LOCATION"
-echo "  Mode: Create new agents"
-echo ""
-
-# Function to deploy an agent (creates new agent if no ID provided)
 deploy_agent() {
     local agent_dir=$1
     local display_name=$2
@@ -62,31 +51,23 @@ deploy_agent() {
         --display_name="$display_name"
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ $display_name deployed successfully${NC}"
+        echo -e "${GREEN}$display_name deployed successfully${NC}"
         echo ""
     else
-        echo -e "${RED}✗ Failed to deploy $display_name${NC}"
+        echo -e "${RED}Failed to deploy $display_name${NC}"
         exit 1
     fi
 }
 
-# Deploy Orders Agent
-echo -e "${YELLOW}=== Step 1: Deploying Orders Agent ===${NC}"
+echo -e "${YELLOW}=== Deploying Orders Agent ===${NC}"
 deploy_agent "app/orders" "Orders Analyst"
 
-# Deploy Inventory Agent
-echo -e "${YELLOW}=== Step 2: Deploying Inventory Agent ===${NC}"
+echo -e "${YELLOW}=== Deploying Inventory Agent ===${NC}"
 deploy_agent "app/inventory" "Inventory Analyst"
 
 echo -e "${GREEN}=== Deployment Complete ===${NC}"
 echo ""
-echo -e "${YELLOW}Next Steps:${NC}"
-echo "1. Copy the Reasoning Engine resource names from above"
-echo "2. Register agents with Gemini Enterprise:"
-echo "   uv run python scripts/register_agents.py \\"
-echo "     --orders-resource <ORDERS_RESOURCE_NAME> \\"
-echo "     --inventory-resource <INVENTORY_RESOURCE_NAME>"
-echo ""
-echo "3. Check logs if issues occur:"
-echo "   gcloud logging read 'resource.type=\"aiplatform.googleapis.com/ReasoningEngine\"' --limit=50"
-echo ""
+echo "Next steps:"
+echo "1. Note the Reasoning Engine IDs from the output above"
+echo "2. Update .env with ORDERS_REASONING_ENGINE_ID and INVENTORY_REASONING_ENGINE_ID"
+echo "3. Register with Gemini Enterprise: uv run python scripts/register_agents.py"
