@@ -39,6 +39,9 @@ sequenceDiagram
 │   ├── setup_auth.py       # Create OAuth resources
 │   ├── register_agents.py  # Register with Gemini Enterprise
 │   └── deploy_agents.sh    # Automated deployment
+├── test_web/               # OAuth test harness
+│   ├── app.py              # Flask app for local testing
+│   └── templates/          # HTML templates
 ├── .env                    # Environment variables
 └── README.md
 ```
@@ -157,6 +160,24 @@ Test agents locally:
 export $(cat .env | xargs)
 uv run adk run app/orders
 ```
+
+## Local Testing with OAuth
+
+Test the OAuth passthrough flow using the test web app:
+
+```bash
+cd test_web
+uv venv .venv
+source .venv/bin/activate
+uv pip install --index-url https://pypi.org/simple/ -r requirements.txt
+python app.py
+```
+
+Open http://localhost:8080, login with Google, and query the agent.
+
+**Prerequisites:**
+- Add `http://localhost:8080/auth/callback` to OAuth client redirect URIs in Cloud Console
+- Set `ORDERS_REASONING_ENGINE_ID` in root `.env`
 
 ## License
 
