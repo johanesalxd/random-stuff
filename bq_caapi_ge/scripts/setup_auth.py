@@ -34,7 +34,7 @@ def create_auth_resource(auth_id: str):
             "clientSecret": OAUTH_CLIENT_SECRET,
             "authorizationUri": "https://accounts.google.com/o/oauth2/v2/auth?client_id="
             + OAUTH_CLIENT_ID
-            + "&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fstatic%2Foauth%2Foauth.html&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent",
+            + "&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Foauth-redirect&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent",
             "tokenUri": "https://oauth2.googleapis.com/token",
         },
     }
