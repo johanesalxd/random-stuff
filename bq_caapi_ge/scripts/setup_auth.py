@@ -19,7 +19,18 @@ AUTH_ID_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
 AUTH_ID_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
 
-def create_auth_resource(auth_id: str):
+def create_auth_resource(auth_id: str) -> None:
+    """Create an OAuth authorization resource in Gemini Enterprise.
+
+    Args:
+        auth_id: The authorization resource ID to create.
+
+    Raises:
+        ValueError: If OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET is not set.
+    """
+    if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
+        raise ValueError("OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET must be set")
+
     logger.info(f"Creating Authorization Resource: {auth_id}...")
 
     url = (
@@ -74,5 +85,29 @@ def create_auth_resource(auth_id: str):
 
 
 if __name__ == "__main__":
-    create_auth_resource(AUTH_ID_ORDERS)
-    create_auth_resource(AUTH_ID_INVENTORY)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Create OAuth authorization resources for Gemini Enterprise."
+    )
+    parser.add_argument(
+        "--orders-only",
+        action="store_true",
+        help="Only create authorization for Orders agent",
+    )
+    parser.add_argument(
+        "--inventory-only",
+        action="store_true",
+        help="Only create authorization for Inventory agent",
+    )
+
+    args = parser.parse_args()
+
+    if args.orders_only:
+        create_auth_resource(AUTH_ID_ORDERS)
+    elif args.inventory_only:
+        create_auth_resource(AUTH_ID_INVENTORY)
+    else:
+        # Default: create both
+        create_auth_resource(AUTH_ID_ORDERS)
+        create_auth_resource(AUTH_ID_INVENTORY)

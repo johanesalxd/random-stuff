@@ -111,29 +111,36 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--orders-resource",
-        required=True,
+        required=False,
         help="Reasoning Engine resource name for Orders Agent",
     )
     parser.add_argument(
         "--inventory-resource",
-        required=True,
+        required=False,
         help="Reasoning Engine resource name for Inventory Agent",
     )
 
     args = parser.parse_args()
 
+    if not args.orders_resource and not args.inventory_resource:
+        parser.error(
+            "At least one of --orders-resource or --inventory-resource is required"
+        )
+
     # 1. Orders Agent
-    register_agent(
-        "Order & User Analyst",
-        "Expert in customer journeys and order tracking.",
-        args.orders_resource,
-        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_ORDERS}",
-    )
+    if args.orders_resource:
+        register_agent(
+            "Order & User Analyst",
+            "Expert in customer journeys and order tracking.",
+            args.orders_resource,
+            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_ORDERS}",
+        )
 
     # 2. Inventory Agent
-    register_agent(
-        "Inventory & Product Analyst",
-        "Expert in stock levels and product catalog.",
-        args.inventory_resource,
-        auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_INVENTORY}",
-    )
+    if args.inventory_resource:
+        register_agent(
+            "Inventory & Product Analyst",
+            "Expert in stock levels and product catalog.",
+            args.inventory_resource,
+            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_INVENTORY}",
+        )
