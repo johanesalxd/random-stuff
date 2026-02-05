@@ -3,8 +3,8 @@ set -e
 
 # Cancel running stress test jobs
 
-PROJECT="johanesa-playground-326616"
-REGION="asia-southeast1"
+PROJECT="${GCP_PROJECT:-your-project-id}"
+REGION="${GCP_REGION:-asia-southeast1}"
 JOB_NAME_PATTERN="bq-stress-test"
 
 FORCE=false

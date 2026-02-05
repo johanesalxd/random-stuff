@@ -175,7 +175,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output_table",
-        default="johanesa-playground-326616:demo_dataset_asia.stress_test_transactions",
+        required=True,
         help="BigQuery output table (project:dataset.table)",
     )
 

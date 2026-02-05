@@ -5,10 +5,10 @@ set -e
 
 unset GOOGLE_APPLICATION_CREDENTIALS
 
-# Configuration
-PROJECT="johanesa-playground-326616"
-REGION="asia-southeast1"
-TEMP_BUCKET="gs://johanesa-temporary/dataflow/stress-test"
+# Configuration - Set these environment variables or modify defaults
+PROJECT="${GCP_PROJECT:-your-project-id}"
+REGION="${GCP_REGION:-asia-southeast1}"
+TEMP_BUCKET="${GCP_TEMP_BUCKET:-gs://your-bucket/dataflow/stress-test}"
 JOB_NAME="bq-stress-test-$(date +%Y%m%d-%H%M%S)"
 BIGQUERY_TABLE="$PROJECT:demo_dataset_asia.stress_test_transactions"
 
