@@ -1,0 +1,8 @@
+[project]
+name = "bq-swapi-stress-test"
+version = "0.1.0"
+description = "Stress test BigQuery Storage Write API throughput"
+requires-python = ">=3.10"
+dependencies = [
+    "apache-beam[gcp]>=2.50.0",
+]
