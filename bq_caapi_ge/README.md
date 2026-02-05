@@ -28,21 +28,26 @@ sequenceDiagram
 
 ```text
 ├── app/
-│   ├── orders/             # Orders Analyst Agent
-│   │   ├── agent.py        # Agent definition + DataAgentToolset
-│   │   └── .env            # Runtime environment variables
-│   └── inventory/          # Inventory Analyst Agent
-│       ├── agent.py        # Agent definition + DataAgentToolset
-│       └── .env            # Runtime environment variables
+│   ├── orders/                 # Orders Analyst Agent
+│   │   ├── agent.py            # Agent definition + DataAgentToolset
+│   │   └── .env                # Runtime environment variables
+│   └── inventory/              # Inventory Analyst Agent
+│       ├── agent.py            # Agent definition + DataAgentToolset
+│       └── .env                # Runtime environment variables
+├── docs/
+│   ├── examples/               # Reference implementations
+│   │   └── chart_with_ca_api.py  # Custom CA API call with chart support
+│   ├── gemini-enterprise-demo.png
+│   └── test-web-demo.png
 ├── scripts/
-│   ├── admin_tools.py      # Manage Data Agents (backend)
-│   ├── setup_auth.py       # Create OAuth resources
-│   ├── register_agents.py  # Register with Gemini Enterprise
-│   └── deploy_agents.sh    # Automated deployment
-├── test_web/               # OAuth test harness
-│   ├── app.py              # Flask app for local testing
-│   └── templates/          # HTML templates
-├── .env                    # Environment variables
+│   ├── admin_tools.py          # Manage Data Agents (backend)
+│   ├── setup_auth.py           # Create OAuth resources
+│   ├── register_agents.py      # Register with Gemini Enterprise
+│   └── deploy_agents.sh        # Automated deployment
+├── test_web/                   # OAuth test harness
+│   ├── app.py                  # Flask app for local testing
+│   └── templates/              # HTML templates
+├── .env                        # Environment variables
 └── README.md
 ```
 
@@ -197,6 +202,25 @@ Open http://localhost:8080, login with Google, and query the agent.
 ![Test Web App Demo](docs/test-web-demo.png)
 
 *Local OAuth test harness showing token passthrough*
+
+## Limitations
+
+### Chart Visualization
+
+The ADK's built-in `DataAgentToolset` does not currently support chart responses
+from the Conversational Analytics API. The CA API returns Vega-Lite specifications
+in `systemMessage.chart.result.vegaConfig`, but the toolset only processes `text`,
+`schema`, and `data` messages.
+
+To add chart support, implement a custom tool that calls the CA API directly
+and parses the `chart` messages from the streaming response.
+
+See [`docs/examples/chart_with_ca_api.py`](docs/examples/chart_with_ca_api.py) for
+a reference implementation that demonstrates:
+
+- Direct CA API calls with OAuth credentials
+- Parsing streaming responses including chart data
+- Rendering Vega-Lite specs to PNG using Altair
 
 ## License
 
