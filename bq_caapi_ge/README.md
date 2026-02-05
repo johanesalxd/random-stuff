@@ -131,6 +131,11 @@ uv run python scripts/setup_auth.py
 ### Step 3: Register with Gemini Enterprise
 
 ```bash
+# Register Orders agent only
+uv run python scripts/register_agents.py \
+  --orders-resource <ORDERS_RESOURCE_NAME>
+
+# Or register both agents
 uv run python scripts/register_agents.py \
   --orders-resource <ORDERS_RESOURCE_NAME> \
   --inventory-resource <INVENTORY_RESOURCE_NAME>
@@ -178,6 +183,20 @@ Open http://localhost:8080, login with Google, and query the agent.
 **Prerequisites:**
 - Add `http://localhost:8080/auth/callback` to OAuth client redirect URIs in Cloud Console
 - Set `ORDERS_REASONING_ENGINE_ID` in root `.env`
+
+## Demo
+
+### Gemini Enterprise
+
+![Gemini Enterprise Demo](docs/gemini-enterprise-demo.png)
+
+*Order & User Analyst responding to queries in Gemini Enterprise*
+
+### Test Web App
+
+![Test Web App Demo](docs/test-web-demo.png)
+
+*Local OAuth test harness showing token passthrough*
 
 ## License
 
