@@ -63,3 +63,66 @@ SELECT
   ROUND(SUM(LENGTH(shipping_address))/1024/1024/1024, 2) AS total_gb
 FROM `johanesa-playground-326616.demo_dataset_asia.stress_test_transactions`
 ```
+
+## Test Results
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Total Rows Ingested | 6,239,978 |
+| Total Data Ingested | 102.47 GB |
+| Test Duration | ~35 minutes |
+| Avg Row Size | 17.22 KB |
+| Peak Burst (Dataflow) | 243 MiB/s |
+| Peak Sustained (BQ) | 83 MB/s |
+| Avg Throughput | 50 MB/s |
+
+### Quota Limit Reached
+
+The pipeline successfully triggered BigQuery's AppendRows quota limit:
+
+```
+RESOURCE_EXHAUSTED: Exceeds 'AppendRows throughput' quota
+user_id: project0000008d0226dd0f_asia-southeast1
+status: INSUFFICIENT_TOKENS
+```
+
+A total of 441 quota errors occurred in 4 distinct bursts, confirming the pipeline generates data faster than the project quota allows.
+
+### Throughput Analysis
+
+```
+                    Dataflow Metrics vs BQ Table Data
+    
+Throughput │
+(MB/s)     │
+           │                                           ▲ 243 (Dataflow burst
+ 250 ──────┼───────────────────────────────────────────│── includes retries)
+           │                                          ╱│╲
+           │         ▲ 160                           ╱ │ ╲
+ 150 ──────┼────────╱─╲──────────────────────────────────────
+           │       ╱   ╲     ▲                      ╱     ╲
+           │      ╱     ╲   ╱ ╲                    ╱       ╲
+  83 ──────┼─────╱───────╲─╱───╲──────────────────╱─────────╲─ BQ peak
+           │    ╱         ╳     ╲                ╱           ╲
+  50 ══════╪═══════════════════════════════════════════════════ BQ average
+           │
+   0 ──────┴──────────────────────────────────────────────────►
+              9:35    9:43    9:50    9:55   10:01   10:05
+                       │              │        │
+                   1st quota      3rd quota  4th quota
+                   exhaustion     burst      burst (441 errors)
+```
+
+**Why Dataflow shows higher peaks than BQ table:**
+1. Dataflow metrics include failed writes being retried
+2. During quota throttling, retry multiplier can reach 4x
+3. BQ table only reflects successfully committed data
+
+### Key Insights
+
+1. Pipeline CAN generate 243+ MiB/s (proven by Dataflow metrics)
+2. Default project quota limits sustained throughput to ~50 MB/s
+3. Quota uses token bucket algorithm (allows bursts, then throttles)
+4. To reach 300 MB/s regional limit, request higher AppendRows quota
