@@ -8,7 +8,7 @@ Standards and configurations for AI-assisted development using Cline, Claude Cod
 |------|---------|
 | **AGENTS.md** | Agent behavioral directives (planning, verification, learning loops) |
 | **CODE_STANDARDS.md** | Coding style guide based on Google standards (Python, Go, Java, JS/TS, Shell) |
-| **cline_gemini_mcp/** | BigQuery MCP server configurations for Cline |
+| **cline/** | Sync script for updating Cline global rules |
 
 ## File Separation Rationale
 
@@ -48,21 +48,6 @@ chmod 444 ~/Documents/Cline/Rules/*.md
 
 When updating standards:
 1. Modify source files in this directory
-2. Sync to global location: `cp agent_stuff/*.md ~/Documents/Cline/Rules/`
-3. Re-apply permissions: `chmod 444 ~/Documents/Cline/Rules/*.md`
+2. Run sync script: `./agent_stuff/cline/sync_rules.sh`
 
-## MCP Server Management
-
-The `cline_gemini_mcp/` directory contains BigQuery MCP server configurations.
-
-**Shell Alias:**
-```bash
-alias manage-mcp='~/Developer/git/random-stuff/agent_stuff/cline_gemini_mcp/manage_mcp_servers.sh'
-```
-
-**Usage:**
-```bash
-manage-mcp  # Manage Cline MCP server configurations
-```
-
-See `cline_gemini_mcp/README.md` for detailed configuration instructions.
+The script automatically handles copying files and applying read-only permissions.
