@@ -10,7 +10,7 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 
 ## Rule Compounding
 
-- **Continuous Learning:** After every correction or mistake, update instruction files immediately to prevent recurrence.
+- **Continuous Learning:** After every correction or mistake, suggest updates to instruction files for user review. Do not modify instruction files without explicit approval.
 - **Project Notes:** Maintain notes for every project/task, updated after every PR or significant change.
 
 ## Verification and Review
