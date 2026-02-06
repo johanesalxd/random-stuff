@@ -281,7 +281,7 @@ Documentation requirements vary by language and follow Google's official style g
 ### Python
 - 4 spaces for indentation (no tabs)
 - Maximum line length: 80 characters
-- Use Black or similar formatter when available
+- Use `ruff format` for formatting and `ruff check` for linting when available
 
 ### Go
 - Use `gofmt` for all formatting
