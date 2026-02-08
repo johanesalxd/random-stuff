@@ -11,7 +11,7 @@ set -euo pipefail
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SOURCE_DIR="$(cd "${SCRIPT_DIR}/../../agent_stuff" && pwd)"
 TARGET_DIR="${HOME}/Documents/Cline/Rules"
 
 # Files to sync
