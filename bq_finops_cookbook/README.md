@@ -20,6 +20,7 @@ This framework helps BigQuery administrators and data platform teams make data-d
 - High burst ratio (p95/p50 > 3)
 - Bursty workloads without baseline needs
 - Pay slot-hours (no commitments available)
+- Note: Billed per second with a **1-minute minimum**, in multiples of 50 slots. You are charged for *scaled* slots, not *used* slots.
 
 ### When to Use Baseline Reservations (Enterprise/Enterprise Plus)
 - p25 slots ≥ 50 (meets minimum)
@@ -32,12 +33,15 @@ This framework helps BigQuery administrators and data platform teams make data-d
 - Some projects stable (prod), others variable (dev/test)
 - Can separate workloads by project
 
+### Scaling Ceiling
+- BigQuery allows up to **1,000 queued interactive queries per project per region** (hard limit, cannot be increased). If your workload approaches this limit, consider distributing queries across multiple projects (project sharding).
+
 ### What This Framework Does
 
 - Analyzes 30 days of slot usage patterns
 - Calculates workload stability and burstiness metrics
 - Recommends optimal workload management strategy
-- Identifies optimization opportunities
+- Identifies optimization opportunities (including queue pressure and streaming ingestion)
 - Generates detailed reports
 
 ### Who Should Use This
@@ -213,5 +217,6 @@ Each report provides detailed analysis and actionable recommendations. See the g
 - [BigQuery Editions](https://cloud.google.com/bigquery/docs/editions-intro)
 
 ### Related Guides
-- `finops_prompt.md` - Detailed analysis guide with all SQL queries
+- `.agents/agents/finops_agent.md` - Detailed analysis guide with all SQL queries
+- `docs/REFERENCES.md` - Official documentation links and query sources
 - `analysis_results/` - Generated reports from your analysis
