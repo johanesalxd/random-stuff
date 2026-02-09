@@ -73,4 +73,10 @@ done
 echo ""
 echo -e "${GREEN}Sync complete.${NC} Symlinks created in ${TARGET_DIR}/"
 echo ""
+
+# Patch OpenCode config
+if [[ -f "${SCRIPT_DIR}/patch_opencode_config.sh" ]]; then
+  "${SCRIPT_DIR}/patch_opencode_config.sh"
+fi
+
 echo "Verify with: ls -la ${TARGET_DIR}/"
