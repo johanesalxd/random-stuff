@@ -26,13 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(cd "${SCRIPT_DIR}/../../agent_stuff" && pwd)"
 TARGET_DIR="${HOME}/.gemini"
 
-# File mappings: source_name:target_name
+# File mappings: parallel arrays for Bash 3.2 compatibility.
 # AGENTS.md is renamed to GEMINI.md because Gemini CLI
 # reads ~/.gemini/GEMINI.md as the global instructions file.
-declare -A FILE_MAP=(
-  ["AGENTS.md"]="GEMINI.md"
-  ["CODE_STANDARDS.md"]="CODE_STANDARDS.md"
-)
+SOURCE_NAMES=("AGENTS.md" "CODE_STANDARDS.md")
+TARGET_NAMES=("GEMINI.md" "CODE_STANDARDS.md")
 
 echo "Syncing agent rules to Gemini global directory (symlinks)..."
 echo -e "Source: ${GREEN}${SOURCE_DIR}${NC}"
@@ -43,8 +41,9 @@ echo ""
 mkdir -p "${TARGET_DIR}"
 
 # Sync each file
-for source_name in "${!FILE_MAP[@]}"; do
-  target_name="${FILE_MAP[${source_name}]}"
+for i in "${!SOURCE_NAMES[@]}"; do
+  source_name="${SOURCE_NAMES[${i}]}"
+  target_name="${TARGET_NAMES[${i}]}"
   source_file="${SOURCE_DIR}/${source_name}"
   target_file="${TARGET_DIR}/${target_name}"
 
