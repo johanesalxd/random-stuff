@@ -1,64 +1,76 @@
 # Code Standards
 
-This document establishes coding and documentation standards for all AI-assisted code generation. All standards are based on Google's official style guides for Python, Go, and Java, ensuring industry-standard code quality, readability, and maintainability across all projects.
+Standards for AI-assisted code generation. All standards are based on Google's official style guides. Project-level rules (AGENTS.md) override these when they conflict.
 
 ## Writing Style
 
-All code and documentation must follow these principles:
+MANDATORY for all code and documentation:
 
-- Write in a simple, concise, and professional manner
-- Use direct technical communication without conversational filler
-- Avoid emojis, decorative elements, or unnecessary formatting
+- Simple, concise, professional language
+- Direct technical communication -- no conversational filler
+- No emojis, decorative elements, or unnecessary formatting
+- No praise, superlatives, or emotional validation
+- Standard technical terminology, used consistently
 - Focus on clarity and precision over friendliness
-- Use standard technical terminology consistently
 
-## Quick Reference
+## Python
 
-Universal principles that apply across all languages (adapt syntax as needed):
+Base: [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
 
-**Documentation:**
-- Document all public/exported APIs
-- First line: brief summary of purpose
-- Include parameters, return values, and exceptions
-- Private functions: document if non-obvious
+### Tooling
 
-**Code Quality:**
-- Explain "why" in comments, not "what"
-- Keep functions focused and under 50 lines
-- Use semantic naming (no abbreviations unless standard)
-- One logical operation per function
+- **Package manager:** `uv` exclusively (no pip, pip-tools, or poetry)
+  - `uv sync` -- install/sync dependencies
+  - `uv add <package>` -- add a dependency
+  - `uv remove <package>` -- remove a dependency
+  - `uv lock` -- update lockfile
+  - `uv run <command>` -- run scripts/tools in the project environment
+  - `uv build --wheel` -- build distribution
+- **Config:** `pyproject.toml` only (no `requirements.txt`, `setup.py`, or `setup.cfg`)
+- **Formatter/Linter:** `ruff` (`ruff format` and `ruff check`)
+- **Testing:** `pytest`
+- **Security scanning:** `uv run pip-audit` or integrate via CI
 
-**Security:**
-- Never hardcode secrets or credentials
-- Validate all user input
-- Use parameterized queries (prevent SQL injection)
-- Sanitize output (prevent XSS)
-- Never log passwords, tokens, or PII
+### Formatting
 
-**Error Handling:**
-- Handle errors explicitly
-- Provide clear, actionable error messages
-- Document all exceptions that can be raised
+- 4 spaces for indentation (no tabs)
+- Maximum line length: 88 characters (ruff default)
 
-**Testing:**
-- Follow AAA pattern (Arrange, Act, Assert)
-- Test edge cases and error conditions
-- Keep tests independent and isolated
-- Mock external dependencies
+### Type Hints
 
-## Code Documentation Standards
+Use modern Python 3.10+ syntax exclusively. Do NOT use legacy typing imports.
 
-### Python
+| Do this | NOT this |
+|---------|----------|
+| `list[str]` | `List[str]` |
+| `dict[str, Any]` | `Dict[str, Any]` |
+| `tuple[int, ...]` | `Tuple[int, ...]` |
+| `str \| None` | `Optional[str]` |
+| `int \| str` | `Union[int, str]` |
 
-Documentation is required for all functions, classes, and modules following Google Python Style Guide standards.
+Only import `Any` from `typing`. Everything else uses builtins.
 
-**Docstring Format:**
-- Use triple-quoted `"""` format for all docstrings
-- First line: brief summary (one line, ending with period)
-- Followed by blank line if additional content exists
-- Include Args, Returns, and Raises sections as needed
+### Imports
 
-**Example:**
+Three groups separated by blank lines: stdlib, third-party, local. Alphabetically sorted within each group.
+
+```python
+import json
+import logging
+
+import apache_beam as beam
+from google.cloud import bigquery
+
+from myproject.transforms.parser import (
+    ParseMessage,
+    validate_schema,
+)
+```
+
+### Docstrings
+
+Google-style with `Args:`, `Returns:`, `Yields:`, `Raises:` sections.
+
 ```python
 def calculate_total(items: list[dict], tax_rate: float = 0.0) -> float:
     """Calculates the total cost including tax.
@@ -79,56 +91,232 @@ def calculate_total(items: list[dict], tax_rate: float = 0.0) -> float:
     return subtotal * (1 + tax_rate)
 ```
 
-**Requirements:**
-- All public functions, classes, and modules must have docstrings
-- Use type hints for function parameters and return values
-- Include inline comments for complex logic only
-- Comments should explain "why" not "what"
+Required for all public functions, classes, and modules. Optional for private functions that are short (fewer than 5 statements) and obvious.
 
-### Other Languages - Quick Reference
+### Logging
 
-| Language | Format | When Required | Key Tags/Sections | Notes |
-|----------|--------|---------------|-------------------|-------|
-| **Go** | `// FuncName description` | All exported names | Start with function name | Use complete sentences |
-| **Java** | `/** */` Javadoc | All public APIs | `@param`, `@return`, `@throws` | Summary fragment (not full sentence) |
-| **Shell** | `#######` header block | All functions | Globals, Arguments, Outputs, Returns | File header required |
+Use `%s` lazy formatting in log calls, NOT f-strings.
 
-**Go Example:**
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Good
+logger.info("User login successful: user_id=%s", user_id)
+logger.error("Database connection failed", exc_info=True)
+
+# Bad -- f-string evaluates even if log level is disabled
+logger.info(f"User logged in: {user_id}")
+```
+
+### Naming
+
+- Functions and variables: `snake_case`
+- Classes: `PascalCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Private/module-level: prefix with `_`
+
+### Testing
+
+- Framework: `pytest` (no unittest classes)
+- File naming: `test_<module>.py`
+- Function naming: `test_<function>_<scenario>` as standalone functions
+- Assertions: bare `assert` statements; `pytest.raises(ValueError, match="...")` for exceptions
+- No mocks unless absolutely necessary; prefer in-memory test data
+
+```python
+def test_calculate_total_with_tax():
+    """Tests total calculation includes tax correctly."""
+    items = [{"price": 10.0}, {"price": 20.0}]
+    result = calculate_total(items, tax_rate=0.1)
+    assert result == 33.0
+
+def test_calculate_total_rejects_negative_tax():
+    """Tests that negative tax rate raises ValueError."""
+    with pytest.raises(ValueError, match="cannot be negative"):
+        calculate_total([], tax_rate=-0.1)
+```
+
+## Go
+
+Base: [Google Go Style Guide](https://google.github.io/styleguide/go/) and [Effective Go](https://go.dev/doc/effective_go)
+
+### Tooling
+
+- **Formatter:** `gofmt` (mandatory, no exceptions)
+- **Dependencies:** `go.mod` with `go mod tidy` and `go mod verify`
+- **Testing:** `go test ./...`
+- **Linting:** `golangci-lint` when available
+
+### Formatting
+
+- Tabs for indentation (enforced by `gofmt`)
+- No line length limit (use judgment for readability)
+
+### Documentation
+
+All exported (capitalized) names must have doc comments. Comments must be complete sentences starting with the name being described.
+
 ```go
 // CalculateTotal computes the total cost including tax.
-// Returns an error if taxRate is negative.
-func CalculateTotal(items []Item, taxRate float64) (float64, error) { ... }
+// It returns an error if taxRate is negative.
+func CalculateTotal(items []Item, taxRate float64) (float64, error) {
+    if taxRate < 0 {
+        return 0, fmt.Errorf("tax rate cannot be negative: %f", taxRate)
+    }
+    var subtotal float64
+    for _, item := range items {
+        subtotal += item.Price
+    }
+    return subtotal * (1 + taxRate), nil
+}
 ```
 
-**Java Example:**
+### Naming
+
+- Exported identifiers: `CapitalizedCamelCase`
+- Unexported identifiers: `lowerCamelCase`
+- Acronyms: all caps (e.g., `HTTPServer`, `XMLParser`)
+- Packages: short, lowercase, single word when possible
+
+### Error Handling
+
+- Return errors explicitly; do not panic for expected failures
+- Wrap errors with context: `fmt.Errorf("failed to process item: %w", err)`
+- Check errors immediately after the call that produces them
+
+### Testing
+
+Use table-driven tests with `t.Run()` for subtests. Use Example functions for testable documentation.
+
+```go
+func TestCalculateTotal(t *testing.T) {
+    tests := []struct {
+        name    string
+        items   []Item
+        taxRate float64
+        want    float64
+        wantErr bool
+    }{
+        {name: "with tax", items: []Item{{Price: 10}, {Price: 20}}, taxRate: 0.1, want: 33.0},
+        {name: "negative tax", items: nil, taxRate: -0.1, wantErr: true},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := CalculateTotal(tt.items, tt.taxRate)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if got != tt.want {
+                t.Errorf("got %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
+
+### Dependencies
+
+- Use `go.mod` for all dependency management
+- Run `go mod tidy` to clean up unused dependencies
+- Use `go mod verify` to check integrity
+- Pin versions with specific commits when needed
+
+## Java
+
+Base: [Google Java Style Guide](https://google.github.io/styleguide/javaguide.html)
+
+### Tooling
+
+- **Formatter:** `google-java-format`
+- **Build:** Maven (`pom.xml`) or Gradle (`build.gradle`)
+- **Testing:** JUnit 5
+- **Security scanning:** OWASP Dependency-Check
+
+### Formatting
+
+- 2 spaces for indentation (no tabs)
+- Maximum line length: 100 characters
+
+### Documentation
+
+Javadoc (`/** */`) required for all public classes and methods. Use `@param`, `@return`, `@throws` tags.
+
 ```java
-/** Calculates the total cost including tax.
+/**
+ * Calculates the total cost including tax.
+ *
  * @param items list of items with price information
- * @param taxRate tax rate as decimal
+ * @param taxRate tax rate as decimal (e.g., 0.08 for 8%)
  * @return total cost including tax
- * @throws IllegalArgumentException if taxRate is negative */
-public double calculateTotal(List<Item> items, double taxRate) { ... }
+ * @throws IllegalArgumentException if taxRate is negative
+ */
+public double calculateTotal(List<Item> items, double taxRate) {
+    if (taxRate < 0) {
+        throw new IllegalArgumentException("Tax rate cannot be negative: " + taxRate);
+    }
+    double subtotal = items.stream().mapToDouble(Item::getPrice).sum();
+    return subtotal * (1 + taxRate);
+}
 ```
 
-**Shell Example:**
-```bash
-#######################################
-# Cleanup files from the backup directory.
-# Globals: BACKUP_DIR, ORACLE_SID
-# Arguments: None
-#######################################
-cleanup() { rm "${BACKUP_DIR}/"*; }
+### Naming
+
+- Classes: `UpperCamelCase`
+- Methods and variables: `lowerCamelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Packages: `all.lowercase`
+
+### Testing
+
+JUnit 5 with `@Test`, `@BeforeEach`, `@AfterEach` annotations. Use descriptive method names.
+
+```java
+@Test
+void calculateTotal_withTax_returnsCorrectTotal() {
+    List<Item> items = List.of(new Item(10.0), new Item(20.0));
+    double result = calculator.calculateTotal(items, 0.1);
+    assertEquals(33.0, result, 0.001);
+}
+
+@Test
+void calculateTotal_withNegativeTax_throwsException() {
+    assertThrows(IllegalArgumentException.class, () ->
+        calculator.calculateTotal(List.of(), -0.1));
+}
 ```
 
-### JavaScript/TypeScript
+### Dependencies
 
-**JSDoc Format:**
-- Use `/** */` for documentation comments
-- JavaScript: Include types in JSDoc (`@param {string}`, `@return {Promise}`)
-- TypeScript: Types in signature, descriptions only in JSDoc (don't duplicate type info)
-- Include `@param`, `@return`, `@throws` when adding information beyond types
+- Specify exact versions for all dependencies
+- Use dependency management sections for version control
+- Run OWASP Dependency-Check for security scanning
 
-**TypeScript Example:**
+## JavaScript/TypeScript
+
+Base: [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html)
+
+### Tooling
+
+- **Formatter:** Prettier
+- **Linting:** ESLint
+- **Package manager:** npm, yarn, or pnpm (use lock files)
+- **Testing:** Jest or Vitest
+
+### Formatting
+
+- 2 spaces for indentation (no tabs)
+- Maximum line length: 80 characters
+- Semicolons required
+- Single quotes for strings (except to avoid escaping)
+- Trailing commas in multi-line arrays and objects
+
+### Documentation
+
+Use JSDoc (`/** */`). In TypeScript, do NOT duplicate type information already in the signature. Only add `@param` and `@return` when they provide information beyond the types.
+
 ```typescript
 /**
  * Tracks a custom analytics event.
@@ -143,202 +331,91 @@ function trackEvent(eventName: string, eventParams: Record<string, unknown> = {}
 }
 ```
 
-**Key Principle (TypeScript):** Don't duplicate type information. Only document what types don't convey.
+### Modern Features
 
-**Modern Features to Use:**
-- `const`/`let` (never `var`), arrow functions, template literals, destructuring
-- `async`/`await` over Promises, optional chaining (`?.`), nullish coalescing (`??`)
+Always use:
+- `const`/`let` (never `var`)
+- Arrow functions for callbacks
+- Template literals for string interpolation
+- `async`/`await` over raw Promises
+- Optional chaining (`?.`) and nullish coalescing (`??`)
+- Destructuring for object/array access
 
-### TypeScript-Specific Patterns
+### Naming
 
-**Interface/Type Documentation:**
-```typescript
-/** Represents a user in the system. */
-interface User {
-  id: string;
-  name: string;
-  /** @defaultValue "user" */
-  role?: string;
-}
-
-/** @typeParam T - The type of items */
-class Collection<T> { ... }
-
-/** @enum {string} */
-enum Status { Pending = 'PENDING', Active = 'ACTIVE' }
-```
-
-**Available TSDoc Tags:**
-- `@typeParam` - Generic type parameters
-- `@deprecated` - Mark as deprecated with migration path
-- `@internal` - Internal APIs not for external use
-- `@example` - Usage examples
-- `@defaultValue` - Default values for optional fields
-- `@throws` - Exceptions that may be thrown
-- `@see` / `@link` - Reference related APIs
-
-## General Code Quality Standards
-
-### Naming Conventions
-
-**Python:**
-- Functions and variables: `lower_with_under`
-- Classes: `CapWords`
-- Constants: `CAPS_WITH_UNDER`
-
-**Go:**
-- Exported identifiers: `CapitalizedCamelCase`
-- Unexported identifiers: `lowerCamelCase`
-- Acronyms: all caps (e.g., `HTTPServer`)
-
-**Java:**
-- Classes: `UpperCamelCase`
-- Methods and variables: `lowerCamelCase`
-- Constants: `UPPER_SNAKE_CASE`
-
-**Shell:**
-- Functions and variables: `lowercase_with_underscores`
-- Constants and environment variables: `UPPERCASE_WITH_UNDERSCORES`
-- Source filenames: `lowercase_with_underscores.sh`
-
-**JavaScript/TypeScript:**
 - Functions and variables: `lowerCamelCase`
 - Classes and interfaces: `UpperCamelCase`
 - Constants: `UPPER_SNAKE_CASE`
-- Private fields: `lowerCamelCase` (optionally with trailing underscore)
-- Type parameters: `UpperCamelCase` or single letter `T`
+- Type parameters: single letter `T` or `UpperCamelCase`
 
-### Project Structure and Directory Naming
+### Dependencies
 
-| Language | Dir Naming | Key Directories | Config File |
-|----------|------------|-----------------|-------------|
-| **Python** | `lower_with_under` | `src/`, `tests/`, `docs/` | `pyproject.toml` |
-| **Go** | `lowercase` | `cmd/`, `pkg/`, `internal/` | `go.mod` |
-| **Java** | `lowercase` | `src/main/java/`, `src/test/java/` | `pom.xml` or `build.gradle` |
-| **JS/TS** | `lower-dash` or `lowerCamel` | `src/`, `tests/`, `public/` | `package.json`, `tsconfig.json` |
+- Use lock files (`package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`)
+- Use `npm ci` or equivalent for reproducible builds
+- Run `npm audit` for security scanning
 
-**Common Principles:**
-- Separate source code from tests
-- Keep directory names short and descriptive
-- Use consistent naming throughout project
-- Document structure in README.md
+## Shell
 
-**Python Note:** Use `__init__.py` to mark package directories
-**Go Note:** Use `internal/` for private packages, `cmd/` for entry points
-**Java Note:** Mirror package structure in directory hierarchy
+Base: [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
 
-### Function Documentation Requirements
+### Formatting and Conventions
 
-Documentation requirements vary by language and follow Google's official style guides.
-
-**Python:**
-- Required for all public functions (not prefixed with underscore)
-- Optional for private functions that are short (fewer than 5 statements) and obvious
-- Required for classes, modules, and methods overriding base classes (unless decorated with @override and behavior unchanged)
-
-**Java:**
-- Required for all classes and methods
-- Optional for "simple, obvious" methods (e.g., getFoo()) only if nothing worthwhile beyond restating the name
-- Must include if typical reader needs context (e.g., explaining "canonical name")
-
-**Go:**
-- Required for ALL exported (capitalized) names
-- Optional for unexported (private) functions
-- Must be complete sentences starting with the name being described
-
-**TypeScript/JavaScript:**
-- Required when purpose is not immediately obvious from name and type signature
-- Do not duplicate type information already in TypeScript signatures
-- @param and @return only needed when adding information beyond type system
-
-**All documented functions should include:**
-
-1. **Purpose**: What the function does (first line)
-2. **Parameters**: Description of each parameter (when not obvious from name/type)
-3. **Return value**: What is returned (when not obvious from type)
-4. **Exceptions**: What errors can be raised/thrown
-5. **Side effects**: Any state changes or external interactions
-
-### Comment Best Practices
-
-- Write comments for complex algorithms or business logic
-- Explain "why" decisions were made, not "what" the code does
-- Keep comments concise and technical
-- Update comments when code changes
-- Avoid redundant comments that restate obvious code
-- Use TODO comments with issue references for future work
-
-### Code Organization
-
-- Keep functions focused and single-purpose
-- Limit function length (prefer under 40-50 lines)
-- Group related functionality together
-- Use meaningful variable and function names
-- Maintain consistent indentation and formatting
-
-## Formatting Standards
-
-### Python
-- 4 spaces for indentation (no tabs)
-- Maximum line length: 80 characters
-- Use `ruff format` for formatting and `ruff check` for linting when available
-
-### Go
-- Use `gofmt` for all formatting
-- Tabs for indentation
-- Follow standard Go formatting conventions
-
-### Java
-- 2 spaces for indentation
-- Maximum line length: 100 characters
-- Use google-java-format when available
-
-### Shell
+- Shebang: `#!/bin/bash` with `set -e`
 - 2 spaces for indentation (no tabs)
 - Maximum line length: 80 characters
-- Use `#!/bin/bash` shebang
-- Place `; then` and `; do` on same line as `if`/`for`/`while`
-- Use `[[  ]]` over `[  ]` for tests
+- Use `[[ ]]` over `[ ]` for tests
 - Use `$(command)` over backticks
 - Always quote variables: `"${var}"`
 - Use arrays for lists
 - Use `(( ))` for arithmetic
-- Check return values explicitly
-- Use `local` for function variables
+- Use `local` for function variables; separate declaration from command substitution assignment
+- Place `; then` and `; do` on same line as `if`/`for`/`while`
+- Send error messages to STDERR: `echo "Error: ..." >&2`
+- Use `readonly` or `declare -r` for constants
+- Use `main` function for scripts containing other functions; call `main "$@"` as the last line
 - Run ShellCheck on all scripts
 
-### JavaScript/TypeScript
-- 2 spaces for indentation (no tabs)
-- Maximum line length: 80 characters
-- Semicolons required at end of statements
-- Single quotes for strings (except to avoid escaping)
-- Use Prettier or similar formatter when available
-- Use `const` and `let`, never `var`
-- Prefer template literals for string interpolation
-- Use trailing commas in multi-line arrays and objects
+### Naming
 
-## Error Handling
+- Functions and variables: `lowercase_with_underscores`
+- Constants and environment variables: `UPPERCASE_WITH_UNDERSCORES`
+- Source filenames: `lowercase_with_underscores.sh`
 
-- Always handle errors explicitly
-- Provide clear, actionable error messages
-- Include context in error messages (what failed and why)
-- Use appropriate exception types
-- Document all exceptions that can be raised
+### Documentation
 
-## Confirmation Before Retesting
+Every script must have a file header comment describing its purpose. Every function requires a header block:
 
-After fixing errors, request explicit user confirmation before rerunning tests or commands.
+```bash
+#!/bin/bash
+#
+# Perform hot backups of Oracle databases.
 
-**Process:**
-1. Make necessary code changes
-2. Summarize what was changed and why
-3. Ask: "I've fixed [issue]. Would you like me to rerun [test/command]?"
-4. Wait for approval before proceeding
+set -e
 
-**When to request confirmation:**
-- After fixing code errors or bugs
-- Before rerunning failed tests or commands
-- After modifying configuration files that affect execution
+#######################################
+# Cleanup files from the backup directory.
+# Globals:
+#   BACKUP_DIR
+#   ORACLE_SID
+# Arguments:
+#   None
+# Returns:
+#   0 on success, non-zero on error
+#######################################
+cleanup() {
+  # Separate local declaration from command substitution
+  # to avoid masking the exit code.
+  local dir
+  dir="$(get_backup_dir)"
+  rm "${dir}/"*
+}
+
+main() {
+  cleanup
+}
+
+main "$@"
+```
 
 ## Git Commit Messages
 
@@ -346,7 +423,7 @@ After fixing errors, request explicit user confirmation before rerunning tests o
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
-**Complete Example:**
+**Example:**
 ```
 feat: Add user authentication module
 
@@ -360,281 +437,113 @@ Fixes #123
 ```
 
 **Structure:**
-- **Subject:** Brief summary (50 chars max)
-- **Body:** Explain what and why (72 chars per line)
-- **Footer:** Issue references, breaking changes, co-authors
+- **Subject line:** brief summary (50 chars max)
+- **Body:** explain what and why (72 chars per line, separated by blank line)
+- **Footer:** issue references, breaking changes, co-authors
 
-**Best Practices:**
+**Rules:**
 - Keep commits atomic (one logical change)
 - Use imperative mood ("Add" not "Added")
 - Reference issues when applicable
 - Explain why, not how
 
-## Security Best Practices
+## Security Guardrails
 
-All code must follow security best practices to protect against common vulnerabilities.
+NEVER:
+- Hardcode credentials, API keys, or secrets in code
+- Log passwords, tokens, session IDs, PII, or encryption keys
+- Concatenate user input into SQL queries (use parameterized queries)
+- Trust unsanitized user input in HTML output (escape or sanitize)
+- Skip input validation on user-provided data
 
-### Input Validation
-
-- Validate all user input before processing
-- Use allowlists rather than denylists when possible
-- Sanitize input to prevent injection attacks
-- Validate data types, ranges, and formats
-- Reject invalid input with clear error messages
-
-### Secrets Management
-
-- Never hardcode credentials, API keys, or secrets in code
-- Use environment variables for sensitive configuration
-- Use secret management services (e.g., Google Secret Manager, AWS Secrets Manager)
-- Add sensitive files to `.gitignore`
-- Rotate secrets regularly
-
-**Example (.gitignore):**
-```
-.env
-.env.local
-secrets/
-*.key
-*.pem
-credentials.json
-```
-
-### Authentication and Authorization
-
-- Implement proper authentication mechanisms
-- Use established libraries for authentication (OAuth, JWT)
-- Apply principle of least privilege
-- Validate permissions before granting access
-- Use secure session management
-
-### Data Protection
-
-- Encrypt sensitive data at rest and in transit
+ALWAYS:
+- Use environment variables or secret managers for credentials
+- Add sensitive files to `.gitignore` (`.env`, `*.key`, `*.pem`, `credentials.json`)
+- Validate all user input (types, ranges, formats) before processing
+- Use allowlists over denylists for input validation
+- Use parameterized queries or prepared statements for database access
 - Use HTTPS for all network communication
 - Hash passwords with strong algorithms (bcrypt, Argon2)
-- Never log sensitive information (passwords, tokens, PII)
-- Implement proper data retention policies
-
-### Common Vulnerability Prevention
-
-**SQL Injection:**
-- Use parameterized queries or prepared statements
-- Never concatenate user input into SQL queries
-- Use ORM frameworks when appropriate
-
-**Cross-Site Scripting (XSS):**
-- Escape output in web applications
-- Use Content Security Policy headers
-- Validate and sanitize user-generated content
-
-**Cross-Site Request Forgery (CSRF):**
-- Use CSRF tokens for state-changing operations
-- Validate origin and referrer headers
-- Use SameSite cookie attributes
-
-### Dependency Security
-
-- Regularly scan dependencies for vulnerabilities
-- Keep dependencies up to date
-- Use tools like `pip-audit`, `go mod verify`, or `OWASP Dependency-Check`
-- Review security advisories for used libraries
+- Use CSRF tokens for state-changing operations in web applications
+- Apply Content Security Policy headers
+- Scan dependencies for vulnerabilities regularly (`pip-audit`, `npm audit`, `go mod verify`, OWASP)
+- Use established libraries for authentication (OAuth, JWT)
 
 ## Logging Standards
 
 **Log Levels:** DEBUG (diagnostic) | INFO (flow) | WARNING (potential issues) | ERROR (recoverable) | CRITICAL (failure)
 
 **What to Log:**
-- Application startup/shutdown, config changes, auth attempts, API interactions, errors with stack traces
+- Application startup/shutdown, config changes
+- Authentication attempts (success and failure)
+- API interactions and errors with stack traces
 
 **NEVER Log:**
 - Passwords, API keys, tokens, session IDs, credit cards, PII, encryption keys
 
-**Example (Python - adapt to language-specific library):**
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Good
-logger.info("User login successful", extra={"user_id": user_id})
-logger.error("Database connection failed", exc_info=True)
-
-# Bad - contains sensitive data
-logger.info(f"User logged in with password: {password}")  # NEVER
-```
-
 **Best Practices:**
 - Use appropriate log levels consistently
-- Include context (user ID, request ID)
-- Log exceptions with stack traces
-- Use structured logging (JSON format)
-- Implement log rotation and centralization
+- Include context (user ID, request ID) -- never PII
+- Log exceptions with stack traces (`exc_info=True` in Python)
+- Use structured logging (JSON format) in production
+- Use `%s` lazy formatting in Python, not f-strings in log calls
 
 ## Dependency Management
 
-Manage dependencies carefully to ensure security, stability, and maintainability.
-
-### Evaluating Dependencies
-
-Before adding a new dependency, consider:
-
-- **Necessity:** Is this dependency truly needed?
-- **Maintenance:** Is it actively maintained?
+Before adding a new dependency, evaluate:
+- **Necessity:** Can this be done without adding a dependency?
+- **Maintenance:** Is it actively maintained with recent releases?
 - **Security:** Does it have known vulnerabilities?
-- **License:** Is the license compatible with your project?
-- **Size:** Does it add significant bloat?
-- **Alternatives:** Are there better alternatives?
+- **License:** Is the license compatible with the project?
+- **Size:** Does it add significant bloat or deep dependency trees?
 
-### Version Management
+**Per-language tooling:**
 
-**Python:**
-- Use `requirements.txt` or `pyproject.toml` for dependencies
-- Pin versions for reproducibility: `package==1.2.3`
-- Use `pip-tools` or `poetry` for dependency resolution
-- Run `pip-audit` for security scanning
+| Language | Manager | Lock File | Security Scan |
+|----------|---------|-----------|---------------|
+| Python | `uv` | `uv.lock` | `pip-audit` |
+| Go | `go mod` | `go.sum` | `go mod verify` |
+| Java | Maven/Gradle | `pom.xml`/`build.gradle` | OWASP Dependency-Check |
+| JS/TS | npm/yarn/pnpm | `package-lock.json` etc. | `npm audit` |
 
-**Go:**
-- Use `go.mod` for dependency management
-- Run `go mod tidy` to clean up dependencies
-- Use `go mod verify` to check integrity
-- Pin versions with specific commits when needed
-
-**Java:**
-- Use Maven (`pom.xml`) or Gradle (`build.gradle`)
-- Specify exact versions for dependencies
-- Use dependency management sections for version control
-- Run OWASP Dependency-Check for security scanning
-
-**JavaScript/TypeScript:**
-- Use `package.json` for dependency declarations
-- Use lock files: `package-lock.json` (npm), `yarn.lock` (Yarn), or `pnpm-lock.yaml` (pnpm)
-- Pin versions or use semantic versioning (^1.2.3, ~1.2.3)
-- Use `npm ci` or `yarn install --frozen-lockfile` for reproducible builds
-- Run `npm audit` or `yarn audit` for security scanning
-
-### Security Scanning
-
-Regularly scan dependencies for vulnerabilities:
-
-```bash
-# Python
-pip-audit
-
-# Go
-go list -json -m all | nancy sleuth
-
-# Java
-mvn dependency-check:check
-
-# JavaScript/TypeScript
-npm audit
-# or
-yarn audit
-```
-
-### Update Strategy
-
-- Review dependency updates regularly
-- Test updates in development before production
-- Read changelogs for breaking changes
-- Use automated tools (Dependabot, Renovate) for update notifications
+**Rules:**
+- Keep dependencies minimal
+- Pin versions for reproducibility
+- Use lock files for all projects
 - Keep security patches up to date immediately
-
-### Best Practices
-
-- Minimize the number of dependencies
-- Avoid dependencies with dependencies (deep dependency trees)
-- Use lock files for reproducible builds
-- Document why each dependency is needed
 - Remove unused dependencies
-- Prefer well-established, widely-used libraries
-- Check license compatibility before adding dependencies
 
 ## Testing
 
-Follow AAA pattern (Arrange, Act, Assert) and language-specific testing frameworks.
-
-### Python Testing (pytest/unittest)
-
-```python
-def test_format_name_with_valid_inputs():
-    """Tests format_name returns properly formatted full name."""
-    result = format_name("john", "doe")
-    assert result == "John Doe"
-
-def test_format_name_raises_error_with_empty_input():
-    """Tests format_name raises ValueError for empty strings."""
-    with pytest.raises(ValueError, match="cannot be empty"):
-        format_name("", "doe")
-```
-
-**File naming:** `test_<module>.py` | **Function naming:** `test_<function>_<scenario>`
-**Location:** `tests/` directory mirroring source structure
-
-### Language-Specific Testing Patterns
+Follow the AAA pattern (Arrange, Act, Assert) in all languages.
 
 | Language | Framework | Test Naming | Key Pattern |
 |----------|-----------|-------------|-------------|
-| **Go** | `testing` | `TestFunctionName` | Table-driven tests with `t.Run()` and Example functions (`func ExampleXxx`) |
-| **Java** | JUnit | `testMethod_scenario` | `@Test`, `@Before`, `@After` annotations |
-| **JS/TS** | Jest/Mocha | `describe`/`it` blocks | Mock with `jest.fn()`, async/await testing |
+| Python | pytest | `test_<function>_<scenario>` | Standalone functions, bare `assert` |
+| Go | testing | `TestFunctionName` | Table-driven with `t.Run()` |
+| Java | JUnit 5 | `method_scenario_result` | `@Test`, `@BeforeEach` |
+| JS/TS | Jest/Vitest | `describe`/`it` blocks | `expect()`, async/await |
 
-**Go:** Use struct slices for test cases, subtests for scenarios, and Example functions for testable documentation.
-**Java:** Use `@Before` for setup, meaningful assertion messages
-**JS/TS:** Use `beforeEach`/`afterEach`, mock external dependencies
-
-### General Best Practices
-
+**Rules:**
 - Test all public functions/methods
-- Test edge cases, error conditions, and both success/failure paths
+- Test both success and failure paths
+- Test edge cases and boundary conditions
 - Keep tests independent and isolated
-- Mock external dependencies
 - One logical assertion per test (when practical)
-- Document complex test scenarios
+- Mock external dependencies, prefer in-memory test data
 
-## Documentation and Diagram Standards
+## Documentation and Diagrams
 
-### README and Documentation Files
+All documentation files must follow the Writing Style rules above.
 
-All documentation files (README.md, guides, etc.) must follow the same writing standards:
-
-- Simple, concise, and professional language
-- No emojis or decorative elements
-- Clear technical explanations
-- Proper grammar and punctuation
-- Consistent formatting and structure
-
-### Diagrams
-
-All diagrams must use Mermaid syntax for consistency and maintainability.
-
-**Requirements:**
-- Use Mermaid for all architectural, flow, and sequence diagrams
-- Clear, descriptive labels without decorative elements
-- Consistent formatting across all diagrams
-- Professional appearance aligned with code standards
-- Include comments in complex diagrams to explain structure
-
-**Example:**
-```mermaid
-graph TD
-    A[Client Request] --> B[API Gateway]
-    B --> C[Authentication Service]
-    C --> D[Business Logic]
-    D --> E[Database]
-    E --> D
-    D --> B
-    B --> A
-```
-
-**Best Practices:**
-- Keep diagrams focused and uncluttered
-- Use meaningful node and edge labels
-- Maintain consistent styling within a project
-- Document diagram purpose in surrounding text
+- Use Mermaid syntax for all architectural, flow, and sequence diagrams
+- Keep diagrams focused and uncluttered with meaningful labels
 - Update diagrams when architecture changes
 
----
-
-These guidelines are based on industry-standard style guides including Google's Python, Go, and Java style guides. Adherence to these standards ensures code quality, maintainability, and consistency across all projects.
+```mermaid
+graph TD
+    A[Client] --> B[API Gateway]
+    B --> C[Auth Service]
+    C --> D[Business Logic]
+    D --> E[Database]
+```

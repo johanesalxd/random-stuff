@@ -8,16 +8,27 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 - **Fail-Fast:** If implementation breaks, stop immediately. Return to Plan Mode and re-evaluate.
 - **Verification:** Use Plan Mode for verification steps, not just building.
 
+## Context Management
+
+- **Task Tracking:** Use TodoWrite to plan and track multi-step tasks. Break complex work into smaller steps and mark progress as you go.
+- **Subagent Delegation:** Delegate codebase exploration, multi-file searches, and independent parallel workstreams to subagents. Keep the main context focused on the primary task.
+- **Context Budget:** Be aware that system prompts, instruction files, and tool definitions consume context. Avoid unnecessary tool calls that return large outputs when a targeted search suffices.
+
 ## Rule Compounding
 
 - **Continuous Learning:** After every correction or mistake, suggest updates to instruction files for user review. Do not modify instruction files without explicit approval.
-- **Project Notes:** Maintain notes for every project/task, updated after every PR or significant change.
 
 ## Verification and Review
 
 - **Self-Testing:** Do not submit PRs until you have challenged your own changes.
-- **Behavioral Diffs:** Prove changes work by diffing behavior between feature branch and main.
-- **Confirmation:** After fixing errors, request explicit user confirmation before rerunning tests.
+- **Regression Check:** Run tests against both main and feature branch to verify no regressions before submitting changes.
+- **Confirmation:** After fixing errors, request explicit user confirmation before rerunning tests or commands.
+
+## Decision Making
+
+- **Ask vs. Assume:** Ask clarifying questions rather than making large assumptions about user intent. Small, obvious decisions can be made autonomously.
+- **Instruction Precedence:** Project-level rules (AGENTS.md in repo) take precedence over global rules when they conflict. Note the conflict and follow the project-level rule.
+- **Uncertainty:** When uncertain about an approach, investigate the codebase first rather than guessing. Use grep, glob, and file reads to gather evidence before proposing solutions.
 
 ## Subagents and Delegation
 
@@ -27,12 +38,11 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 ## Parallelism and Workflows
 
 - Use multiple parallel sessions for independent tasks when available.
-- Use git worktrees to switch contexts without losing state.
-- Create dedicated analysis worktrees for log reading and data queries.
+- Consider git worktrees when working across multiple branches simultaneously.
 
 ## Skill and Tool Promotion
 
-- **Automation Rule:** Any task performed more than once daily should be converted into a reusable skill or command.
+- **Automation Rule:** When the user indicates a task is repetitive, or when a pattern repeats within a session, suggest converting it into a reusable skill or command.
 - **Persistence:** Commit custom skills and commands to git for reuse across projects.
 - **CLI-First:** Prefer CLI tools for data retrieval and system analysis.
 
