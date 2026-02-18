@@ -4,7 +4,7 @@
 > Covers workspace conventions, model strategy, cron architecture, and prompt design.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-02-18
+> **Last updated:** 2026-02-19
 
 ---
 
@@ -145,12 +145,20 @@ isolated agent needs:
 
 ```
 [SYSTEM_DIRECTIVE]    -- Behavioral constraints (atomic execution, no hallucination)
+[CRITICAL]            -- (Optional) Hard delivery/safety guards (e.g., forbidden tokens)
 [TOOLS]               -- Which tools to use (exec commands, native tools)
 [PHASE 1: BOOT]       -- Explicit file reads (absolute paths)
 [PHASE 2: DATA]       -- Numbered atomic steps, one command each
 [PHASE 3: SYNTHESIS]  -- Output format, persona, comparison directives
 [CORE OBJECTIVE]      -- Single-sentence mission
 ```
+
+**`[CRITICAL]` (optional).** Hard constraints that prevent system-level
+failures. Use this for delivery guards (e.g., forbidden tokens that suppress
+output), safety rails, or any constraint where violation breaks the pipeline
+-- not just degrades quality. Keep this section short; one or two lines
+maximum. If you have no delivery or safety concerns, omit this section
+entirely.
 
 ### Atomic Execution Rules
 
@@ -183,6 +191,9 @@ You are a data collection and reporting agent.
 - Execute steps EXACTLY as numbered. Do NOT skip or reorder.
 - Do NOT hallucinate data. If a tool call fails, record [DATA UNAVAILABLE].
 - Use ONLY the tools listed below.
+
+[CRITICAL]: NEVER include the token 'NO_REPLY' in your output.
+Your response MUST be delivered to the user.
 
 [TOOLS]
 - `exec`: For running CLI commands
@@ -227,6 +238,29 @@ Options:
 - Split into separate cron jobs that run at staggered times
 - Reduce the scope of slow tools (fewer feeds, narrower queries)
 - Use Flash with low thinking to minimize model processing time
+
+**Delivery-suppressing tokens in isolated sessions.** Isolated cron agents
+can hallucinate system tokens like `NO_REPLY` at the end of their output.
+In OpenClaw, `NO_REPLY` triggers the delivery system to suppress the message,
+preventing it from reaching the user's Telegram/channel. Always include an
+explicit prohibition in the `[CRITICAL]` block:
+
+```
+[CRITICAL]: NEVER include the token 'NO_REPLY' in your output.
+Your response MUST be delivered to the user.
+```
+
+This is especially important for `announce` delivery mode where silent
+suppression means the report is generated but never delivered.
+
+**Session staleness after major changes.** After making significant
+structural changes to cron payloads or workspace files, start a new agent
+session before evaluating results or making further adjustments. Long
+sessions accumulate stale context -- the agent may reason against outdated
+prompt versions, suggest fixes for already-resolved issues, or recommend
+patterns that contradict changes made earlier in the same session. This
+is particularly dangerous when the agent suggests "fixes" based on the
+pre-edit state of a prompt it helped rewrite.
 
 ---
 
