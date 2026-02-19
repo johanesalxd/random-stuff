@@ -37,3 +37,5 @@ internal/
 
 # Python version management
 .python-version
+
+WORKSPACE_REFERENCE.md
