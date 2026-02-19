@@ -218,6 +218,13 @@ hand-holding — the prompts can be simplified significantly in the next revisio
 at the end of their output. In OpenClaw, `NO_REPLY` suppresses delivery to
 Telegram. Always include the prohibition in `[CRITICAL]`.
 
+**CLI startup warnings are not failures.** Some CLIs print warnings to stdout
+before returning results (e.g., permission errors for cookie stores, missing
+optional dependencies). An isolated agent that sees a warning at the top of
+output may incorrectly mark the step as `[DATA UNAVAILABLE]` and skip valid
+results. For any CLI with known startup noise, add a `[CRITICAL - <TOOL>]`
+block explaining the warning is cosmetic and results should be used if present.
+
 **Session staleness after major changes.** After significant structural changes
 to cron payloads or workspace files, start a new agent session before evaluating
 results. Long sessions accumulate stale context.
@@ -273,27 +280,31 @@ all subsequent content is processed through the lens of the goal.
 
 ## 5. Coding Architecture
 
-### OpenCode Integration
+### Skill-First Approach
 
-Coding tasks use `opencode` via the Anthropic provider. Planning is always
-orchestrator-level — the agent presents a technical plan, user approves, then
-opencode builds.
+Coding tasks are delegated via the **coding-agent skill** rather than raw
+command invocations. The skill owns the HOW (PTY, background mode, process
+monitoring, auto-notify on completion); the orchestrator (AGENTS.md) owns the
+project-level constraints.
 
-```bash
-# Standard build command
-exec pty:true background:true workdir:/path/to/project \
-  command:"opencode run -m anthropic/claude-sonnet-4-6 'task description'"
-```
+**Read the skill's SKILL.md before spawning a coding task.** It contains
+current command syntax, PTY requirements, and background monitoring patterns
+that may change with OpenClaw updates. Hardcoding CLI syntax in AGENTS.md
+creates maintenance debt.
 
-**Key rules:**
-- Planning stays at orchestrator level — never ask opencode to plan AND build in one shot
+**Preferred agent:** `opencode` via Anthropic provider (`claude-sonnet-4-6`, Thinking: Low).
+Other supported agents: Codex, Claude Code (`claude`), Pi.
+
+**Key rules (orchestrator-level — put these in AGENTS.md, not the skill):**
+- Planning stays at orchestrator level — present a plan, get approval, then delegate to skill
 - `git init` always. Local commits only. No `git push` without explicit user action
 - Local unit/functional tests with mocks. No external deps
 - Project root: your preferred git directory (e.g., `~/Developer/git/`)
 
-**opencode config:** `~/.config/opencode/opencode.json`
-- Coding standards file can be auto-loaded as an instruction file
-- Anthropic provider authenticated via Claude Max plan
+**Why skill-first over raw commands:**
+- Skill stays up-to-date with OpenClaw releases (PTY flags, auto-notify pattern, etc.)
+- Decouples orchestrator from implementation detail
+- Single source of truth for HOW; AGENTS.md only carries project constraints
 
 ---
 
@@ -309,6 +320,7 @@ exec pty:true background:true workdir:/path/to/project \
 [ ] Failure handling in SYSTEM_DIRECTIVE ([DATA UNAVAILABLE])
 [ ] Total estimated execution time well under ~120s timeout
 [ ] NO_REPLY guard in [CRITICAL] block for announce delivery jobs
+[ ] For CLIs with known startup warnings, add [CRITICAL - <TOOL>] guard explaining noise
 [ ] Model set appropriately (sonnet or haiku with low thinking)
 ```
 
@@ -353,4 +365,5 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-02-20 | Skill-first coding: Section 5 updated to delegate via coding-agent skill instead of raw opencode command. Added CLI startup warning pattern to Section 3 gotchas and Section 6 checklist. |
 | 2026-02-19 | Initial creation. Forked from `openclaw-gemini-guide.md`. Replaced Gemini model strategy with Anthropic. Updated model assignments, coding architecture, and cron notes to reflect Claude Max migration. |
