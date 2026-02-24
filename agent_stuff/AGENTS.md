@@ -2,6 +2,12 @@
 
 Core behavioral directives for AI coding agents. For code style and formatting, see [CODE_STANDARDS.md](./CODE_STANDARDS.md).
 
+## Project Environment
+
+- **Python:** `uv` exclusively (not pip, poetry, or pip-tools). `pyproject.toml` only (no `requirements.txt`). `ruff` for formatting and linting. `pytest` for tests.
+- **Go:** `gofmt` mandatory. `go test ./...` for tests. `golangci-lint` when available.
+- **Git:** Local commits only. **NO `git push`** — remote operations are user-only. Never push without explicit user instruction.
+
 ## Planning Protocol
 
 - **Plan First:** Start complex tasks in Plan Mode. Focus on logic and architecture before implementation.
