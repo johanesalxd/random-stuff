@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-02-23
+> **Last updated:** 2026-02-25
 
 ---
 
@@ -188,7 +188,7 @@ Recommended assignments across OpenClaw contexts:
 | Conversation (main) | `claude-sonnet-4-6` | Low | Interactive; balanced reasoning and speed |
 | Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; haiku is faster and conserves quota on bounded tasks |
 | Research / Deep analysis | `claude-opus-4-6` | Low | Deep synthesis, multi-step analysis |
-| Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` |
+| Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
 (observed ~120s in practice). For complex multi-step payloads with slow tools
@@ -395,6 +395,14 @@ creates maintenance debt.
 
 **Preferred agent:** `opencode` via Anthropic provider (`claude-sonnet-4-6`, Thinking: Low).
 Other supported agents: Codex, Claude Code (`claude`), Pi.
+
+> **Instance Note (2026-02-23):** Anthropic direct OAuth is broken in this deployment.
+> Working path: **Google Vertex ADC**. Model: `google-vertex-anthropic/claude-sonnet-4-6@default`.
+> Config in `~/.config/opencode/opencode.json`: set your GCP `project` and
+> `location: us-east5` (Claude Sonnet 4.x unavailable in `us-central1` or `global`).
+> Auth via Application Default Credentials (ADC).
+> This is a deployment-specific workaround — the generic Anthropic provider pattern above
+> remains correct for setups where OAuth is functional.
 
 **Key rules (orchestrator-level — put these in AGENTS.md, not the skill):**
 - Planning stays at orchestrator level — present a plan, get approval, then delegate to skill
@@ -614,6 +622,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-02-25 | Instance-specific config notes added (no generic pattern changes). Section 5: added instance note block — Anthropic direct OAuth broken, working path is Google Vertex ADC (`google-vertex-anthropic/claude-sonnet-4-6@default`, `us-east5`). Section 2 model table: linked coding row to Section 5 note. TOOLS.md addition: Gemini CLI section added as a headless analytics proxy layer (taxonomy-correct, no guide changes needed). Confirmed all 7 workspace files aligned to guide taxonomy after audit. |
 | 2026-02-23 | Added QMD memory backend subsection (Section 1): install pattern, config, memory pressure notes, updated L3 tier diagram. Updated model assignment table: haiku confirmed for crons (resolved backlog item). Added two cron gotchas: same-minute scheduling race condition and `agentId: "main"` fragility. Added parallel cron support note (v2026.2.22). Added new Section 6: MCP Tools Integration via mcporter — config pattern, core commands, HTTP/stdio server examples, google-dev-knowledge reference, agent usage pattern. Updated operational checklists. Added QMD + mcporter reference links. Renumbered sections 6→7 (Operational), 7→8 (Reference Links), 8→9 (Revision History). |
 | 2026-02-20 | Skill-first coding: Section 5 updated to delegate via coding-agent skill instead of raw opencode command. Added CLI startup warning pattern to Section 3 gotchas and Section 6 checklist. |
 | 2026-02-19 | Initial creation. Forked from `openclaw-gemini-guide.md`. Replaced Gemini model strategy with Anthropic. Updated model assignments, coding architecture, and cron notes to reflect Claude Max migration. |
