@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-02-25
+> **Last updated:** 2026-02-27
 
 ---
 
@@ -247,6 +247,8 @@ Cron payloads follow this structure, hardcoding everything the isolated agent ne
 
 **`[CRITICAL]` (optional).** Hard constraints that prevent system-level
 failures. Keep short — one or two lines max. Omit if no delivery/safety concerns.
+Multiple `[CRITICAL]` blocks are supported — use `[CRITICAL - <LABEL>]` for
+distinct concerns (e.g., `[CRITICAL - BIRD]`, `[CRITICAL - DELIVERY]`).
 
 ### Atomic Execution Rules
 
@@ -270,10 +272,16 @@ You are a data collection and reporting agent.
 [CRITICAL]: NEVER include the token 'NO_REPLY' in your output.
 Your response MUST be delivered to the user.
 
+[CRITICAL - DELIVERY]: MANDATORY FINAL STEP — After completing Phase 3,
+use the message tool (action=send, channel=<channel>, target=<target>) to
+deliver your full report. Do NOT truncate content.
+delivery.mode: announce is fallback only.
+
 [TOOLS]
 - `exec`: For running CLI commands
 - `web_search`: For internet searches (NATIVE tool, do NOT use exec)
 - `read`: For reading workspace files
+- `message`: For direct channel delivery (action=send, channel=<channel>, target=<target>)
 
 [PHASE 1: BOOT]
 Step 1: Read file at /absolute/path/to/context.md
@@ -329,6 +337,19 @@ directly, regardless of `agentId`.
 **Session staleness after major changes.** After significant structural changes
 to cron payloads or workspace files, start a new agent session before evaluating
 results. Long sessions accumulate stale context.
+
+**Announce delivery silently fails for large outputs (v2026.2.25 regression).**
+The `delivery.mode: announce` path silently fails when cron output exceeds
+Telegram's ~4096 character per-message limit. The delivery falls back to the
+main session as a system message (shown as `deliveryStatus: "delivered"` in
+`cron runs` output — misleadingly marking the main-session fallback, not
+actual channel delivery). Short outputs (e.g., a few lines) continue to work.
+**Fix:** Add `[CRITICAL - DELIVERY]` to the cron prompt instructing the agent
+to call the `message` tool directly as its final step. The `message` tool
+handles chunking natively and is not affected by this regression. Keep
+`delivery.mode: announce` in place as a fallback safety net — if the
+`message` tool send succeeds, announce is skipped automatically (duplicate
+guard); if it fails, the announce fallback still fires.
 
 **Slow tools still dominate runtime.** In complex multi-step crons, execution
 time is driven by tool calls (feed scanners can take 30–40s alone, multiple
@@ -570,6 +591,7 @@ Document active MCP servers in `TOOLS.md` so agents can reference them:
 [ ] Failure handling in SYSTEM_DIRECTIVE ([DATA UNAVAILABLE])
 [ ] Total estimated execution time well under ~120s timeout
 [ ] NO_REPLY guard in [CRITICAL] block for announce delivery jobs
+[ ] [CRITICAL - DELIVERY] block added with message tool instruction (channel + target hardcoded)
 [ ] For CLIs with known startup warnings, add [CRITICAL - <TOOL>] guard explaining noise
 [ ] Model set to haiku with low thinking (confirmed for spoon-fed crons)
 [ ] Schedules staggered ≥15min apart from other crons delivering to the same channel
@@ -622,6 +644,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-02-27 | Section 3: Added `[CRITICAL - DELIVERY]` block to Payload Skeleton and `[TOOLS]` section. Added new Common Gotcha: announce delivery silently fails for large outputs (v2026.2.25 regression) — `message` tool is the reliable fix, `delivery.mode: announce` retained as fallback. Updated `[CRITICAL]` description to document labeled blocks pattern. Added `[CRITICAL - DELIVERY]` to Cron Job Creation Checklist. |
 | 2026-02-25 | Instance-specific config notes added (no generic pattern changes). Section 5: added instance note block — Anthropic direct OAuth broken, working path is Google Vertex ADC (`google-vertex-anthropic/claude-sonnet-4-6@default`, `us-east5`). Section 2 model table: linked coding row to Section 5 note. TOOLS.md addition: Gemini CLI section added as a headless analytics proxy layer (taxonomy-correct, no guide changes needed). Confirmed all 7 workspace files aligned to guide taxonomy after audit. |
 | 2026-02-23 | Added QMD memory backend subsection (Section 1): install pattern, config, memory pressure notes, updated L3 tier diagram. Updated model assignment table: haiku confirmed for crons (resolved backlog item). Added two cron gotchas: same-minute scheduling race condition and `agentId: "main"` fragility. Added parallel cron support note (v2026.2.22). Added new Section 6: MCP Tools Integration via mcporter — config pattern, core commands, HTTP/stdio server examples, google-dev-knowledge reference, agent usage pattern. Updated operational checklists. Added QMD + mcporter reference links. Renumbered sections 6→7 (Operational), 7→8 (Reference Links), 8→9 (Revision History). |
 | 2026-02-20 | Skill-first coding: Section 5 updated to delegate via coding-agent skill instead of raw opencode command. Added CLI startup warning pattern to Section 3 gotchas and Section 6 checklist. |
