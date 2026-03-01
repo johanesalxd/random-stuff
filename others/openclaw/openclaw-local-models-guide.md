@@ -4,6 +4,10 @@
 > Covers hardware selection, configuration, and benchmark results comparing
 > local MoE models against hosted Anthropic models.
 >
+> **For general patterns** (workspace architecture, cron design, prompt
+> engineering, operational checklists) — see the master guide:
+> [OpenClaw + Anthropic Guide](./openclaw-anthropic-guide.md)
+>
 > **OpenClaw docs:** https://docs.openclaw.ai/gateway/local-models
 > **Last updated:** 2026-02-28
 
