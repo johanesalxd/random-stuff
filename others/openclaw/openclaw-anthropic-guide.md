@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-01
+> **Last updated:** 2026-03-01 (v3)
 
 ---
 
@@ -52,12 +52,20 @@ explicitly instruct the agent to read them at session start.
 > within the last 7 days and read the most recent ones. This is more resilient
 > than assuming a daily log exists.
 
+> **STM is the sole source of truth for active tasks (2026-03-01):** Dated memory
+> files (`memory/*.md`) and session transcript logs are **reference/intel records
+> only** — they document what happened, not what is pending. Never infer active
+> tasks or pending work from their content. The only place active tasks live is
+> `short-term-memory.md` (L1 STM). If STM has no `[ACTIVE]` entries, there is
+> nothing pending — regardless of what dated files contain.
+
 ### Content Taxonomy
 
 | Content Type | Belongs In | NOT In |
 |---|---|---|
 | Operational protocols, rules, boot sequence | `AGENTS.md` | ~~MEMORY.md~~ |
-| Curated facts, decisions, lessons learned | `MEMORY.md` | ~~AGENTS.md~~ |
+| Curated facts, decisions, lessons learned (durable, timeless) | `MEMORY.md` | ~~AGENTS.md~~ |
+| Time-bound intel, research outputs, event records | `memory/YYYY-MM-DD.md` | ~~MEMORY.md~~ |
 | Persona, tone, vibe, journaling protocol | `SOUL.md` | |
 | Identity card (name, creature, emoji) | `IDENTITY.md` | |
 | User profile | `USER.md` | |
@@ -419,6 +427,18 @@ No exceptions. These three tools surface different signals: Brave for speed and 
 freshness, Bird for unfiltered social reactions and disinformation detection, Exa for
 semantic match and non-dominant editorial angles.
 
+**Breaking event rule (MANDATORY):** For any breaking event <48h old — fire Brave +
+Bird + Exa as one parallel block. Do not fire Brave-only and call it done. Breaking
+events are where all three signals diverge most: Brave catches wire headlines, Bird
+catches unfiltered reactions and disinformation, Exa surfaces editorial analysis from
+sources Brave doesn't rank highly.
+
+**Query pattern — anchor + angle:** Never fire two near-identical queries in parallel.
+One query anchors the core fact (`event + key actors + outcome`); the parallel query
+chases a specific POV, counter-argument, or data source (`"expert analysis"`,
+`"institutional response"`, `"economic impact"`). Anchor + angle extracts more signal
+from the same number of tool calls.
+
 **Tier 2 — URL extraction, parallel:**
 When you need the full body of a specific article, fire `web_fetch` and
 `exa.crawling_exa` simultaneously. Take whichever returns better content.
@@ -430,6 +450,19 @@ truncates). `web_fetch` is faster on clean, non-paywalled pages.
 > x.com/twitter.com — `web_fetch` returns a login wall, `exa.crawling_exa` is
 > banned by the domain. Bird CLI (Tier 1) is the only correct tool for X content.
 > Do not fire Tier 2 on X.com URLs.
+
+**Proactive content-type trigger (MANDATORY):** Do not wait for a full URL to fire
+Tier 2. When Tier 1 surfaces a snippet from a high-value source — institutional
+reports (RAND, CSIS, Brookings, Pentagon, INSS), paywalled journalism (NYT, FT,
+Foreign Affairs), academic papers — fire `exa.crawling_exa` proactively to extract
+the full document. Snippet-level data from these sources is consistently insufficient
+for synthesis. The proactive trigger is content-type based, not failure-based.
+
+**Deep Research Mode:** In sessions with 3+ research turns requiring depth (geopolitical
+analysis, multi-source synthesis, technical deep-dives) — default every institutional
+source hit to a Tier 2 crawl alongside Tier 1 search. The quality ceiling of
+snippet-only research is meaningfully lower than full-document synthesis for these
+session types.
 
 **Tier 3 — on-demand precision:**
 - `exa.web_search_advanced_exa`: date filters (`startPublishedDate`), domain
@@ -719,6 +752,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-01 (v3) | Section 1: Added STM-as-sole-task-source-of-truth rule (dated files are reference/intel only, not task queues). Clarified Content Taxonomy: time-bound intel/research outputs route to `memory/YYYY-MM-DD.md`, not `MEMORY.md`. Section 4: Added Breaking Event Rule (mandatory Brave+Bird+Exa triple parallel for events <48h old). Added Anchor+Angle query pattern (never two near-identical parallel queries). Added Proactive Content-Type Tier 2 trigger (fire `crawling_exa` on institutional/paywalled sources without waiting for a known URL). Added Deep Research Mode (3+ research turns → default every institutional source to Tier 2 crawl). |
 | 2026-03-01 (v2) | Section 4: Full rewrite of Research Tool Orchestration — upgraded to complete 4-tier architecture. Tier 1: Brave+Bird+Exa search always parallel. Tier 2: web_fetch+crawling_exa parallel URL extraction with X.com exception documented (both tools blocked on x.com, Bird is correct tool). Tier 3: web_search_advanced_exa (precision filters) + company_research_exa (structured company intel) on-demand. Tier 4: Browser with two profiles — profile:openclaw (public JS pages) vs profile:chrome (login-gated, requires Browser Relay attach). Added decision flow pseudocode and orchestrator synthesis rationale. |
 | 2026-03-01 | Section 2: Removed Opus from model strategy — Sonnet is now the default for all roles including research and deep analysis. Simplified Thinking Budget table (removed High tier). Updated Model Assignment Framework table accordingly. Section 1: Updated On-Demand Files boot pattern — replaced hardcoded `YYYY-MM-DD.md` with resilient "scan last 7 days" approach. Section 4: Added Research Tool Orchestration subsection — documents Brave+Bird parallel (Tier 1), Exa for breaking events (Tier 2), web_fetch for verification (Tier 3), Browser for interactive (Tier 4); includes breaking events parallel execution rule and rationale for each tier's placement. |
 | 2026-02-27 | Section 3: Added `[CRITICAL - DELIVERY]` block to Payload Skeleton and `[TOOLS]` section. Added new Common Gotcha: announce delivery silently fails for large outputs (v2026.2.25 regression) — `message` tool is the reliable fix, `delivery.mode: announce` retained as fallback. Updated `[CRITICAL]` description to document labeled blocks pattern. Added `[CRITICAL - DELIVERY]` to Cron Job Creation Checklist. |
