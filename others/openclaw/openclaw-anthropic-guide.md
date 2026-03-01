@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-02-27
+> **Last updated:** 2026-03-01
 
 ---
 
@@ -44,8 +44,13 @@ explicitly instruct the agent to read them at session start.
 
 | Path | Purpose | Access Method | Memory Tier |
 |------|---------|---------------|-------------|
-| `memory/YYYY-MM-DD.md` (recent) | Daily session logs | Boot step (explicit read) | L3 |
+| `memory/*.md` (recent, last 7 days) | Recent session context | Boot step: scan dir, read latest | L3 |
 | `memory/*.md` (older) | Historical journal archive | `memory_search` | L3 |
+
+> **Boot pattern (2026-03-01):** Rather than reading a hardcoded `memory/YYYY-MM-DD.md`
+> path (which may not exist), scan the `memory/` directory for any dated files
+> within the last 7 days and read the most recent ones. This is more resilient
+> than assuming a daily log exists.
 
 ### Content Taxonomy
 
@@ -60,7 +65,7 @@ explicitly instruct the agent to read them at session start.
 | Health check protocol | `HEARTBEAT.md` | |
 | Active project state | `memory/projects.md` | |
 | Transactional task tracking | `short-term-memory.md` | |
-| Daily session journals | `memory/YYYY-MM-DD.md` | |
+| Recent session context | `memory/*.md` (last 7 days) | |
 
 ### Memory Tier Architecture
 
@@ -153,17 +158,19 @@ memory: {
 
 ### Model Comparison
 
-| Aspect | Haiku | Sonnet | Opus |
-|--------|-------|--------|------|
-| Latency | Very low (~1-3s) | Low-Medium (~3-8s) | Higher (~8-20s) |
-| Cost (Max plan) | Included | Included | Included |
-| Instruction-following | Good | Excellent | Excellent |
-| Reasoning depth | Adequate for structured tasks | Strong | Deepest |
-| Best for | Spoon-fed crons, atomic steps | Conversation, orchestration, synthesis | Complex multi-step analysis |
+| Aspect | Haiku | Sonnet |
+|--------|-------|--------|
+| Latency | Very low (~1-3s) | Low-Medium (~3-8s) |
+| Cost (Max plan) | Included | Included |
+| Instruction-following | Good | Excellent |
+| Reasoning depth | Adequate for structured tasks | Strong — sufficient for conversation, research, and synthesis |
+| Best for | Spoon-fed crons, atomic steps | Everything else: conversation, orchestration, analysis, research |
 
 **Claude Max plan note:** On Claude Max, cost-per-call is not the primary
-concern — execution time and quality are. However, haiku is still preferable
-for timeout-constrained cron jobs because it's faster, not cheaper.
+concern — execution time and quality are. Haiku is preferable for
+timeout-constrained cron jobs because it's faster, not cheaper. Sonnet
+handles all other roles including deep research and synthesis — no need
+to reach for a heavier model.
 
 ### Thinking Budget Levels
 
@@ -171,13 +178,12 @@ Claude models support configurable thinking budgets.
 
 | Level | When to Use | Trade-off |
 |-------|-------------|-----------|
-| Low | Cron jobs, atomic tool calls, spoon-fed prompts | Fastest. Sufficient when the prompt does the thinking for the model. |
-| Medium | Interactive conversation, moderate ambiguity | Good balance for reasoning through unclear tasks. |
-| High | Complex multi-step analysis, research synthesis | Slowest. Use when the model must reason deeply, not just execute. |
+| Low | Cron jobs, atomic tool calls, spoon-fed prompts, most conversation | Fastest. Sufficient when the prompt does the thinking for the model. |
+| Medium | Genuine ambiguity, multi-source conflict resolution, orchestration decisions with real stakes | Good balance for reasoning through unclear tasks. |
 
-**Rule of thumb:** If the prompt already tells the model exactly what to do
-step-by-step, low thinking is sufficient. Save medium/high for tasks where
-the model must determine *what* to do, not just *how*.
+**Rule of thumb:** Low thinking covers the vast majority of tasks. Escalate
+to medium only when the model must determine *what* to do (ambiguous
+orchestration, conflicting data sources) — not just *how* to do it.
 
 ### Model Assignment Framework
 
@@ -186,8 +192,8 @@ Recommended assignments across OpenClaw contexts:
 | Context | Model | Thinking | Rationale |
 |---------|-------|----------|-----------|
 | Conversation (main) | `claude-sonnet-4-6` | Low | Interactive; balanced reasoning and speed |
+| Research / Deep analysis | `claude-sonnet-4-6` | Low | Sonnet handles multi-source synthesis and complex analysis without needing a heavier model |
 | Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; haiku is faster and conserves quota on bounded tasks |
-| Research / Deep analysis | `claude-opus-4-6` | Low | Deep synthesis, multi-step analysis |
 | Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
@@ -201,14 +207,6 @@ cron jobs. The payloads already encode all reasoning — the model just executes
 step-by-step. Haiku performs equivalently to sonnet on structured execution
 tasks while being meaningfully faster, which reduces timeout risk on
 longer-running crons.
-
-### When to Escalate Thinking Level
-
-- **Sonnet + medium/high:** Genuine ambiguity, multi-source conflict resolution,
-  orchestration decisions with real stakes (financial, config changes).
-- **Opus:** Reserve for truly complex synthesis tasks. Rare, explicit request only.
-- **Never escalate for crons:** The prompt structure handles complexity; model
-  reasoning budget is wasted on structured execution tasks.
 
 ---
 
@@ -397,6 +395,39 @@ structured per step. Token overhead adds latency for marginal quality gain.
 State the core objective at the very top of the prompt, before data or tool calls.
 The Spoon-Feeding Pattern already does this via `[SYSTEM_DIRECTIVE]`. This ensures
 all subsequent content is processed through the lens of the goal.
+
+### Research Tool Orchestration
+
+For research-heavy tasks (news analysis, geopolitical events, market data),
+tool selection and sequencing significantly impacts output quality. The recommended
+pattern is **parallel multi-source ingestion** followed by a single synthesis pass.
+
+**Tiered research stack:**
+
+| Tier | Tools | When to Use |
+|------|-------|-------------|
+| 1 (always parallel) | Brave Search (`web_search`) + Bird CLI (`bird search` / `bird thread`) | Every research query. Brave for raw news/URLs; Bird for real-time social sentiment and on-the-ground reactions. |
+| 2 (breaking events) | Exa (`mcp-tools` skill — `exa.web_search_exa`) | Run in parallel with Tier 1 for geopolitical events, market analysis, breaking news. Exa's semantic matching surfaces sources and editorial angles keyword search misses. |
+| 3 (verification) | `web_fetch` | Deep page extraction when full article body is needed beyond snippets. |
+| 4 (interactive) | Browser (`profile:openclaw`) | JS-heavy pages and interactive flows only. |
+
+**Breaking events rule:** Fire Tier 1 + Tier 2 in a single parallel tool call
+block. Do not wait for one to complete before starting the others. Parallelism
+is not optional for time-sensitive analysis — sequential execution introduces
+recency bias (earlier sources dominate synthesis).
+
+**Why Bird at Tier 1:** Social signals often surface damage assessments,
+eyewitness reports, and counter-narratives faster than wire services. Running
+Bird in parallel with Brave catches these signals before they're filtered
+through editorial. This also surfaces disinformation early — recycled footage,
+fabricated timestamps, and false attribution are frequently debunked in
+real-time in social threads.
+
+**Why Exa at Tier 2 (not Tier 1):** Exa is semantic-first. For general/routine
+queries, Brave's keyword index is faster and sufficient. Exa's value emerges
+on breaking events where editorial framing diverges across outlets — Exa
+surfaces that diversity where Brave returns the dominant narrative. For
+routine queries (weather, simple facts), skip Exa entirely.
 
 ---
 
@@ -644,6 +675,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-01 | Section 2: Removed Opus from model strategy — Sonnet is now the default for all roles including research and deep analysis. Simplified Thinking Budget table (removed High tier). Updated Model Assignment Framework table accordingly. Section 1: Updated On-Demand Files boot pattern — replaced hardcoded `YYYY-MM-DD.md` with resilient "scan last 7 days" approach. Section 4: Added Research Tool Orchestration subsection — documents Brave+Bird parallel (Tier 1), Exa for breaking events (Tier 2), web_fetch for verification (Tier 3), Browser for interactive (Tier 4); includes breaking events parallel execution rule and rationale for each tier's placement. |
 | 2026-02-27 | Section 3: Added `[CRITICAL - DELIVERY]` block to Payload Skeleton and `[TOOLS]` section. Added new Common Gotcha: announce delivery silently fails for large outputs (v2026.2.25 regression) — `message` tool is the reliable fix, `delivery.mode: announce` retained as fallback. Updated `[CRITICAL]` description to document labeled blocks pattern. Added `[CRITICAL - DELIVERY]` to Cron Job Creation Checklist. |
 | 2026-02-25 | Instance-specific config notes added (no generic pattern changes). Section 5: added instance note block — Anthropic direct OAuth broken, working path is Google Vertex ADC (`google-vertex-anthropic/claude-sonnet-4-6@default`, `us-east5`). Section 2 model table: linked coding row to Section 5 note. TOOLS.md addition: Gemini CLI section added as a headless analytics proxy layer (taxonomy-correct, no guide changes needed). Confirmed all 7 workspace files aligned to guide taxonomy after audit. |
 | 2026-02-23 | Added QMD memory backend subsection (Section 1): install pattern, config, memory pressure notes, updated L3 tier diagram. Updated model assignment table: haiku confirmed for crons (resolved backlog item). Added two cron gotchas: same-minute scheduling race condition and `agentId: "main"` fragility. Added parallel cron support note (v2026.2.22). Added new Section 6: MCP Tools Integration via mcporter — config pattern, core commands, HTTP/stdio server examples, google-dev-knowledge reference, agent usage pattern. Updated operational checklists. Added QMD + mcporter reference links. Renumbered sections 6→7 (Operational), 7→8 (Reference Links), 8→9 (Revision History). |
