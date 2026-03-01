@@ -401,33 +401,77 @@ all subsequent content is processed through the lens of the goal.
 For research-heavy tasks (news analysis, geopolitical events, market data),
 tool selection and sequencing significantly impacts output quality. The recommended
 pattern is **parallel multi-source ingestion** followed by a single synthesis pass.
+The orchestrating agent decides which tiers to fire and aggregates all results
+into one coherent answer — the user sees only the synthesis, not the raw tool outputs.
 
-**Tiered research stack:**
+**4-Tier research stack:**
 
-| Tier | Tools | When to Use |
-|------|-------|-------------|
-| 1 (always parallel) | Brave Search (`web_search`) + Bird CLI (`bird search` / `bird thread`) | Every research query. Brave for raw news/URLs; Bird for real-time social sentiment and on-the-ground reactions. |
-| 2 (breaking events) | Exa (`mcp-tools` skill — `exa.web_search_exa`) | Run in parallel with Tier 1 for geopolitical events, market analysis, breaking news. Exa's semantic matching surfaces sources and editorial angles keyword search misses. |
-| 3 (verification) | `web_fetch` | Deep page extraction when full article body is needed beyond snippets. |
-| 4 (interactive) | Browser (`profile:openclaw`) | JS-heavy pages and interactive flows only. |
+| Tier | Tools | Mode | When to Use |
+|------|-------|------|-------------|
+| 1 | Brave (`web_search`) + Bird CLI + `exa.web_search_exa` | Always parallel | Every query. Brave=keyword/news, Bird=social signals, Exa=semantic/editorial diversity |
+| 2 | `web_fetch` + `exa.crawling_exa` | Parallel, on-demand | When full article body is needed from a known URL. Both fire simultaneously. |
+| 3 | `exa.web_search_advanced_exa` + `exa.company_research_exa` | On-demand, not parallel by default | Precision filters (date/domain/category) or structured company intel |
+| 4 | Browser (`profile:openclaw` / `profile:chrome`) | On-demand, last resort | JS-rendered pages, interactive flows, login-gated dashboards |
 
-**Breaking events rule:** Fire Tier 1 + Tier 2 in a single parallel tool call
-block. Do not wait for one to complete before starting the others. Parallelism
-is not optional for time-sensitive analysis — sequential execution introduces
-recency bias (earlier sources dominate synthesis).
+**Tier 1 — always parallel:**
+Fire Brave + Bird + `exa.web_search_exa` simultaneously on every research query.
+No exceptions. These three tools surface different signals: Brave for speed and news
+freshness, Bird for unfiltered social reactions and disinformation detection, Exa for
+semantic match and non-dominant editorial angles.
 
-**Why Bird at Tier 1:** Social signals often surface damage assessments,
-eyewitness reports, and counter-narratives faster than wire services. Running
-Bird in parallel with Brave catches these signals before they're filtered
-through editorial. This also surfaces disinformation early — recycled footage,
-fabricated timestamps, and false attribution are frequently debunked in
-real-time in social threads.
+**Tier 2 — URL extraction, parallel:**
+When you need the full body of a specific article, fire `web_fetch` and
+`exa.crawling_exa` simultaneously. Take whichever returns better content.
+`exa.crawling_exa` handles paywalled and JS-heavy pages better than `web_fetch`
+(e.g. bypasses Reuters 401 errors, returns complete Medium articles where `web_fetch`
+truncates). `web_fetch` is faster on clean, non-paywalled pages.
 
-**Why Exa at Tier 2 (not Tier 1):** Exa is semantic-first. For general/routine
-queries, Brave's keyword index is faster and sufficient. Exa's value emerges
-on breaking events where editorial framing diverges across outlets — Exa
-surfaces that diversity where Brave returns the dominant narrative. For
-routine queries (weather, simple facts), skip Exa entirely.
+> **X.com exception:** Both `web_fetch` and `exa.crawling_exa` are blocked on
+> x.com/twitter.com — `web_fetch` returns a login wall, `exa.crawling_exa` is
+> banned by the domain. Bird CLI (Tier 1) is the only correct tool for X content.
+> Do not fire Tier 2 on X.com URLs.
+
+**Tier 3 — on-demand precision:**
+- `exa.web_search_advanced_exa`: date filters (`startPublishedDate`), domain
+  restrictions (`includeDomains`), category filters (`"news"`, `"financial report"`,
+  `"research paper"`). Trigger when precision matters more than speed.
+- `exa.company_research_exa`: structured company profile — headcount, funding
+  history, tech stack, competitors, key executives. Trigger on explicit due diligence
+  questions. NOT for breaking news about a company (Tier 1 covers that).
+
+**Tier 4 — interactive/visual, last resort:**
+- `profile:openclaw`: isolated browser, no saved logins. Use for public JS-rendered
+  pages where lower tiers return empty content — e.g. live trading charts, SPAs,
+  public dashboards with dynamic content.
+- `profile:chrome`: your active Chrome session with existing cookies. Use for
+  login-gated pages. Requires the user to attach the tab via the Browser Relay
+  toolbar button first.
+
+**Decision flow:**
+```
+Any query →
+  Always fire Tier 1 (Brave + Bird + Exa search) in parallel
+
+  Need full article from a URL?
+  → Fire Tier 2 (web_fetch + crawling_exa) in parallel
+  → URL is X.com? → Skip Tier 2, Bird already covered it in Tier 1
+
+  Need date/domain/category precision?
+  → Fire web_search_advanced_exa (Tier 3)
+
+  Need company structure/funding/headcount?
+  → Fire company_research_exa (Tier 3)
+
+  Content is JS-rendered or requires login?
+  → Fire Browser (Tier 4)
+  → Needs session auth? → profile:chrome, user must attach tab
+```
+
+**Why the orchestrator synthesizes, not the tools:**
+The agent fires all relevant tiers, reads all results, and delivers one coherent
+answer. This mirrors the experience of products like Google AI Mode or Exa Deep
+Research, but with added context-awareness (user history, prior decisions) and
+social signal integration via Bird that neither product provides natively.
 
 ---
 
@@ -675,6 +719,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-01 (v2) | Section 4: Full rewrite of Research Tool Orchestration — upgraded to complete 4-tier architecture. Tier 1: Brave+Bird+Exa search always parallel. Tier 2: web_fetch+crawling_exa parallel URL extraction with X.com exception documented (both tools blocked on x.com, Bird is correct tool). Tier 3: web_search_advanced_exa (precision filters) + company_research_exa (structured company intel) on-demand. Tier 4: Browser with two profiles — profile:openclaw (public JS pages) vs profile:chrome (login-gated, requires Browser Relay attach). Added decision flow pseudocode and orchestrator synthesis rationale. |
 | 2026-03-01 | Section 2: Removed Opus from model strategy — Sonnet is now the default for all roles including research and deep analysis. Simplified Thinking Budget table (removed High tier). Updated Model Assignment Framework table accordingly. Section 1: Updated On-Demand Files boot pattern — replaced hardcoded `YYYY-MM-DD.md` with resilient "scan last 7 days" approach. Section 4: Added Research Tool Orchestration subsection — documents Brave+Bird parallel (Tier 1), Exa for breaking events (Tier 2), web_fetch for verification (Tier 3), Browser for interactive (Tier 4); includes breaking events parallel execution rule and rationale for each tier's placement. |
 | 2026-02-27 | Section 3: Added `[CRITICAL - DELIVERY]` block to Payload Skeleton and `[TOOLS]` section. Added new Common Gotcha: announce delivery silently fails for large outputs (v2026.2.25 regression) — `message` tool is the reliable fix, `delivery.mode: announce` retained as fallback. Updated `[CRITICAL]` description to document labeled blocks pattern. Added `[CRITICAL - DELIVERY]` to Cron Job Creation Checklist. |
 | 2026-02-25 | Instance-specific config notes added (no generic pattern changes). Section 5: added instance note block — Anthropic direct OAuth broken, working path is Google Vertex ADC (`google-vertex-anthropic/claude-sonnet-4-6@default`, `us-east5`). Section 2 model table: linked coding row to Section 5 note. TOOLS.md addition: Gemini CLI section added as a headless analytics proxy layer (taxonomy-correct, no guide changes needed). Confirmed all 7 workspace files aligned to guide taxonomy after audit. |
