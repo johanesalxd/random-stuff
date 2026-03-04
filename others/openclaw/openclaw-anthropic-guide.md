@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-01 (v3)
+> **Last updated:** 2026-03-04 (v4)
 
 ---
 
@@ -44,13 +44,13 @@ explicitly instruct the agent to read them at session start.
 
 | Path | Purpose | Access Method | Memory Tier |
 |------|---------|---------------|-------------|
-| `memory/*.md` (recent, last 7 days) | Recent session context | Boot step: scan dir, read latest | L3 |
+| `memory/*.md` (recent, last 48h) | Recent session context | Boot step: read today's + yesterday's dated file | L3 |
 | `memory/*.md` (older) | Historical journal archive | `memory_search` | L3 |
 
-> **Boot pattern (2026-03-01):** Rather than reading a hardcoded `memory/YYYY-MM-DD.md`
-> path (which may not exist), scan the `memory/` directory for any dated files
-> within the last 7 days and read the most recent ones. This is more resilient
-> than assuming a daily log exists.
+> **Boot pattern (2026-03-04):** Read today's and yesterday's main dated files
+> (`memory/YYYY-MM-DD.md`) if they exist. If none within 48h, read the single
+> most recent one. Sub-files (e.g. `2026-03-02-session-name.md`) are auto-generated
+> session transcripts — skip at boot, available via `memory_search` if needed.
 
 > **STM is the sole source of truth for active tasks (2026-03-01):** Dated memory
 > files (`memory/*.md`) and session transcript logs are **reference/intel records
@@ -66,6 +66,7 @@ explicitly instruct the agent to read them at session start.
 | Operational protocols, rules, boot sequence | `AGENTS.md` | ~~MEMORY.md~~ |
 | Curated facts, decisions, lessons learned (durable, timeless) | `MEMORY.md` | ~~AGENTS.md~~ |
 | Time-bound intel, research outputs, event records | `memory/YYYY-MM-DD.md` | ~~MEMORY.md~~ |
+| Archived detail from context optimization | `memory/YYYY-MM-DD-memory-archive.md` | ~~MEMORY.md~~ |
 | Persona, tone, vibe, journaling protocol | `SOUL.md` | |
 | Identity card (name, creature, emoji) | `IDENTITY.md` | |
 | User profile | `USER.md` | |
@@ -73,7 +74,7 @@ explicitly instruct the agent to read them at session start.
 | Health check protocol | `HEARTBEAT.md` | |
 | Active project state | `memory/projects.md` | |
 | Transactional task tracking | `short-term-memory.md` | |
-| Recent session context | `memory/*.md` (last 7 days) | |
+| Recent session context | `memory/*.md` (last 48h) | |
 
 ### Memory Tier Architecture
 
@@ -161,6 +162,122 @@ memory: {
 - **Health check:** Use `openclaw memory status` — not `qmd status`. The `qmd` CLI maintains a separate database (`~/.cache/qmd/`) unrelated to the OpenClaw-managed instance (`~/.openclaw/agents/main/qmd/`). Only `openclaw memory status` reflects what actually powers `memory_search`. Key fields to check: `provider: "qmd"`, `dirty: false`, `files > 0`.
 - **Memory pressure (constrained hardware):** On 8 GB unified memory systems, QMD GGUF models add ~1–1.5 GB when loaded. Set `interval: "10m"` (vs default 5 m) to reduce background refresh pressure. macOS compresses inactive pages before touching SSD swap.
 
+#### QMD Query Strategy (Memory-Constrained Models)
+
+QMD's BM25 semantic search layer prefers **short, keyword-driven queries
+(2–4 words)**. Verbose multi-part queries or boolean-style logic fail
+silently — returning 0 results without error. This is not a bug; it's how
+BM25 tokenization works.
+
+**The failure mode:** An agent issues a complex query like
+`"memory architecture BM25 search configuration state directory"` →
+QMD returns 0 results → the agent assumes the data doesn't exist and
+reports "not found." The data is there; the query pattern is wrong.
+
+**Workaround:** Break complex recall needs into 2–3 atomic searches:
+- ❌ `"memory architecture BM25 search configuration state directory"`
+- ✅ `"QMD config"` + `"memory indexing"` (separate searches)
+
+**Why this matters for haiku/sonnet-class models:** These models have tighter
+effective context budgets than opus-class. Tighter queries = faster QMD
+lookups + more room for task context in the window. This strategy is also
+critical for cron agents and sub-agents that receive minimal boot context.
+
+**Practical guidance for AGENTS.md:** Add a mid-session recall rule — when
+the user asks about a prior decision or config that isn't in the current
+injection window, fire `memory_search` with short keyword queries before
+answering. If 0 results on first attempt, refire with different keywords
+before concluding the data is missing.
+
+### Context Optimization & Memory Compaction
+
+As workspace memory grows over weeks of use, boot context bloats —
+eventually causing **silent truncation** of injected files. OpenClaw has
+a per-file injection limit (~18KB for MEMORY.md). Content beyond that
+limit is silently dropped, meaning the agent loses access to lessons
+and decisions without any error.
+
+**Targets:**
+- Boot context (all auto-injected files): **< 60KB**
+- MEMORY.md: **< 15KB** (well under the ~18KB injection limit)
+- Zero truncation of any injected file
+
+**The Archive Convention:**
+
+When MEMORY.md or other injected files grow too large, move detailed
+content to dated archive files:
+
+```
+memory/YYYY-MM-DD-memory-archive.md
+```
+
+These archives are NOT injected on every turn, but remain fully searchable
+via `memory_search` (QMD indexes all files in `memory/`). This preserves
+access while reducing boot context.
+
+**Compaction Workflow (Distill & Flush):**
+
+When transactional state (STM) becomes bloated or a session involves
+many decisions, execute this compaction sequence:
+
+1. Write any active discussion or decision-in-flight → STM as a new
+   `## Active Context: <Topic>` section
+2. Move settled lessons, behavioral rules, tool quirks →
+   `MEMORY.md` (Lessons Learned). Only durable, timeless content.
+3. Move time-bound intelligence, research outputs, event records →
+   `memory/YYYY-MM-DD.md` (today's date). Dated snapshots, not permanent.
+4. Move project-specific outcomes, status changes →
+   `memory/projects.md`
+5. Trim STM: remove `[DONE]` tasks older than 2–3 entries, stale notes
+6. Confirm to user. Fresh session boot reconstructs from distilled files.
+
+**Measurement:** Use `wc -c` on all workspace files to measure actual
+boot context size. Run periodically (weekly or when sessions feel sluggish).
+
+### Session Reset Configuration
+
+OpenClaw supports automatic session resets to prevent stale context
+accumulation. Configuration lives at the **top level** of
+`~/.openclaw/openclaw.json` — NOT inside `agents.defaults`.
+
+```json5
+// ✅ Correct — top level
+{
+  "session": {
+    "reset": {
+      "mode": "idle",        // or "daily"
+      "idleMinutes": 2880    // only for mode: "idle"
+      // "atHour": 4         // only for mode: "daily" (24h format, local tz)
+    }
+  }
+}
+
+// ❌ Wrong — inside agents.defaults (silently ignored)
+{
+  "agents": {
+    "defaults": {
+      "session": { "reset": { ... } }  // does nothing
+    }
+  }
+}
+```
+
+**Available modes:**
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `daily` | Resets at `atHour` (default: 4 AM local time) every day | Predictable daily fresh start |
+| `idle` | Resets after `idleMinutes` of no messages | Preserves active sessions, clears stale ones |
+
+There is no `"none"` or `"manual"` mode. If you want minimal resets,
+use `idle` with a high `idleMinutes` value (e.g., 2880 = 2 days).
+
+**Model override scoping:** Model overrides set via `/model` or
+`session_status` are **session-scoped** — they do not persist across
+resets. Only `agents.defaults.model.primary` in `openclaw.json`
+survives a session reset. Plan accordingly when temporarily switching
+models.
+
 ---
 
 ## 2. Anthropic Model Strategy
@@ -183,16 +300,22 @@ to reach for a heavier model.
 
 ### Thinking Budget Levels
 
-Claude models support configurable thinking budgets.
+Claude models support configurable thinking budgets. As of OpenClaw
+v2026.3.1, **adaptive thinking is the default** for Claude 4.6 models.
+If you have no explicit `thinking` setting in your config, your agent
+is running adaptive (variable token usage per turn).
 
 | Level | When to Use | Trade-off |
 |-------|-------------|-----------|
-| Low | Cron jobs, atomic tool calls, spoon-fed prompts, most conversation | Fastest. Sufficient when the prompt does the thinking for the model. |
+| Low | Cron jobs, atomic tool calls, spoon-fed prompts, most conversation | Fastest. Sufficient when the prompt does the thinking for the model. Explicit `thinking: low` in config overrides the adaptive default. |
 | Medium | Genuine ambiguity, multi-source conflict resolution, orchestration decisions with real stakes | Good balance for reasoning through unclear tasks. |
+| Adaptive (default) | No explicit config set | Model decides per-turn. Can consume more tokens than `low` on simple tasks. Set `thinking: low` explicitly if you want predictable token usage. |
 
-**Rule of thumb:** Low thinking covers the vast majority of tasks. Escalate
-to medium only when the model must determine *what* to do (ambiguous
-orchestration, conflicting data sources) — not just *how* to do it.
+**Rule of thumb:** Low thinking covers the vast majority of tasks. Set
+`thinking: low` explicitly in your config unless you specifically want
+the model to self-regulate thinking depth. Escalate to medium only when
+the model must determine *what* to do (ambiguous orchestration, conflicting
+data sources) — not just *how* to do it.
 
 ### Model Assignment Framework
 
@@ -363,6 +486,32 @@ time is driven by tool calls (feed scanners can take 30–40s alone, multiple
 web searches compound), not model latency. Model switches don't fix timeout
 risk — prompt optimisation and step reduction do.
 
+### Sub-agent Permission Boundary
+
+When using `sessions_spawn` for ad-hoc sub-agents (research tasks, data
+collection, parallel analysis), enforce a **READ/COMPUTE ONLY** boundary.
+
+**The risk:** Sub-agents inherit tool access. Without explicit constraints,
+a sub-agent can send emails, post to social media, delete files, or mutate
+external state — all without the orchestrator's Plan & Execute approval gate.
+
+**Rules:**
+
+1. Every `sessions_spawn` touching write-capable tools MUST include an
+   explicit constraint in the task prompt:
+   `"DO NOT delete, send, modify, or take any external action. Read and report ONLY."`
+
+2. If a task requires both read AND write: sub-agent returns results,
+   orchestrator executes the write step directly (where Plan & Execute applies).
+
+3. Write/action tasks (email sends, state changes, file deletes, outbound
+   messages) MUST stay with the orchestrator — never delegated to sub-agents.
+
+**Why this matters:** The orchestrator's approval gate (present plan → user
+says "Go" → execute) is the primary safety mechanism for external actions.
+Sub-agents bypass this gate entirely. The permission boundary ensures
+sub-agents can't take irreversible actions without human oversight.
+
 ---
 
 ## 4. Prompt Architecture Considerations
@@ -506,6 +655,73 @@ The agent fires all relevant tiers, reads all results, and delivers one coherent
 answer. This mirrors the experience of products like Google AI Mode or Exa Deep
 Research, but with added context-awareness (user history, prior decisions) and
 social signal integration via Bird that neither product provides natively.
+
+### Deep Analysis Protocol (Tenth Man Pattern)
+
+For high-stakes research where consensus might mask blind spots, the
+**Tenth Man pattern** uses a skeptical sub-agent to challenge the
+orchestrator's synthesis before delivery.
+
+**When to use:** Manual trigger only — for topics where getting it wrong
+has real consequences (investment decisions, geopolitical assessments,
+architectural choices). Not for routine research.
+
+**Architecture:**
+
+```
+Orchestrator                          Tenth Man (sub-agent)
+    │                                       │
+    ├── Run full tiered research            │
+    │   (Tier 1 mandatory,                  │
+    │    Tier 2 FORCED on key sources)      │
+    │                                       │
+    ├── Synthesize from full content        │
+    │                                       │
+    ├── Identify 3 claims to challenge      │
+    │                                       │
+    ├── Spawn sub-agent ─────────────────► Receives:
+    │                                       - Full synthesis
+    │                                       - Source list
+    │                                       - 3 specific claims
+    │                                       │
+    │                                       ├── web_search for counter-evidence
+    │                                       │
+    │                                       └── Returns severity table:
+    │                                           claim / severity [HIGH/MED/LOW]
+    │                                           + bullet detail per claim
+    │                                       │
+    ◄── Receives Tenth Man report ──────────┘
+    │
+    ├── Revise synthesis where warranted
+    │   (dismiss with explicit reasoning
+    │    if challenges are weak)
+    │
+    └── Deliver with confidence tag:
+        [HIGH CONFIDENCE / MEDIUM CONFIDENCE / CONTESTED]
+```
+
+**Key implementation details:**
+
+1. **Tier 2 checkpoint (MANDATORY before synthesis):** Do NOT spawn the
+   Tenth Man until Tier 2 crawls complete or explicitly timeout. Synthesis
+   built on snippets alone produces weaker claims that are easier to
+   challenge — but that's testing the research depth, not the conclusion.
+
+2. **Spoon-fed sub-agent prompts:** Include the FULL synthesis text,
+   complete source list, and the 3 specific claims in the spawn payload.
+   Sub-agents are dumb pipes — they should not need to re-derive context.
+
+3. **Orchestrator labels sources inline:** During synthesis, tag each
+   source with its institutional context (e.g., "VinaCapital, fund manager
+   with bullish bias on Vietnam assets"). Bias identification is
+   orchestrator work, not sub-agent pre-loading.
+
+4. **Sub-agent timeout:** Use `runTimeoutSeconds: 150`. Count N spawned,
+   deliver when N events received regardless of success/timeout status.
+
+5. **Message splitting:** For channel delivery (e.g., Telegram), split
+   final output into sequential messages ≤3,500 chars each, labeled
+   (1/N), (2/N). Never send a single synthesis block over 3,500 chars.
 
 ---
 
@@ -654,6 +870,59 @@ mcporter call "google-dev-knowledge.search_documents" query="Cloud Run cold star
 mcporter call "google-dev-knowledge.get_document" id="<document-id>"
 ```
 
+### Example: Financial Data MCP Server
+
+The [Financial Datasets MCP](https://financialdatasets.ai/) provides
+structured financial data for US stocks and crypto — income statements,
+balance sheets, SEC filings, earnings, and live/historical crypto prices.
+
+**Config (`<workspace>/config/mcporter.json`):**
+
+```json
+{
+  "mcpServers": {
+    "financial-datasets": {
+      "baseUrl": "https://mcp.financialdatasets.ai/api",
+      "headers": {
+        "Authorization": "Bearer YOUR_FINANCIAL_DATASETS_API_KEY"
+      }
+    }
+  }
+}
+```
+
+**Key tools (13 total):**
+
+| Tool | Description |
+|------|-------------|
+| `getIncomeStatement` | Annual/quarterly/TTM income statements |
+| `getBalanceSheet` | Balance sheet data |
+| `getCashFlowStatement` | Cash flow statements |
+| `getFinancialMetrics` | P/E, EV, profitability ratios, valuation |
+| `getSegmentedRevenues` | Revenue breakdown by segment/geography |
+| `getNews` | Company news + press releases by ticker |
+| `getFilings` / `getFilingItems` | SEC 10-K, 10-Q, 8-K full text + structured |
+| `getCompanyFacts` | Market cap, employees, sector, exchange |
+| `getCryptoPriceSnapshot` | Live crypto price (BTC, ETH, etc.) |
+| `getCryptoPrices` | Historical crypto prices with interval |
+
+**Usage:**
+
+```bash
+# Income statement (last 4 annual periods)
+mcporter call "financial-datasets.getIncomeStatement(ticker: \"GOOGL\", period: \"annual\", limit: 4)"
+
+# Live BTC price
+mcporter call "financial-datasets.getCryptoPriceSnapshot(ticker: \"BTC-USD\")"
+
+# Financial metrics (TTM)
+mcporter call "financial-datasets.getFinancialMetrics(ticker: \"AAPL\", period: \"ttm\", limit: 1)"
+```
+
+**Note:** This is a PAYG (pay-as-you-go) API. Load credits before use.
+Not recommended for cron polling loops — use on-demand for interactive
+analysis sessions.
+
 ### Using MCP Tools in Agent Context
 
 Once configured, reference MCP tools in cron payloads or interactive tasks
@@ -715,12 +984,15 @@ Document active MCP servers in `TOOLS.md` so agents can reference them:
 [ ] SOUL.md references to AGENTS.md match actual section headers
 [ ] SOUL.md Distill & Flush targets exist (MEMORY.md, memory/projects.md)
 [ ] MEMORY.md decisions log updated with any architectural changes
+[ ] MEMORY.md size < 15KB (check with wc -c; prevent injection truncation)
 [ ] memory/projects.md backlog is current
 [ ] Cron job absolute paths match actual file locations
 [ ] Cron job model assignments match AGENTS.md model section
 [ ] Active skill roster reflects current active/disabled skills
 [ ] QMD binary accessible (if enabled): run memory_search and confirm provider: "qmd"
 [ ] MCP server configs in mcporter.json verified with mcporter list
+[ ] Session reset config at top level of openclaw.json (not agents.defaults)
+[ ] Total boot context < 60KB (measure with wc -c on all workspace files)
 ```
 
 ### CLI Tool Version Upgrades
@@ -746,6 +1018,7 @@ When upgrading tools used in cron jobs:
 | Memory (QMD backend) | https://docs.openclaw.ai/concepts/memory |
 | mcporter | http://mcporter.dev |
 | QMD (Tobi Lütke) | https://github.com/tobi/qmd |
+| Financial Datasets MCP | https://financialdatasets.ai/ |
 
 ---
 
@@ -753,6 +1026,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-04 (v4) | **Section 1:** Added QMD Query Strategy subsection — BM25 prefers 2–4 word keyword queries; verbose queries fail silently; workaround is atomic search splits; critical for haiku/sonnet-class models. Added Context Optimization & Memory Compaction subsection — archive convention (`memory/YYYY-MM-DD-memory-archive.md`), boot context targets (<60KB total, <15KB MEMORY.md), Distill & Flush compaction workflow, truncation risk documentation. Added Session Reset Configuration subsection — config at top level (not `agents.defaults`), `daily` vs `idle` modes, model override scoping (session-scoped only). Updated boot pattern from "scan last 7 days" to "read today's + yesterday's" (more precise). Added archive files to Content Taxonomy. **Section 2:** Added Adaptive Thinking note (default in OpenClaw v2026.3.1 for Claude 4.6; explicit `thinking: low` overrides). Updated Thinking Budget table with Adaptive row. **Section 3:** Added Sub-agent Permission Boundary subsection — READ/COMPUTE ONLY for ad-hoc sub-agents, orchestrator retains write actions, explicit constraint wording. **Section 4:** Added Deep Analysis Protocol (Tenth Man Pattern) — skeptical sub-agent architecture for high-stakes research, Tier 2 checkpoint, spoon-fed prompts, confidence tagging, message splitting. **Section 6:** Added Financial Datasets MCP as second example server (13 tools, PAYG billing, usage patterns). **Section 7:** Updated Verification Checklist with MEMORY.md size check, session reset config location, total boot context measurement. **Section 8:** Added Financial Datasets MCP link. |
 | 2026-03-02 (v3.1) | Section 1 (QMD): Added health check note — `openclaw memory status` is the correct command; `qmd status` checks a separate CLI database unrelated to the OpenClaw-managed instance. Key fields: `provider: "qmd"`, `dirty: false`, `files > 0`. |
 | 2026-03-01 (v3) | Section 1: Added STM-as-sole-task-source-of-truth rule (dated files are reference/intel only, not task queues). Clarified Content Taxonomy: time-bound intel/research outputs route to `memory/YYYY-MM-DD.md`, not `MEMORY.md`. Section 4: Added Breaking Event Rule (mandatory Brave+Bird+Exa triple parallel for events <48h old). Added Anchor+Angle query pattern (never two near-identical parallel queries). Added Proactive Content-Type Tier 2 trigger (fire `crawling_exa` on institutional/paywalled sources without waiting for a known URL). Added Deep Research Mode (3+ research turns → default every institutional source to Tier 2 crawl). |
 | 2026-03-01 (v2) | Section 4: Full rewrite of Research Tool Orchestration — upgraded to complete 4-tier architecture. Tier 1: Brave+Bird+Exa search always parallel. Tier 2: web_fetch+crawling_exa parallel URL extraction with X.com exception documented (both tools blocked on x.com, Bird is correct tool). Tier 3: web_search_advanced_exa (precision filters) + company_research_exa (structured company intel) on-demand. Tier 4: Browser with two profiles — profile:openclaw (public JS pages) vs profile:chrome (login-gated, requires Browser Relay attach). Added decision flow pseudocode and orchestrator synthesis rationale. |
