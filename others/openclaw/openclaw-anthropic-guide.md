@@ -57,6 +57,41 @@ explicitly instruct the agent to read them at session start.
 > `short-term-memory.md` (L1 STM). If STM has no `[ACTIVE]` entries, there is
 > nothing pending — regardless of what dated files contain.
 
+### Workspace File Injection Architecture
+
+```mermaid
+graph LR
+    subgraph Auto["Auto-injected every turn"]
+        AGENTS["AGENTS.md\nProtocols + boot sequence"]
+        SOUL["SOUL.md\nPersona + tone"]
+        IDENTITY["IDENTITY.md\nName + role"]
+        USER["USER.md\nUser profile"]
+        TOOLS["TOOLS.md\nInfra + entity IDs"]
+        HEARTBEAT["HEARTBEAT.md\nHealth check"]
+        MEMORY["MEMORY.md\nCurated long-term memory"]
+    end
+
+    subgraph Boot["Read at boot (explicit)"]
+        STM["short-term-memory.md\nL1 Active tasks"]
+        PROJ["memory/projects.md\nL2 Project context"]
+        DATED["memory/YYYY-MM-DD.md\nL3 Recent dated files"]
+    end
+
+    subgraph OnDemand["On-demand via memory_search"]
+        SEARCH["memory/*.md\nHistorical archive"]
+    end
+
+    Main["Main Agent"] --> Auto
+    Main --> Boot
+    Main --> OnDemand
+
+    Cron["Cron / Sub-agent\n(isolated)"] --> AGENTS
+    Cron --> TOOLS
+```
+
+> **Key rule:** Cron and sub-agents only receive `AGENTS.md` + `TOOLS.md`.
+> All other context must be spoon-fed explicitly in the cron payload.
+
 ### Content Taxonomy
 
 | Content Type | Belongs In | NOT In |
@@ -76,12 +111,20 @@ explicitly instruct the agent to read them at session start.
 
 ### Memory Tier Architecture
 
-```
-L1 (STM)       : short-term-memory.md      -- Active tasks, read at boot
-L2 (Projects)  : memory/projects.md        -- Project context, read at boot
-L3 (Search)    : memory_search             -- Searches memory/*.md + MEMORY.md
-                                              Backend: QMD (BM25 + vectors + reranker)
-                                              OR built-in SQLite (default)
+```mermaid
+graph TD
+    Boot["Session Boot"] --> L1["L1 — STM\nshort-term-memory.md\nActive tasks · read at boot"]
+    Boot --> L2["L2 — Projects\nmemory/projects.md\nProject context · read at boot"]
+    Boot --> L3["L3 — Search\nmemory_search\nSearches memory/*.md + MEMORY.md"]
+
+    L3 --> QMD["QMD backend\nBM25 + vectors + reranker\n(optional, experimental)"]
+    L3 --> SQLite["Built-in SQLite\n(default)"]
+
+    style L1 fill:#d4edda,stroke:#28a745
+    style L2 fill:#d1ecf1,stroke:#17a2b8
+    style L3 fill:#fff3cd,stroke:#ffc107
+    style QMD fill:#f8f9fa,stroke:#6c757d
+    style SQLite fill:#f8f9fa,stroke:#6c757d
 ```
 
 ### Memory Backend: QMD (Optional, Experimental)
@@ -410,6 +453,25 @@ race condition gotcha below).
 
 ### The Spoon-Feeding Pattern
 
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator (Main)
+    participant C as Cron Agent (Isolated)
+    participant T as Tools (exec/web/API)
+    participant D as Delivery (Telegram)
+
+    O->>C: Spawn with self-contained payload<br/>(AGENTS.md + TOOLS.md only)
+    Note over C: No SOUL/MEMORY/USER context
+    C->>C: Phase 1 — Boot (read explicit files)
+    loop Phase 2 — Atomic steps
+        C->>T: One tool call per step
+        T-->>C: Result (or [DATA UNAVAILABLE])
+    end
+    C->>C: Phase 3 — Synthesize output
+    C->>D: Deliver via message tool
+    C-->>O: Complete (auto-announce)
+```
+
 Cron payloads follow this structure, hardcoding everything the isolated agent needs:
 
 ```
@@ -563,6 +625,21 @@ Sub-agents bypass this gate entirely. The permission boundary ensures
 sub-agents can't take irreversible actions without human oversight.
 
 ### Sub-Agent Decision Rules (When to Spawn vs Orchestrate)
+
+```mermaid
+flowchart TD
+    Start([New task]) --> Q1{Parallel independent\nitems > 3?}
+    Q1 -->|Yes| Spawn1[✅ Spawn]
+    Q1 -->|No| Q2{Long compute,\nno mid-task judgment?}
+    Q2 -->|Yes| Spawn2[✅ Spawn]
+    Q2 -->|No| Q3{External repo,\nself-contained?}
+    Q3 -->|Yes| Spawn3[✅ Spawn]
+    Q3 -->|No| Q4{Touches workspace\nfiles / memory / delivery?}
+    Q4 -->|Yes| Orch1[❌ Orchestrate]
+    Q4 -->|No| Q5{Needs live judgment\nor user back-and-forth?}
+    Q5 -->|Yes| Orch2[❌ Orchestrate]
+    Q5 -->|No| Default[❌ Orchestrate\ndefault when unsure]
+```
 
 | Signal | Decision |
 |--------|----------|
