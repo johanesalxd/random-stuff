@@ -5,7 +5,7 @@
 > Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-04 (v4)
+> **Last updated:** 2026-03-07 (v5)
 
 ---
 
@@ -189,6 +189,12 @@ injection window, fire `memory_search` with short keyword queries before
 answering. If 0 results on first attempt, refire with different keywords
 before concluding the data is missing.
 
+**QMD search mode:** Use the `search` command (BM25, fast). The `vsearch`
+(vector-only) and `query` (hybrid) modes are unreliable on memory-constrained
+hardware — poor accuracy and significantly slower. On 8 GB unified memory
+systems in particular, stick to BM25 `search` as the default. Hybrid search
+may improve on higher-spec machines as QMD matures.
+
 ### Context Optimization & Memory Compaction
 
 As workspace memory grows over weeks of use, boot context bloats —
@@ -281,6 +287,49 @@ models.
 ---
 
 ## 2. Anthropic Model Strategy
+
+### Model Providers
+
+OpenClaw supports multiple model providers simultaneously. For Anthropic-first
+deployments, three provider paths are available:
+
+| Provider | Auth Method | Best For |
+|----------|-------------|----------|
+| Anthropic direct | OAuth / API key | Primary — full model access |
+| Google Vertex ADC | Application Default Credentials | Fallback when Anthropic OAuth is broken; Claude models via Vertex |
+| **GitHub Copilot** | `openclaw models auth login-github-copilot` | Hybrid supplement — GPT-5.x, Grok, Gemini via Copilot subscription |
+
+**GitHub Copilot as an OpenClaw provider** is useful when you want access to
+non-Anthropic frontier models (GPT-5.2, GPT-5-mini, Grok, Gemini Pro) within
+the same agent context, without managing separate API keys. Auth via GitHub
+OAuth; models appear in `openclaw models list --all` once configured.
+
+Copilot includes 1,500 premium requests/month with overage pricing beyond that.
+Check current model availability with `openclaw models list --all` — models
+showing `configured,missing` are not yet in the Copilot API catalog.
+
+### Model Aliases
+
+OpenClaw supports user-defined model aliases in `~/.openclaw/openclaw.json`.
+Aliases let you switch providers without updating every cron prompt or config
+reference — just update the alias target.
+
+```json5
+"models": {
+  "aliases": {
+    "sonnet": "anthropic/claude-sonnet-4-6",
+    "haiku": "anthropic/claude-haiku-4-5",
+    "gpt54": "github-copilot/gpt-5.2",
+    "gpt5min": "github-copilot/gpt-5-mini",
+    "gemini-pro": "google/gemini-3.1-pro-preview",
+    "gemini-flash": "google/gemini-3-flash-preview"
+  }
+}
+```
+
+Use aliases in cron payloads, `sessions_spawn`, and `/model` overrides.
+When a provider rotates model names (common with Copilot as new releases land),
+you update one alias and all references inherit the change.
 
 ### Model Comparison
 
@@ -656,72 +705,102 @@ answer. This mirrors the experience of products like Google AI Mode or Exa Deep
 Research, but with added context-awareness (user history, prior decisions) and
 social signal integration via Bird that neither product provides natively.
 
-### Deep Analysis Protocol (Tenth Man Pattern)
+### Deep Analysis Protocol
 
-For high-stakes research where consensus might mask blind spots, the
-**Tenth Man pattern** uses a skeptical sub-agent to challenge the
-orchestrator's synthesis before delivery.
+For high-stakes research requiring maximum depth — investment decisions,
+geopolitical assessments, architectural choices — use the **GPT sub-agent
+depth + orchestrator enhancement** pattern. The sub-agent handles deep
+analysis compute; the orchestrator validates, cross-references personal
+context, and delivers.
 
-**When to use:** Manual trigger only — for topics where getting it wrong
-has real consequences (investment decisions, geopolitical assessments,
-architectural choices). Not for routine research.
+**When to use:** Manual trigger only. Not for routine research.
 
 **Architecture:**
 
 ```
-Orchestrator                          Tenth Man (sub-agent)
-    │                                       │
-    ├── Run full tiered research            │
-    │   (Tier 1 mandatory,                  │
-    │    Tier 2 FORCED on key sources)      │
-    │                                       │
-    ├── Synthesize from full content        │
-    │                                       │
-    ├── Identify 3 claims to challenge      │
-    │                                       │
-    ├── Spawn sub-agent ─────────────────► Receives:
-    │                                       - Full synthesis
-    │                                       - Source list
-    │                                       - 3 specific claims
-    │                                       │
-    │                                       ├── web_search for counter-evidence
-    │                                       │
-    │                                       └── Returns severity table:
-    │                                           claim / severity [HIGH/MED/LOW]
-    │                                           + bullet detail per claim
-    │                                       │
-    ◄── Receives Tenth Man report ──────────┘
+Orchestrator                              GPT Sub-agent
+    │                                          │
+    ├── Full tiered research                   │
+    │   (Tier 1 mandatory,                     │
+    │    Tier 2 FORCED on every key source)    │
+    │                                          │
+    ├── Compile spoon-fed brief:               │
+    │   - Tier 1+2 findings                    │
+    │   - Relevant memory context              │
+    │   - User's personal situation            │
+    │                                          │
+    ├── Spawn sub-agent ──────────────────►  Receives compiled brief
+    │   model: GPT (e.g. gpt-5.2)             + analysis task
+    │   runTimeoutSeconds: 300                 + output path instruction
+    │                                          │
+    │                                          ├── Deep analysis compute
+    │                                          │
+    │                                          └── Writes full output to:
+    │                                              /tmp/deep-analysis-
+    │                                              <label>-<YYYYMMDD>.md
+    │                                          │
+    ◄── Sub-agent completes ──────────────────┘
     │
-    ├── Revise synthesis where warranted
-    │   (dismiss with explicit reasoning
-    │    if challenges are weak)
+    ├── Read output file directly
+    │   (no byte limit — full content)
+    │   Fallback: sessions_history on child key
     │
-    └── Deliver with confidence tag:
-        [HIGH CONFIDENCE / MEDIUM CONFIDENCE / CONTESTED]
+    ├── Cross-reference with personal context
+    │   + verify accuracy
+    │
+    ├── If divergence found:
+    │   → present both findings as [CONTESTED]
+    │   → let user decide, do not force a verdict
+    │
+    ├── If convergent:
+    │   → confidence goes up, label [HIGH/MEDIUM]
+    │
+    └── Deliver orchestrator-enhanced output
+        split into ≤3,500 char chunks (1/N, 2/N)
 ```
 
 **Key implementation details:**
 
-1. **Tier 2 checkpoint (MANDATORY before synthesis):** Do NOT spawn the
-   Tenth Man until Tier 2 crawls complete or explicitly timeout. Synthesis
-   built on snippets alone produces weaker claims that are easier to
-   challenge — but that's testing the research depth, not the conclusion.
+1. **Tier 2 checkpoint (MANDATORY before spawning):** Do NOT spawn the
+   sub-agent until Tier 2 crawls are complete or explicitly timed out.
+   Sub-agent synthesis built on snippets produces lower-quality output —
+   the full-document crawls are what justify the depth label.
 
-2. **Spoon-fed sub-agent prompts:** Include the FULL synthesis text,
-   complete source list, and the 3 specific claims in the spawn payload.
-   Sub-agents are dumb pipes — they should not need to re-derive context.
+2. **Compile the brief before spawning:** Pull relevant STM context,
+   project facts, applicable lessons, and Tier 1+2 research findings into
+   a structured brief. Include the user's personal context where relevant.
+   Pass the compiled brief as the sub-agent's full input — sub-agents are
+   dumb pipes and should not need to re-derive context.
 
-3. **Orchestrator labels sources inline:** During synthesis, tag each
-   source with its institutional context (e.g., "VinaCapital, fund manager
-   with bullish bias on Vietnam assets"). Bias identification is
-   orchestrator work, not sub-agent pre-loading.
+3. **Define output path before spawning:** Use
+   `/tmp/deep-analysis-<label>-<YYYYMMDD>.md`. Pass the path explicitly
+   in the spawn prompt: "write complete findings to that path." Vague
+   language ("include", "report") causes text-only responses with no file
+   written to disk.
 
-4. **Sub-agent timeout:** Use `runTimeoutSeconds: 150`. Count N spawned,
-   deliver when N events received regardless of success/timeout status.
+4. **Sub-agent constraint:** Include explicitly in the spawn prompt:
+   `"DO NOT delete, send, modify, or take any external action. Read and report ONLY."`
 
-5. **Message splitting:** For channel delivery (e.g., Telegram), split
-   final output into sequential messages ≤3,500 chars each, labeled
-   (1/N), (2/N). Never send a single synthesis block over 3,500 chars.
+5. **Read the output file directly:** After completion, `read` the `/tmp/`
+   file with no byte limit. Do not rely on the channel announce — it may
+   truncate. If the file is missing (crash/timeout), fall back to
+   `sessions_history` on the child session key.
+
+6. **Never deliver raw sub-agent output.** Always orchestrator-enhanced.
+   Cross-reference, verify, and layer in synthesis before delivery.
+
+7. **Confidence tags:**
+   - `[HIGH]` — orchestrator and sub-agent converge
+   - `[MEDIUM]` — moderate convergence, some uncertainty
+   - `[CONTESTED]` — divergence; present both findings transparently
+
+8. **Archive if durable:** If the analysis has lasting research value,
+   append key findings to `memory/YYYY-MM-DD.md`. The `/tmp/` file is
+   ephemeral (cleared on restart).
+
+9. **Message splitting:** Split final delivery into sequential messages
+   ≤3,500 chars each, labeled (1/N). Never send a single synthesis block
+   over the limit.
 
 ---
 
@@ -729,21 +808,29 @@ Orchestrator                          Tenth Man (sub-agent)
 
 ### Skill-First Approach
 
-Coding tasks are delegated via the **coding-agent skill** rather than raw
-command invocations. The skill owns the HOW (PTY, background mode, process
-monitoring, auto-notify on completion); the orchestrator (AGENTS.md) owns the
-project-level constraints.
+Coding tasks are delegated via the **coding-agent skill** and the
+**opencode-wrapper skill** rather than raw command invocations. The skills own
+the HOW (PTY, tmux session management, background mode, process monitoring,
+run-manifest provenance, auto-notify on completion); the orchestrator
+(AGENTS.md) owns the project-level constraints.
 
-**Read the skill's SKILL.md before spawning a coding task.** It contains
+**Read each skill's SKILL.md before spawning a coding task.** They contain
 current command syntax, PTY requirements, and background monitoring patterns
 that may change with OpenClaw updates. Hardcoding CLI syntax in AGENTS.md
 creates maintenance debt.
 
+**Two complementary skills:**
+
+| Skill | Role |
+|-------|------|
+| `coding-agent` | Spawns and monitors the coding agent (Codex, Claude Code, opencode, Pi); handles PTY, background mode, and completion detection |
+| `opencode-wrapper` | Wraps opencode specifically — manages tmux session naming, log paths, model selection, run-manifest.json, and context threshold routing |
+
 **Preferred agent:** `opencode` via Anthropic provider (`claude-sonnet-4-6`, Thinking: Low).
 Other supported agents: Codex, Claude Code (`claude`), Pi.
 
-> **Instance Note (2026-02-23):** Anthropic direct OAuth is broken in this deployment.
-> Working path: **Google Vertex ADC**. Model: `google-vertex-anthropic/claude-sonnet-4-6@default`.
+> **Instance Note (2026-02-23):** Anthropic direct OAuth is broken in some deployments.
+> Working fallback: **Google Vertex ADC**. Model: `google-vertex-anthropic/claude-sonnet-4-6@default`.
 > Config in `~/.config/opencode/opencode.json`: set your GCP `project` and
 > `location: us-east5` (Claude Sonnet 4.x unavailable in `us-central1` or `global`).
 > Auth via Application Default Credentials (ADC).
@@ -757,9 +844,81 @@ Other supported agents: Codex, Claude Code (`claude`), Pi.
 - Project root: your preferred git directory (e.g., `~/Developer/git/`)
 
 **Why skill-first over raw commands:**
-- Skill stays up-to-date with OpenClaw releases (PTY flags, auto-notify pattern, etc.)
+- Skills stay up-to-date with OpenClaw releases (PTY flags, auto-notify pattern, etc.)
 - Decouples orchestrator from implementation detail
 - Single source of truth for HOW; AGENTS.md only carries project constraints
+
+### Prompt-in-File Standard
+
+When delegating to a coding agent, **always write the prompt to a file**
+(e.g., `prompt.txt`) in the project workdir and pass it via stdin or file
+argument — never embed long prompts inline in bash.
+
+**Why this matters:** Vague language in inline prompts ("create a module",
+"include tests") causes text-only responses — the agent describes what it
+would do but writes no files to disk. Explicit, file-based prompts with
+clear directives ("write these files to the current working directory") are
+reliably executed.
+
+**Pattern:**
+
+```bash
+# Write the prompt to a file first
+cat > /path/to/project/prompt.txt << 'EOF'
+Build a Flask API with the following endpoints...
+Write all files to the current working directory.
+Include a requirements.txt and README.md.
+EOF
+
+# Pass to opencode via stdin or skill wrapper
+opencode run --model anthropic/claude-sonnet-4-6 < /path/to/project/prompt.txt
+```
+
+**Mandatory phrasing in every prompt:**
+- ✅ "Write these files to the current working directory."
+- ✅ "Create the following files on disk: ..."
+- ❌ "Create a module" (too vague — agent may respond with text only)
+- ❌ "Include tests" (too vague — may not write files)
+
+### Run Completion Detection
+
+After spawning a coding agent, check completion before reading output:
+
+```bash
+# Primary: tmux session gone = run finished
+tmux list-sessions 2>/dev/null | grep <session-name>
+# No output = FINISHED
+
+# Fallback: process check
+ps aux | grep opencode | grep -v grep
+# No output = FINISHED
+```
+
+The opencode-wrapper skill writes a `run-manifest.json` to the project
+workdir on completion — use this for provenance (model used, tokens, duration).
+
+### Vertex AI / Gemini SDK Notes (google.genai)
+
+When building coding tools that use Google's `google.genai` SDK on Vertex AI,
+watch for these non-obvious gotchas:
+
+1. **File API is AI Studio only.** `client.files.upload()` is not supported on
+   Vertex. Use `Part.from_bytes(data=pdf_bytes, mime_type=...)` for inline
+   content ingestion instead.
+
+2. **`gemini-3.1-pro-preview` requires `location="global"`** — `us-central1`
+   returns 404. Confirm location in your config before running.
+
+3. **Full model path required on Vertex:**
+   `publishers/google/models/gemini-3.1-pro-preview` — not the short form.
+
+4. **Auth:** Use Application Default Credentials (ADC) via
+   `gcloud auth application-default login`. Set `GOOGLE_CLOUD_PROJECT` in
+   your `.env` (git-ignored). Never hardcode credentials.
+
+5. **Python project convention:** Use `uv init --no-workspace` + `uv add <pkg>`.
+   Run via `uv run <script>.py`. Commit `.env.example` as a template;
+   add `.env` to `.gitignore`.
 
 ---
 
@@ -1026,6 +1185,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-07 (v5) | **Section 1:** Added QMD search mode note — `search` (BM25) is the correct mode; `vsearch` and `query` are unreliable on memory-constrained hardware. **Section 2:** Added Model Providers subsection documenting three provider paths (Anthropic direct, Vertex ADC, GitHub Copilot) with auth methods and use cases. Added Model Aliases subsection — `openclaw.json` alias config pattern with examples; enables provider switching without updating cron prompts. **Section 4:** Replaced Tenth Man skeptical sub-agent pattern with redesigned Deep Analysis Protocol — GPT sub-agent writes full output to `/tmp/deep-analysis-<label>-<YYYYMMDD>.md`; orchestrator reads file directly (no truncation); fallback to `sessions_history`; divergence → `[CONTESTED]` (both findings shown, user decides); convergence → `[HIGH/MEDIUM]`; `runTimeoutSeconds: 300`; mandatory output file path + "write to disk" instruction in prompt; never deliver raw sub-agent output. **Section 5:** Added opencode-wrapper skill alongside coding-agent skill — two-skill architecture documented. Added Prompt-in-File Standard subsection — always write prompt to file, never inline in bash; mandatory "write these files to the current working directory" phrasing; vague language causes text-only responses. Added Run Completion Detection subsection — tmux session check as primary, ps fallback, run-manifest.json for provenance. Added Vertex AI / Gemini SDK Notes subsection — File API AI Studio only (use Part.from_bytes on Vertex), location=global requirement, full model path format, ADC auth, uv project convention. |
 | 2026-03-04 (v4) | **Section 1:** Added QMD Query Strategy subsection — BM25 prefers 2–4 word keyword queries; verbose queries fail silently; workaround is atomic search splits; critical for haiku/sonnet-class models. Added Context Optimization & Memory Compaction subsection — archive convention (`memory/YYYY-MM-DD-memory-archive.md`), boot context targets (<60KB total, <15KB MEMORY.md), Distill & Flush compaction workflow, truncation risk documentation. Added Session Reset Configuration subsection — config at top level (not `agents.defaults`), `daily` vs `idle` modes, model override scoping (session-scoped only). Updated boot pattern from "scan last 7 days" to "read today's + yesterday's" (more precise). Added archive files to Content Taxonomy. **Section 2:** Added Adaptive Thinking note (default in OpenClaw v2026.3.1 for Claude 4.6; explicit `thinking: low` overrides). Updated Thinking Budget table with Adaptive row. **Section 3:** Added Sub-agent Permission Boundary subsection — READ/COMPUTE ONLY for ad-hoc sub-agents, orchestrator retains write actions, explicit constraint wording. **Section 4:** Added Deep Analysis Protocol (Tenth Man Pattern) — skeptical sub-agent architecture for high-stakes research, Tier 2 checkpoint, spoon-fed prompts, confidence tagging, message splitting. **Section 6:** Added Financial Datasets MCP as second example server (13 tools, PAYG billing, usage patterns). **Section 7:** Updated Verification Checklist with MEMORY.md size check, session reset config location, total boot context measurement. **Section 8:** Added Financial Datasets MCP link. |
 | 2026-03-02 (v3.1) | Section 1 (QMD): Added health check note — `openclaw memory status` is the correct command; `qmd status` checks a separate CLI database unrelated to the OpenClaw-managed instance. Key fields: `provider: "qmd"`, `dirty: false`, `files > 0`. |
 | 2026-03-01 (v3) | Section 1: Added STM-as-sole-task-source-of-truth rule (dated files are reference/intel only, not task queues). Clarified Content Taxonomy: time-bound intel/research outputs route to `memory/YYYY-MM-DD.md`, not `MEMORY.md`. Section 4: Added Breaking Event Rule (mandatory Brave+Bird+Exa triple parallel for events <48h old). Added Anchor+Angle query pattern (never two near-identical parallel queries). Added Proactive Content-Type Tier 2 trigger (fire `crawling_exa` on institutional/paywalled sources without waiting for a known URL). Added Deep Research Mode (3+ research turns → default every institutional source to Tier 2 crawl). |
