@@ -562,6 +562,22 @@ says "Go" → execute) is the primary safety mechanism for external actions.
 Sub-agents bypass this gate entirely. The permission boundary ensures
 sub-agents can't take irreversible actions without human oversight.
 
+### Sub-Agent Decision Rules (When to Spawn vs Orchestrate)
+
+| Signal | Decision |
+|--------|----------|
+| Parallel independent tasks (>3 items, no interdependency) | ✅ Spawn |
+| Long compute with no mid-task judgment (deep analysis, big refactors) | ✅ Spawn |
+| External / non-OpenClaw repos — self-contained, no workspace context needed | ✅ Spawn |
+| Sequential task requiring live judgment calls or user back-and-forth | ❌ Orchestrate |
+| Task touches workspace files, memory, or channel delivery | ❌ Orchestrate |
+| Doc audits, config edits, cron changes — context IS the workspace | ❌ Orchestrate |
+
+**Default:** When unsure → orchestrate. Sub-agent overhead (spoon-feeding context,
+monitoring, output retrieval) only pays off when the task is genuinely parallel
+or self-contained. For tasks that need live judgment mid-way, the orchestrator
+loop with the user is faster and more accurate than a sub-agent round-trip.
+
 ---
 
 ## 4. Prompt Architecture Considerations
