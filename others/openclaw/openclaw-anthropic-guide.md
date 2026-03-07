@@ -1,8 +1,6 @@
 # OpenClaw + Anthropic: Workspace & Prompt Architecture Guide
 
 > Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
-> Evolved from `openclaw-gemini-guide.md` — architectural patterns are preserved,
-> Gemini-specific content replaced with Anthropic equivalents.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
 > **Last updated:** 2026-03-07 (v5)
@@ -482,10 +480,13 @@ Deliver a briefing using ONLY verified data from the steps above.
 
 ### Common Gotchas (Anthropic-specific)
 
-**Sonnet follows complex instructions better than flash did.** The excessive
-guardrails in current cron prompts (repeated directives, heavy [SYSTEM_DIRECTIVE]
-blocks) were added to combat gemini-flash laziness. Sonnet/Haiku need less
-hand-holding — the prompts can be simplified significantly in the next revision.
+**The Spoon-Feeding directive structure is intentional, not boilerplate.**
+Haiku and Sonnet are reliable executors of structured prompts — the heavy
+`[SYSTEM_DIRECTIVE]` blocks, numbered steps, and explicit failure handling
+exist because isolated cron agents have no boot context, no memory, and no
+fallback. The structure does the reasoning so the model doesn't have to.
+Removing guardrails from working cron prompts increases fragility; add them
+only where needed, but don't strip them in the name of simplification.
 
 **Delivery-suppressing tokens.** Isolated cron agents can hallucinate `NO_REPLY`
 at the end of their output. In OpenClaw, `NO_REPLY` suppresses delivery to
