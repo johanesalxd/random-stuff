@@ -539,11 +539,43 @@ All documentation files must follow the Writing Style rules above.
 - Use Mermaid syntax for all architectural, flow, and sequence diagrams
 - Keep diagrams focused and uncluttered with meaningful labels
 - Update diagrams when architecture changes
+- When a persistent editable diagram is needed, export Mermaid to draw.io format (via draw.io MCP `open_drawio_mermaid` if available, or manually via draw.io)
 
+### Diagram Type Guide
+
+| Situation | Diagram Type |
+|---|---|
+| System/service architecture | `graph LR` or `C4Context` |
+| Request/data flow between components | `sequenceDiagram` |
+| API or logic flow with conditionals | `flowchart TD` |
+| Data model / entity relationships | `erDiagram` |
+| Class structure / OOP design | `classDiagram` |
+| State machine / lifecycle | `stateDiagram-v2` |
+
+### Examples
+
+**Architecture:**
 ```mermaid
-graph TD
-    A[Client] --> B[API Gateway]
-    B --> C[Auth Service]
-    C --> D[Business Logic]
-    D --> E[Database]
+graph LR
+    Client --> API[API Gateway]
+    API --> Auth[Auth Service]
+    API --> BL[Business Logic]
+    BL --> DB[(Database)]
+```
+
+**Sequence:**
+```mermaid
+sequenceDiagram
+    Client->>API: POST /login
+    API->>Auth: validate(token)
+    Auth-->>API: OK
+    API-->>Client: 200 JWT
+```
+
+**ER Diagram:**
+```mermaid
+erDiagram
+    USER ||--o{ ORDER : places
+    ORDER ||--|{ LINE_ITEM : contains
+    PRODUCT ||--o{ LINE_ITEM : referenced_in
 ```
