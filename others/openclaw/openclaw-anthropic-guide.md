@@ -89,6 +89,8 @@ graph LR
     Cron --> TOOLS
 ```
 
+> [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22jZRhb5swEIZ%2FDVI7iYlS5QeQQJtMoVSEfOinyTHXxCvYmW2i9t%2FPZxsypdlchMQZHw%2Fv3b2wl%2BR4iNJkXUdJZq7TqYbd3u9lgxbRbB6lKUYx47%2BAamjNDpxAfpirHiQ329Esv6D8fWaPxVOz8SAbf%2B%2FbaLbgz1JoQUWnbJ7ZTnZCaNQAvwfgFILoTbVdOzBGIxakEpxMUC14mLTKjbBV8%2BJo48oTn0gPE06KLozbboraoTDymK0CafaOUryyLzCaqlr7ttnQU1b8VZ6LA66Z%2FrAFqCBxWWR1My%2ByxlGnpScvgXQaB08PQN%2BCtLIoq9o3zMWesxgkcT7pBN%2FHGmRv4h56gaa5QgXe4p1%2FGnGOtrDvqYEgl%2BizWW7g%2FdgxyvRt2C5N6TDqIKS2wmInyytf36FfqWYnnLcm6i3c1Oe6%2BuGoY4UPZsL4qaiRmmKau4fdFVzDuw6C86wp8gvyiznisozzfGTfm8waqPGBCVrfd%2FTXdeWhVlc8h56YJPveisetW6bJiZFpij8VEEkP4YYbhy2WFzV8G%2B3GlBaSUdLhRA3Odv2rmkvCuPceRmZse9sD%2B3yaxHF0X0T%2BH3blyXOGNdd%2FM6aefBKxkMKLsBHee8Cyh11MrBxT5g1TosO53H4W5%2F6MV5jnHPvp%2FwE%3D%22%7D)
+
 > **Key rule:** Cron and sub-agents only receive `AGENTS.md` + `TOOLS.md`.
 > All other context must be spoon-fed explicitly in the cron payload.
 
@@ -126,6 +128,8 @@ graph TD
     style QMD fill:#f8f9fa,stroke:#6c757d
     style SQLite fill:#f8f9fa,stroke:#6c757d
 ```
+
+> [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22pZJvb4IwEMY%2FTZO5hAWKDH0p6l5JNufe7NVSy3Uy%2FpS01ei332ERhUiyZAnJtU%2Bvz%2F3uyrdi1Y5Q92NB3BnG9oukNCSICKUb0DqV5UWjlAQL3DgO8ZcYV55Nw4gXl5RMXDId43rzEZNgXuqdVMYxoAqngEKq01OR1PqMm%2FQAmGeYznR9d05JFOJCAUswMKzlbq8l7%2FDdUNCGgvYo3pT8AW50XdLWJ%2FSlasQGpcnBbC5LA0fzbxq%2FofH7MwGm%2BO7K8qVbwR5BPYmW87EGrAugmRsv49f3z7NyIehCnKtdENbxwjLUCyRnPIPy3G0U06A1PWDfUul2r0CxMgNVJz7IyuDDs5zQOR7BsQKVFlAalo%2FuTqEDsFmvUgOWIdqnuXHS8kZG%2BwQE2%2BdmNNSPNqcc7B9GXZHmOfHx3E%2FGkCQMmbRRMgMr0gkLx8GQAe0aeMCF1zPwQka3kyEDv2MghPB50jMQgntuOGBgH%2BHGYSKmot%2FDMw%2BDMBlwaOb2R5Nf%22%7D)
 
 ### Memory Backend: QMD (Optional, Experimental)
 
@@ -472,6 +476,8 @@ sequenceDiagram
     C-->>O: Complete (auto-announce)
 ```
 
+> [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22jVNdb%2BIwEPw1ltIHThRa6e7RJGmFBKSCUOke3WQLlhyvL3YK3K%2B%2FXfOhEl1RJSe7XmvGM2vbw58ObAWZVptWNWIoxWh4GU61QVfaKRtoVtCnPCdttQUfWhWwpWkyV9re3YSmZ2jaoqUgNxDrydSjUQHq2%2FDyDC8RDccE9lCJ0dMO3ugvX6a38dkZn4HRH9AemKIEA%2Bw5Qq%2FRxUCMcxqpGHN95dSOVe902FLwYN4HFdpAtqGOmx0MqlqM0zfqxxMBE%2FmcL8rVj6aOhBOWXhSzUwGtOfQFLzAAL5G62K%2B48QJ592I9I9Z5Pi%2BWvylZr%2FIllVkA7EOPJr1W%2FrJVnmnveTUfiZ9D8euB8glibH8LigXB3hnqFpfetQHfF2cQ3Se2UY9NBmx0xZ0J4HwP%2Bz915VFdYZkt0JmyH2U4uOifiW7wlINrm0vwnYmG4oUUj5NMlrywXshXOZ3JySwXj1nfFtj6e%2B0b9wyvDjbQC9B%2F45F1wXVfnUN2JDrdO8o%2BtKJ%2FA96rzcV9H3sCF0dwio0zEK9HorqAA2UtdvRo7%2F4B%22%7D)
+
 Cron payloads follow this structure, hardcoding everything the isolated agent needs:
 
 ```
@@ -640,6 +646,8 @@ flowchart TD
     Q5 -->|Yes| Orch2[❌ Orchestrate]
     Q5 -->|No| Default[❌ Orchestrate\ndefault when unsure]
 ```
+
+> [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22ldNfT8IwEADwT3OJPiyBjgZ8lA2eDErkxcfa3tika5e2c%2FrtvYIQo4VgsvTPrbn7rZdV2g6yFi4AG21KGN3TfHqeA724AT5f4UDbIPwOeHlLyyyDfEHzegzT%2BZNwQmvUtG%2BMwg5pMAF4YZqArY%2B59odzyJcw%2FV2EUhzzTYsX9DTG0p0YzJhKw4LBXQEzfgyS4FKGlT0kWDOSPVizpbW0bdcHBFZElLEUahuV7b%2BHjd56tW0jOKljZ3XsSh1L6XLSLT4COiPivTns7DfPo64yaU0QjUGVRuVnUfmVqDyFmhBqY3tZY2zaYN3Od0JiVFWN3geBLePtYWvd52mrUDfvSIEkdpLCPjpZn9pbwuwYQx%2BcoFb9FU9SYk7iFaKKtGj42U5SW0eB3mOcXoXcZcKorLIu1GkqP0dl%2F6LyBLXESvQ6XMpT0H9zOESXX6OJduN7F0t8AQ%3D%3D%22%7D)
 
 | Signal | Decision |
 |--------|----------|
