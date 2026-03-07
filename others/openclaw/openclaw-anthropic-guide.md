@@ -3,7 +3,7 @@
 > Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-07 (v6)
+> **Last updated:** 2026-03-07 (v8)
 
 ---
 
@@ -20,13 +20,32 @@ agent turn. Do NOT duplicate their content in cron job payloads.
 | `SOUL.md` | Persona, tone, boundaries, journaling protocol | No |
 | `IDENTITY.md` | Name, creature, vibe, role, channels, emoji | No |
 | `USER.md` | User profile (name, preferences, interests) | No |
-| `TOOLS.md` | Infrastructure notes, entity IDs, paths, device references | Yes |
-| `HEARTBEAT.md` | Periodic health check checklist | No |
+| `TOOLS.md` | Infrastructure notes, entity IDs, paths, device references. **Does NOT control tool availability — guidance only.** | Yes |
+| `HEARTBEAT.md` | Periodic health check checklist. **Keep short — token burn risk on every heartbeat poll.** | No |
 | `MEMORY.md` | Curated long-term memory (decisions, preferences, lessons) | No |
 
 **Key distinction:** Sub-agents and isolated cron agents only receive
 `AGENTS.md` + `TOOLS.md`. This is why cron payloads must be self-contained
 — the agent cannot rely on persona, user profile, or memory files.
+
+### One-Time / Restart Files
+
+These files serve specific lifecycle events — not injected on every session turn.
+
+| File | Purpose | When It Fires |
+|------|---------|---------------|
+| `BOOT.md` | Optional startup checklist. Keep short; use `message` tool for outbound sends. | On **gateway restart** (internal hooks must be enabled). Distinct from `HEARTBEAT.md`. |
+| `BOOTSTRAP.md` | One-time first-run ritual. Delete it after completion — it is only created for brand-new workspaces. | On **first boot** only. If present, agent reads it, follows it, then deletes it. |
+
+> **BOOT.md vs HEARTBEAT.md:** `BOOT.md` fires on gateway restart. `HEARTBEAT.md` fires on heartbeat polls. Two separate files, two separate triggers — do not conflate.
+
+### Workspace Directories
+
+| Path | Purpose | Notes |
+|------|---------|-------|
+| `skills/` | Workspace-specific skills | Overrides managed/bundled skills when names collide. Takes priority over `~/.openclaw/skills/`. |
+| `canvas/` | Canvas UI files for node displays | e.g. `canvas/index.html`. Optional. |
+| `memory/` | All dated logs, project context, archives | Indexed by QMD. Not injected automatically — read via boot sequence or `memory_search`. |
 
 ### Non-Standard Files (loaded via boot sequence)
 
@@ -250,8 +269,13 @@ and decisions without any error.
 
 **Targets:**
 - Boot context (all auto-injected files): **< 60KB**
-- MEMORY.md: **< 15KB** (well under the ~18KB injection limit)
+- MEMORY.md: **< 15KB** (well under the per-file injection limit)
 - Zero truncation of any injected file
+
+**Injection limits (official):**
+- Per-file cap: `agents.defaults.bootstrapMaxChars` = **20,000 chars** (default). Content beyond this is silently dropped.
+- Aggregate cap: `agents.defaults.bootstrapTotalMaxChars` = **150,000 chars** (default). Total across all injected files.
+- Both are configurable in `~/.openclaw/openclaw.json` if you need higher limits.
 
 **The Archive Convention:**
 
@@ -417,8 +441,8 @@ Recommended assignments across OpenClaw contexts:
 
 | Context | Model | Thinking | Rationale |
 |---------|-------|----------|-----------|
-| Conversation (main) | `claude-sonnet-4-6` | Low | Interactive; balanced reasoning and speed |
-| Research / Deep analysis | `claude-sonnet-4-6` | Low | Sonnet handles multi-source synthesis and complex analysis without needing a heavier model |
+| Conversation (main) | `claude-haiku-4-5` | Low | Interactive default — fast, reliable tool calling, conserves sonnet quota |
+| Research / Deep analysis | `claude-sonnet-4-6` | Low | **Explicit invocation only.** Deep analysis protocol, high-stakes decisions, complex multi-source synthesis. Conserve weekly quota. |
 | Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; haiku is faster and conserves quota on bounded tasks |
 | Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
 
@@ -1287,6 +1311,9 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-08 (v9) | **Section 1 alignment audit vs official docs:** Added `BOOT.md` entry (gateway-restart checklist, distinct from `HEARTBEAT.md`). Added `BOOTSTRAP.md` to formal file map. Added Workspace Directories section (`skills/`, `canvas/`, `memory/`). Fixed `TOOLS.md` description — added "does not control tool availability" per official docs. Fixed `HEARTBEAT.md` description — added "keep short, token burn risk" per official docs. Fixed injection limit — "~18KB" replaced with official `bootstrapMaxChars: 20,000 chars` + `bootstrapTotalMaxChars: 150,000 chars`. |
+| 2026-03-07 (v8) | **Model policy update:** Interactive default switched from `claude-sonnet-4-6` → `claude-haiku-4-5` (sonnet quota burn at 31%/24h unsustainable). Sonnet now explicit-invocation only: deep analysis, high-stakes decisions, complex multi-source synthesis. Updated model table, AGENTS.md, MEMORY.md, TOOLS.md, openclaw.json accordingly. GPT-5-mini documented as zero-quota throwaway option. |
+| 2026-03-07 (v7) | **draw.io + Mermaid diagrams:** Added 4 Mermaid diagrams to guide (workspace file injection, memory tiers, cron execution sequence, sub-agent decision flowchart). Each diagram has draw.io MCP Tool Server edit link below it. CODE_STANDARDS.md expanded with diagram type guide and examples. |
 | 2026-03-07 (v6) | **Housekeeping / alignment:** MEMORY.md aligned to AGENTS.md as source of truth — removed conflicting model decision entry (haiku for standard sessions, contradicted AGENTS.md sonnet policy), added sub-agent decision rules to Decisions Log. TOOLS.md updated: removed temp haiku note, confirmed sonnet as default model. openclaw.json `agents.defaults.model.primary` updated to `anthropic/claude-sonnet-4-6`. No architectural changes — guide content was already accurate. |
 | 2026-03-07 (v5) | **Section 1:** Added QMD search mode note — `search` (BM25) is the correct mode; `vsearch` and `query` are unreliable on memory-constrained hardware. **Section 2:** Added Model Providers subsection documenting three provider paths (Anthropic direct, Vertex ADC, GitHub Copilot) with auth methods and use cases. Added Model Aliases subsection — `openclaw.json` alias config pattern with examples; enables provider switching without updating cron prompts. **Section 4:** Replaced Tenth Man skeptical sub-agent pattern with redesigned Deep Analysis Protocol — GPT sub-agent writes full output to `/tmp/deep-analysis-<label>-<YYYYMMDD>.md`; orchestrator reads file directly (no truncation); fallback to `sessions_history`; divergence → `[CONTESTED]` (both findings shown, user decides); convergence → `[HIGH/MEDIUM]`; `runTimeoutSeconds: 300`; mandatory output file path + "write to disk" instruction in prompt; never deliver raw sub-agent output. **Section 5:** Added opencode-wrapper skill alongside coding-agent skill — two-skill architecture documented. Added Prompt-in-File Standard subsection — always write prompt to file, never inline in bash; mandatory "write these files to the current working directory" phrasing; vague language causes text-only responses. Added Run Completion Detection subsection — tmux session check as primary, ps fallback, run-manifest.json for provenance. Added Vertex AI / Gemini SDK Notes subsection — File API AI Studio only (use Part.from_bytes on Vertex), location=global requirement, full model path format, ADC auth, uv project convention. |
 | 2026-03-04 (v4) | **Section 1:** Added QMD Query Strategy subsection — BM25 prefers 2–4 word keyword queries; verbose queries fail silently; workaround is atomic search splits; critical for haiku/sonnet-class models. Added Context Optimization & Memory Compaction subsection — archive convention (`memory/YYYY-MM-DD-memory-archive.md`), boot context targets (<60KB total, <15KB MEMORY.md), Distill & Flush compaction workflow, truncation risk documentation. Added Session Reset Configuration subsection — config at top level (not `agents.defaults`), `daily` vs `idle` modes, model override scoping (session-scoped only). Updated boot pattern from "scan last 7 days" to "read today's + yesterday's" (more precise). Added archive files to Content Taxonomy. **Section 2:** Added Adaptive Thinking note (default in OpenClaw v2026.3.1 for Claude 4.6; explicit `thinking: low` overrides). Updated Thinking Budget table with Adaptive row. **Section 3:** Added Sub-agent Permission Boundary subsection — READ/COMPUTE ONLY for ad-hoc sub-agents, orchestrator retains write actions, explicit constraint wording. **Section 4:** Added Deep Analysis Protocol (Tenth Man Pattern) — skeptical sub-agent architecture for high-stakes research, Tier 2 checkpoint, spoon-fed prompts, confidence tagging, message splitting. **Section 6:** Added Financial Datasets MCP as second example server (13 tools, PAYG billing, usage patterns). **Section 7:** Updated Verification Checklist with MEMORY.md size check, session reset config location, total boot context measurement. **Section 8:** Added Financial Datasets MCP link. |
