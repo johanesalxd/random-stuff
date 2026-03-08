@@ -1,0 +1,31 @@
+[project]
+name = "bq-discovery"
+version = "0.1.0"
+description = "Scan BigQuery permission access across projects in a GCP organization"
+requires-python = ">=3.12"
+dependencies = [
+    "google-cloud-bigquery>=3.25",
+    "google-cloud-resource-manager>=1.12",
+    "google-cloud-asset>=3.26",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.32",
+]
+
+[project.scripts]
+bq-discovery = "bq_discovery.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.5",
+]
