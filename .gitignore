@@ -39,3 +39,6 @@ internal/
 .python-version
 
 WORKSPACE_REFERENCE.md
+
+# OpenCode
+.opencode/
