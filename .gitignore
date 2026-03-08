@@ -40,5 +40,7 @@ internal/
 
 WORKSPACE_REFERENCE.md
 
-# OpenCode
+# Others
 .opencode/
+**/.ruff_cache/
+**/.pytest_cache/

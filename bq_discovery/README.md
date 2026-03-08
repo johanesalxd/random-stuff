@@ -28,6 +28,7 @@ single command.
 
 **Member types identified:** `user`, `group`, `serviceAccount`, `domain`,
 `specialGroup` (allUsers, allAuthenticatedUsers, projectOwners, etc.),
+`projectEditor`, `projectOwner`, `projectViewer`, `iamMember`,
 `authorizedView`, `authorizedDataset`, `authorizedRoutine`
 
 > **Note:** Project-level IAM captures *all* roles bound to the project, not
@@ -41,7 +42,7 @@ single command.
 flowchart TD
     A["bq-discovery CLI<br/>(cli.py)"] --> B["scanner.py<br/>(orchestrator)"]
 
-    B -->|"--list-projects"| P["resolvers/projects.py<br/>list_org_projects_info()"]
+    A -->|"--list-projects"| P["resolvers/projects.py<br/>list_org_projects_info()"]
     P -->|"list projects + folders<br/>recursive BFS<br/>Resource Manager API"| Q["Project IDs + Numbers<br/>(printed and exit)"]
 
     B --> C["iam_scanner.py<br/>scan_iam_policies()"]
@@ -118,22 +119,6 @@ gcloud organizations add-iam-policy-binding $ORG_ID \
 gcloud organizations add-iam-policy-binding $ORG_ID \
   --member=$MEMBER --role=roles/bigquery.metadataViewer
 ```
-
-### Authentication
-
-Use Application Default Credentials (ADC) authenticated as a principal with
-the roles above:
-
-```bash
-gcloud auth application-default login
-```
-
-> **Important:** If `GOOGLE_APPLICATION_CREDENTIALS` is set to a service
-> account key that lacks org-level roles, unset it before running:
->
-> ```bash
-> env -u GOOGLE_APPLICATION_CREDENTIALS bq-discovery --org-id YOUR_ORG_ID
-> ```
 
 ## Installation
 
@@ -305,7 +290,7 @@ denormalized into every row. Compatible with
 
 ```
 organization_id,scanned_at,project_id,dataset_id,resource_id,resource_type,role,member,member_type,source,inherited_from_group
-750756831972,2026-03-09T12:00:00+00:00,my-project,,,"project",roles/editor,user:alice@example.com,user,iam_policy,
+750756831972,2026-03-09T12:00:00+00:00,my-project,,,project,roles/editor,user:alice@example.com,user,iam_policy,
 750756831972,2026-03-09T12:00:00+00:00,my-project,my_dataset,,dataset,READER,group:analysts@example.com,group,dataset_acl,
 ```
 
@@ -324,15 +309,6 @@ organization_id,scanned_at,project_id,dataset_id,resource_id,resource_type,role,
 | `inherited_from_group` | Group email if expanded from a group; null otherwise (only with `--expand-groups`) |
 
 ## Troubleshooting
-
-**`GOOGLE_APPLICATION_CREDENTIALS` overrides ADC**
-
-If the env var points to a service account key without org-level roles, all
-org-level API calls will fail with 403. Unset it:
-
-```bash
-env -u GOOGLE_APPLICATION_CREDENTIALS uv run bq-discovery --org-id ...
-```
 
 **Linked/external datasets**
 
