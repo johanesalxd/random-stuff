@@ -217,9 +217,8 @@ def scan_iam_policies(
             _process_result(result, resource_types, project_ids, entries)
 
     except Exception as e:
-        error_msg = f"Cloud Asset Inventory scan failed: {e}"
-        logger.error(error_msg)
-        errors.append(error_msg)
+        logger.error("Cloud Asset Inventory scan failed: %s", e)
+        errors.append(f"Cloud Asset Inventory scan failed: {e}")
 
     logger.info(
         "IAM policy scan complete: %s entries found",

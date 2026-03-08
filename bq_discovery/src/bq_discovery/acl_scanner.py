@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 
 from google.api_core.exceptions import (
+    BadRequest,
     Forbidden,
     NotFound,
     PermissionDenied,
@@ -191,7 +192,7 @@ def _scan_project_acls(
 
     try:
         datasets = list(bq_client.list_datasets())
-    except (Forbidden, PermissionDenied) as e:
+    except (BadRequest, Forbidden, PermissionDenied) as e:
         errors.append(f"No access to list datasets in {project_id}: {e}")
         return entries, errors
     except Exception as e:
@@ -211,7 +212,7 @@ def _scan_project_acls(
 
         try:
             dataset = bq_client.get_dataset(f"{project_id}.{dataset_id}")
-        except (NotFound, Forbidden, PermissionDenied) as e:
+        except (BadRequest, NotFound, Forbidden, PermissionDenied) as e:
             logger.warning(
                 "Skipping dataset %s.%s: %s",
                 project_id,
@@ -270,9 +271,8 @@ def scan_dataset_acls(
             all_entries.extend(entries)
             all_errors.extend(errors)
         except Exception as e:
-            error_msg = f"Unexpected error scanning project {project_id}: {e}"
-            logger.error(error_msg)
-            all_errors.append(error_msg)
+            logger.error("Unexpected error scanning project %s: %s", project_id, e)
+            all_errors.append(f"Unexpected error scanning project {project_id}: {e}")
 
     logger.info(
         "Dataset ACL scan complete: %s entries from %s projects",
