@@ -1,14 +1,39 @@
 # bq-discovery
 
-Scans BigQuery permission access (projects, datasets, tables, views) across all
-projects in a GCP organization. Combines two complementary data sources for
-complete coverage:
+Audit who has access to what in BigQuery across your GCP organization —
+individual users, groups, service accounts, and their specific roles — in a
+single command.
 
-- **Cloud Asset Inventory** — fast, org-wide IAM policy scan in a single API
-  call. Covers project-level IAM, dataset IAM, table IAM, and view IAM.
-- **Direct BigQuery API** — dataset ACL scan covering legacy bindings, special
-  groups, domains, and authorized views/datasets/routines that Cloud Asset
-  Inventory does not expose.
+## How it works
+
+- Discovers all projects in your GCP organization (or scans a specific
+  allowlist via `--project-ids`)
+- Scans project-level, dataset-level, and table/view-level IAM policies
+  org-wide via Cloud Asset Inventory (~1-2 seconds)
+- Scans dataset legacy ACLs (READER/WRITER/OWNER, special groups, domains,
+  authorized views) via the BigQuery API
+- Optionally expands Google Group memberships to individual users via
+  Cloud Identity
+- Outputs JSON, JSONL, or CSV — ready for BigQuery import via `bq load`
+
+## What it captures
+
+| Source | Level | What's captured | Examples |
+|--------|-------|-----------------|----------|
+| Cloud Asset Inventory | Project | All IAM bindings on each project | `roles/owner`, `roles/editor`, `roles/bigquery.admin`, service agent roles |
+| Cloud Asset Inventory | Dataset | IAM bindings on datasets | `roles/bigquery.dataViewer`, `roles/bigquery.dataOwner` |
+| Cloud Asset Inventory | Table / View | IAM bindings on tables and views | `roles/bigquery.dataViewer` on a specific table |
+| BigQuery API | Dataset ACLs | Legacy access control entries | `READER`, `WRITER`, `OWNER`, `specialGroup:projectOwners`, `domain:example.com`, authorized views/datasets/routines |
+| Cloud Identity API | Group members | Individual users and service accounts inside Google Groups (opt-in via `--expand-groups`) | `group:team@corp.com` expanded to `user:alice@corp.com`, `serviceAccount:bot@project.iam.gserviceaccount.com` |
+
+**Member types identified:** `user`, `group`, `serviceAccount`, `domain`,
+`specialGroup` (allUsers, allAuthenticatedUsers, projectOwners, etc.),
+`authorizedView`, `authorizedDataset`, `authorizedRoutine`
+
+> **Note:** Project-level IAM captures *all* roles bound to the project, not
+> just BigQuery-specific ones. Users and service accounts with `roles/editor`
+> or `roles/owner` have implicit BigQuery access. Filter by role name in your
+> analysis if you only need BigQuery-relevant bindings.
 
 ## Architecture
 

@@ -14,7 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """Parse command-line arguments.
+
+    Args:
+        argv: Argument list to parse. Defaults to sys.argv if None.
+
+    Returns:
+        Parsed arguments as a Namespace object.
+    """
     parser = argparse.ArgumentParser(
         prog="bq-discovery",
         description=(
@@ -95,7 +102,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Main entry point for bq-discovery CLI."""
+    """Main entry point for bq-discovery CLI.
+
+    Args:
+        argv: Argument list to parse. Defaults to sys.argv if None.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+    """
     args = parse_args(argv)
 
     # Configure logging

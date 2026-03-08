@@ -56,7 +56,11 @@ class PermissionEntry:
     inherited_from_group: str | None = None
 
     def to_dict(self) -> dict:
-        """Convert to a JSON-serializable dictionary."""
+        """Convert to a JSON-serializable dictionary.
+
+        Returns:
+            Dict with enum values serialized as strings.
+        """
         return {
             "project_id": self.project_id,
             "dataset_id": self.dataset_id,
@@ -102,6 +106,12 @@ class ScanResult:
         """Serialize the scan result to pretty-printed JSON.
 
         Includes a metadata block and an entries array.
+
+        Args:
+            indent: Number of spaces for JSON indentation.
+
+        Returns:
+            Pretty-printed JSON string.
         """
         return json.dumps(
             {
