@@ -1,0 +1,115 @@
+"""Data models for BigQuery permission discovery."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+
+
+class ResourceType(Enum):
+    """BigQuery resource types that can have permissions."""
+
+    DATASET = "dataset"
+    TABLE = "table"
+    VIEW = "view"
+    # Future extensibility:
+    # MODEL = "model"
+    # ROUTINE = "routine"
+
+
+class PermissionSource(Enum):
+    """Source of the permission entry."""
+
+    DATASET_ACL = "dataset_acl"
+    IAM_POLICY = "iam_policy"
+
+
+@dataclass
+class PermissionEntry:
+    """A single permission binding for a BigQuery resource.
+
+    Attributes:
+        project_id: GCP project ID containing the resource.
+        dataset_id: BigQuery dataset ID.
+        resource_id: Table or view ID. None for dataset-level permissions.
+        resource_type: Type of the BigQuery resource.
+        role: IAM role or dataset ACL role (READER, WRITER, OWNER).
+        member: Member identifier (e.g. "user:alice@example.com").
+        member_type: Type of member (user, group, serviceAccount, etc.).
+        source: Whether from dataset ACL or IAM policy.
+        inherited_from_group: Group email if expanded from group membership.
+    """
+
+    project_id: str
+    dataset_id: str
+    resource_id: str | None
+    resource_type: ResourceType
+    role: str
+    member: str
+    member_type: str
+    source: PermissionSource
+    inherited_from_group: str | None = None
+
+    def to_dict(self) -> dict:
+        """Convert to a JSON-serializable dictionary."""
+        return {
+            "project_id": self.project_id,
+            "dataset_id": self.dataset_id,
+            "resource_id": self.resource_id,
+            "resource_type": self.resource_type.value,
+            "role": self.role,
+            "member": self.member,
+            "member_type": self.member_type,
+            "source": self.source.value,
+            "inherited_from_group": self.inherited_from_group,
+        }
+
+
+@dataclass
+class ScanResult:
+    """Result of a permission discovery scan.
+
+    Attributes:
+        organization_id: GCP organization ID that was scanned.
+        strategy: Scan mode identifier. Always "hybrid" (IAM + ACLs).
+        scanned_at: ISO 8601 timestamp of when the scan started.
+        projects_scanned: Number of distinct projects found in results.
+        datasets_scanned: Number of distinct datasets found in results.
+        resources_scanned: Number of distinct tables/views found in results.
+        groups_expanded: Number of groups resolved to individual members.
+        errors: List of error messages encountered during the scan.
+        entries: List of permission entries discovered.
+    """
+
+    organization_id: str
+    strategy: str = "hybrid"
+    scanned_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    projects_scanned: int = 0
+    datasets_scanned: int = 0
+    resources_scanned: int = 0
+    groups_expanded: int = 0
+    errors: list[str] = field(default_factory=list)
+    entries: list[PermissionEntry] = field(default_factory=list)
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize the scan result to JSON."""
+        return json.dumps(
+            {
+                "metadata": {
+                    "organization_id": self.organization_id,
+                    "strategy": self.strategy,
+                    "scanned_at": self.scanned_at,
+                    "projects_scanned": self.projects_scanned,
+                    "datasets_scanned": self.datasets_scanned,
+                    "resources_scanned": self.resources_scanned,
+                    "groups_expanded": self.groups_expanded,
+                    "errors": self.errors,
+                },
+                "entries": [e.to_dict() for e in self.entries],
+            },
+            indent=indent,
+        )

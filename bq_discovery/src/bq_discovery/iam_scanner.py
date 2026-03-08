@@ -1,0 +1,201 @@
+"""IAM policy scanner using Cloud Asset Inventory.
+
+Uses searchAllIamPolicies to efficiently discover all IAM policy bindings
+for BigQuery resources across an entire organization in a single paginated
+API call.
+
+Limitations:
+    - Only captures IAM policies, not legacy dataset ACLs (use acl_scanner
+      for those).
+    - Cannot distinguish between TABLE and VIEW resource types — both are
+      indexed as bigquery.googleapis.com/Table in Cloud Asset Inventory.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from google.cloud import asset_v1
+
+from bq_discovery.models import (
+    PermissionEntry,
+    PermissionSource,
+    ResourceType,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_resource_name(resource: str) -> tuple[str, str, str | None]:
+    """Parse a BigQuery full resource name into components.
+
+    Args:
+        resource: Full resource name, e.g.:
+            //bigquery.googleapis.com/projects/p/datasets/d
+            //bigquery.googleapis.com/projects/p/datasets/d/tables/t
+
+    Returns:
+        Tuple of (project_id, dataset_id, resource_id or None).
+    """
+    parts = resource.split("/")
+    project_id = ""
+    dataset_id = ""
+    resource_id = None
+
+    for i, part in enumerate(parts):
+        if part == "projects" and i + 1 < len(parts):
+            project_id = parts[i + 1]
+        elif part == "datasets" and i + 1 < len(parts):
+            dataset_id = parts[i + 1]
+        elif part == "tables" and i + 1 < len(parts):
+            resource_id = parts[i + 1]
+
+    return project_id, dataset_id, resource_id
+
+
+def _extract_member_type(member: str) -> str:
+    """Extract the member type prefix from an IAM member string.
+
+    Args:
+        member: IAM member like "user:alice@example.com", or a special
+            principal like "allUsers" or "allAuthenticatedUsers".
+
+    Returns:
+        The member type (user, group, serviceAccount, domain,
+        specialGroup, etc.).
+    """
+    if member in ("allUsers", "allAuthenticatedUsers"):
+        return "specialGroup"
+    if ":" in member:
+        return member.split(":")[0]
+    return "unknown"
+
+
+def _build_asset_types(resource_types: set[ResourceType]) -> list[str]:
+    """Build the list of Cloud Asset asset type strings to search.
+
+    Args:
+        resource_types: Set of requested resource types.
+
+    Returns:
+        List of Cloud Asset API asset type strings.
+    """
+    asset_types: list[str] = []
+
+    if ResourceType.DATASET in resource_types:
+        asset_types.append("bigquery.googleapis.com/Dataset")
+
+    if ResourceType.TABLE in resource_types or ResourceType.VIEW in resource_types:
+        asset_types.append("bigquery.googleapis.com/Table")
+
+    return asset_types
+
+
+def _process_result(
+    result: asset_v1.IamPolicySearchResult,
+    resource_types: set[ResourceType],
+    project_ids: list[str] | None,
+    entries: list[PermissionEntry],
+) -> None:
+    """Process a single IAM policy search result into entries.
+
+    Args:
+        result: A single IAM policy search result from Cloud Asset.
+        resource_types: Set of requested resource types for filtering.
+        project_ids: Optional list of project IDs to filter by.
+        entries: List to append matching PermissionEntry objects to.
+    """
+    resource = result.resource
+    project_id, dataset_id, resource_id = _parse_resource_name(resource)
+
+    if project_ids and project_id not in project_ids:
+        return
+
+    asset_type = result.asset_type
+    if asset_type == "bigquery.googleapis.com/Dataset":
+        res_type = ResourceType.DATASET
+    elif asset_type == "bigquery.googleapis.com/Table":
+        # Cloud Asset Inventory does not distinguish table vs view.
+        # Both are reported as bigquery.googleapis.com/Table.
+        res_type = ResourceType.TABLE
+    else:
+        return
+
+    # Check if this resource type was requested. For TABLE asset type,
+    # also accept if VIEW was requested since asset inventory cannot
+    # distinguish between them.
+    if res_type not in resource_types:
+        if not (res_type == ResourceType.TABLE and ResourceType.VIEW in resource_types):
+            return
+
+    for binding in result.policy.bindings:
+        role = binding.role
+        for member in binding.members:
+            member_type = _extract_member_type(member)
+            entries.append(
+                PermissionEntry(
+                    project_id=project_id,
+                    dataset_id=dataset_id,
+                    resource_id=resource_id,
+                    resource_type=res_type,
+                    role=role,
+                    member=member,
+                    member_type=member_type,
+                    source=PermissionSource.IAM_POLICY,
+                )
+            )
+
+
+def scan_iam_policies(
+    organization_id: str,
+    resource_types: set[ResourceType],
+    project_ids: list[str] | None = None,
+) -> tuple[list[PermissionEntry], list[str]]:
+    """Scan BigQuery IAM policies org-wide using Cloud Asset Inventory.
+
+    Performs a single paginated searchAllIamPolicies call across the
+    entire organization scope, covering datasets, tables, and views.
+
+    Args:
+        organization_id: Numeric GCP organization ID.
+        resource_types: Set of resource types to include in results.
+        project_ids: Optional list of project IDs to filter results.
+            If None, results from all projects are included.
+
+    Returns:
+        Tuple of (entries, errors) where entries is a list of
+        PermissionEntry objects and errors is a list of error strings.
+    """
+    client = asset_v1.AssetServiceClient()
+    entries: list[PermissionEntry] = []
+    errors: list[str] = []
+
+    asset_types = _build_asset_types(resource_types)
+    if not asset_types:
+        return entries, errors
+
+    scope = f"organizations/{organization_id}"
+    logger.info(
+        "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
+        scope,
+    )
+
+    try:
+        request = asset_v1.SearchAllIamPoliciesRequest(
+            scope=scope,
+            asset_types=asset_types,
+        )
+
+        for result in client.search_all_iam_policies(request=request):
+            _process_result(result, resource_types, project_ids, entries)
+
+    except Exception as e:
+        error_msg = f"Cloud Asset Inventory scan failed: {e}"
+        logger.error(error_msg)
+        errors.append(error_msg)
+
+    logger.info(
+        "IAM policy scan complete: %s entries found",
+        len(entries),
+    )
+    return entries, errors
