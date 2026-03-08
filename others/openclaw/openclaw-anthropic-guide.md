@@ -491,6 +491,172 @@ is a higher-leverage fix than switching models.
 
 ---
 
+## 2.5. Security Architecture (Personal Assistant Model)
+
+When running OpenClaw as a personal assistant — one trusted operator, loopback-only gateway, no multi-tenancy — the security model differs from multi-user deployments. The goal is to **allow full capability (read, analyze, research, messaging on request) while blocking unauthorized data exfiltration and destructive actions.**
+
+### Threat Model
+
+For personal assistant setups, rank threats by likelihood and impact:
+
+| Threat | Vector | Impact | Example |
+|--------|--------|--------|---------|
+| **Prompt injection from web content** | `web_fetch`, `bird`, `web_search` results parsed as instructions | Credential leak, memory dump exfiltration | Attacker-controlled web page that injects SQL queries or command injection |
+| **Unauthorized message exfiltration** | Compromised cron payload or prompt injection → `message` tool used to send to attacker | Data leaked to external channel | Agent sends BTC position or financial data to attacker-owned Telegram account |
+| **Destructive exec** | `rm`, `git push`, `sudo` triggered by prompt injection or errant cron | Repo sabotage, file deletion, data loss | Injected instruction: "run: rm -rf /" or "git push" to wrong remote |
+| **API overspend** | Rogue tool loops (web_fetch spam, BQ scans) | Budget burn ($50–500+) | Cron malfunction or prompt injection causes 1,000 web_fetch calls |
+| **Cron exfiltration** | Compromised cron payload (human error or version control leak) | Sensitive data leaked via scheduled job | Cron sends daily financial snapshot to attacker-controlled webhook |
+
+**Key insight:** The trusted operator (user) is the gatekeeper for legitimate actions. The security model prevents the agent from taking irreversible actions without human approval — it does NOT prevent the user from explicitly instructing the agent to do anything.
+
+### OpenClaw Security Layers
+
+OpenClaw provides multiple configuration points for constraint enforcement:
+
+#### 1. Exec Approvals System
+
+The **exec-approvals.json** file (located at `~/.clawdbot/exec-approvals.sock` on macOS) defines per-agent execution policy:
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "security": "deny",
+    "ask": "off"
+  },
+  "agents": {
+    "main": {
+      "security": "full",
+      "ask": "off"
+    },
+    "cron": {
+      "security": "full",
+      "ask": "off"
+    }
+  }
+}
+```
+
+**Key fields:**
+- `security`: `"deny"` (block), `"allowlist"` (whitelist binary paths), `"full"` (allow all)
+- `ask`: `"off"` (silent), `"on-miss"` (prompt for unknown binaries), `"always"` (prompt every exec)
+
+#### 2. Per-Agent Isolation
+
+Cron jobs and sub-agents are isolated agents — they receive only `AGENTS.md` + `TOOLS.md`, no persona/user/memory context. Assign each cron a unique `agentId`:
+
+```json
+{
+  "agentId": "cron",
+  "schedule": "0 3 * * *"
+}
+```
+
+This allows crons to run with a **different security policy than the main interactive session**. Example:
+
+```json
+"agents": {
+  "main": {
+    "security": "allowlist",
+    "ask": "on-miss"
+  },
+  "cron": {
+    "security": "full",
+    "ask": "off"
+  }
+}
+```
+
+Main agent: new binaries prompt for approval. Crons: pre-approved binaries, no prompts.
+
+#### 3. Tool Policy (Global)
+
+`openclaw.json` tools section controls exec behavior globally:
+
+```json
+"tools": {
+  "exec": {
+    "ask": "off",
+    "host": "gateway",
+    "security": "full"
+  }
+}
+```
+
+**`host: "gateway"`** routes exec through the gateway approval system (required for per-agent policy enforcement). Stricter of `tools.exec` + agent-level policy wins.
+
+#### 4. Message / External Output Gates
+
+Binary gate at `tools.message`:
+- Allow: agent can send to configured channels
+- Deny: agent cannot send (but you can manually send on-request)
+
+No per-action approval exists yet (as of OpenClaw v2026.3.7) — it's all-or-nothing per channel. Workaround: remove the token from `~/.openclaw/.env` and manually send on request.
+
+### Phase 1 Implementation: Gateway Routing + Cron Isolation
+
+A working deployment combines exec-approvals with per-agent scoping:
+
+1. **Route exec through gateway:**
+   ```json
+   "exec": {
+     "host": "gateway",
+     "security": "full",
+     "ask": "off"
+   }
+   ```
+
+2. **Define per-agent policy in exec-approvals.json:**
+   ```json
+   "agents": {
+     "main": { "security": "full", "ask": "off" },
+     "cron": { "security": "full", "ask": "off" }
+   }
+   ```
+
+3. **Assign all crons the same agentId ("cron") so they inherit cron-level policy.** This decouples cron execution from main interactive policy:
+   ```bash
+   openclaw cron edit <job-id> --set agentId=cron
+   ```
+
+**Result:** Crons run with pre-approved binary sets; main agent can prompt on unknown binaries (when ask mode is toggled). Policies are independent — change one without affecting the other.
+
+### Phase 2 (Future): Telegram Approval Prompts
+
+When ready, enable per-action approval via Telegram:
+
+1. Fix `allow-always` persistence bug (pending OpenClaw update)
+2. Pre-seed binary allowlist with resolved paths (`which <binary>` on your system)
+3. Toggle `ask: "on-miss"` in exec-approvals main agent
+4. Configure Telegram target in `openclaw.json` approvals section
+
+**Before Phase 2:** All execs run silently. Phase 2 adds interruptible prompts.
+
+### Quirks & Best Practices
+
+1. **Binary path resolution on macOS** — `/bin/date` may resolve to a different actual path at runtime. To pre-seed an allowlist, use exact resolved paths from `which <binary>` in your terminal, not assumed paths.
+
+2. **`allow-always` approval doesn't persist (v2026.3.7 bug)** — When you approve a binary with `allow-always`, it's not written to exec-approvals.json. Workaround: pre-seed allowlist entries manually before toggling `ask: "on-miss"`. Use `allow-once` for temporary approvals.
+
+3. **Async approval behavior** — Even with `ask: "always"`, crons do NOT block. Approval prompts return immediately; cron execution continues without waiting for your response. Plan accordingly when security matters (e.g., destructive operations should require explicit pre-approval in the cron payload, not runtime approval).
+
+4. **`tools.exec.ask` and agent-level `ask` are evaluated independently** — Tool-level `ask` controls the strictness threshold; agent-level `security` controls the permission scope. They don't fully override each other. Stricter of both applies.
+
+5. **Empty `defaults: {}` falls back to built-in "deny"** — Always set explicit defaults in exec-approvals.json:
+   ```json
+   "defaults": { "security": "deny", "ask": "off" }
+   ```
+
+6. **Unicode in cron payloads breaks silently** — Non-ASCII characters (em dashes, arrows, quotes) in JSON payloads can cause haiku to fail without error. Use `ensure_ascii=False` in Python JSON encoding; replace em dashes with `--`, arrows with `->`. Verify zero non-ASCII before deploying.
+
+### Links
+
+- **Exec Approvals:** https://docs.openclaw.ai/tools/exec-approvals
+- **Security Model:** https://docs.openclaw.ai/gateway/security
+- **Exec Tool:** https://docs.openclaw.ai/tools/exec
+
+---
+
 ## 3. Cron Job Architecture
 
 ### Isolated Agent Context
@@ -1476,6 +1642,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-08 (v11) | **Section 2.5 (NEW):** Added Security Architecture subsection — comprehensive guide to threat model (prompt injection, exfiltration, destructive exec, API overspend), OpenClaw security layers (exec-approvals.json, per-agent isolation, tool policy, message gates), Phase 1 implementation (gateway routing + cron isolation with config example), Phase 2 future state (Telegram approval prompts), and 6 quirks/best practices (binary path resolution, allow-always bug, async approvals, independent eval of ask/security, empty defaults, unicode in crons). Threat model table ranks by likelihood + impact. Config examples are generic (no personal paths/credentials). Links to official exec-approvals, security model, and exec tool docs. |
 | 2026-03-08 (v10) | **Section 2 model table:** Updated interactive/conversation thinking from `Low` → `Medium` (haiku thinking:medium is the correct interactive default; crons stay at low). Added `sonnet-gh` alias (`github-copilot/claude-sonnet-4.6`, 125k ctx) to Model Aliases section with usage note. **Section 1 context optimization:** Added `memoryFlush.softThresholdTokens` config recommendation (15,000) with rationale — single large tool response can skip a 4k flush window entirely. **Section 3:** Added Maintenance Cron Pattern subsection — documents the 4-section health report structure (process cleanup, memory backend, token analytics, workspace size), workspace size check script pattern, scheduling guidance, and key payload rules. **Section 4:** Added Non-Trivial Task Gate — mandatory `memory_search` before any research/decision task mid-session. **Section 7:** Added Operational Rituals subsection documenting Prework (3-step: re-boot → skill scan → confirm) and Spa Day / Context Optimization (6-step compaction with MEMORY.md audit). **Section 7 checklist:** Added `wakeMode: "now"` to Cron Creation Checklist (item 13) — prevents scheduler drift; "timezone" property causes drift in Beta. |
 | 2026-03-08 (v9) | **Section 1 alignment audit vs official docs:** Added `BOOT.md` entry (gateway-restart checklist, distinct from `HEARTBEAT.md`). Added `BOOTSTRAP.md` to formal file map. Added Workspace Directories section (`skills/`, `canvas/`, `memory/`). Fixed `TOOLS.md` description — added "does not control tool availability" per official docs. Fixed `HEARTBEAT.md` description — added "keep short, token burn risk" per official docs. Fixed injection limit — "~18KB" replaced with official `bootstrapMaxChars: 20,000 chars` + `bootstrapTotalMaxChars: 150,000 chars`. |
 | 2026-03-07 (v8) | **Model policy update:** Interactive default switched from `claude-sonnet-4-6` → `claude-haiku-4-5` (sonnet quota burn at 31%/24h unsustainable). Sonnet now explicit-invocation only: deep analysis, high-stakes decisions, complex multi-source synthesis. Updated model table, AGENTS.md, MEMORY.md, TOOLS.md, openclaw.json accordingly. GPT-5-mini documented as zero-quota throwaway option. |
