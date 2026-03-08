@@ -226,7 +226,7 @@ memory: {
 - **Health check:** Use `openclaw memory status` — not `qmd status`. The `qmd` CLI maintains a separate database (`~/.cache/qmd/`) unrelated to the OpenClaw-managed instance (`~/.openclaw/agents/main/qmd/`). Only `openclaw memory status` reflects what actually powers `memory_search`. Key fields to check: `provider: "qmd"`, `dirty: false`, `files > 0`.
 - **Memory pressure (constrained hardware):** On 8 GB unified memory systems, QMD GGUF models add ~1–1.5 GB when loaded. Set `interval: "10m"` (vs default 5 m) to reduce background refresh pressure. macOS compresses inactive pages before touching SSD swap.
 
-#### QMD Query Strategy (Memory-Constrained Models)
+#### QMD Query Strategy
 
 QMD's BM25 semantic search layer prefers **short, keyword-driven queries
 (2–4 words)**. Verbose multi-part queries or boolean-style logic fail
@@ -262,9 +262,9 @@ may improve on higher-spec machines as QMD matures.
 ### Context Optimization & Memory Compaction
 
 As workspace memory grows over weeks of use, boot context bloats —
-eventually causing **silent truncation** of injected files. OpenClaw has
-a per-file injection limit (~18KB for MEMORY.md). Content beyond that
-limit is silently dropped, meaning the agent loses access to lessons
+eventually causing **silent truncation** of injected files. OpenClaw enforces
+a per-file injection limit (`bootstrapMaxChars`, default 20,000 chars). Content
+beyond that limit is silently dropped, meaning the agent loses access to lessons
 and decisions without any error.
 
 **Targets:**
@@ -443,14 +443,15 @@ you update one alias and all references inherit the change.
 | Latency | Very low (~1-3s) | Low-Medium (~3-8s) |
 | Cost (Max plan) | Included | Included |
 | Instruction-following | Good | Excellent |
-| Reasoning depth | Adequate for structured tasks | Strong — sufficient for conversation, research, and synthesis |
-| Best for | Spoon-fed crons, atomic steps | Everything else: conversation, orchestration, analysis, research |
+| Reasoning depth | Adequate for structured tasks; medium thinking adds useful depth for ambiguous interactive work | Strong — high-quality synthesis, complex orchestration, deep analysis |
+| Best for | Interactive conversation, cron jobs, atomic tool execution | Explicit invocation only: deep analysis, high-stakes decisions, complex multi-source research |
 
 **Claude Max plan note:** On Claude Max, cost-per-call is not the primary
-concern — execution time and quality are. Haiku is preferable for
-timeout-constrained cron jobs because it's faster, not cheaper. Sonnet
-handles all other roles including deep research and synthesis — no need
-to reach for a heavier model.
+concern — execution time and quality are. Haiku handles the full interactive
+workload (conversation, orchestration, research) at medium thinking, and is
+also the right choice for crons at low thinking due to its lower latency.
+Sonnet is reserved for tasks where reasoning depth materially changes the
+output — deep analysis, high-stakes decisions, complex multi-source synthesis.
 
 ### Thinking Budget Levels
 
@@ -487,12 +488,6 @@ Recommended assignments across OpenClaw contexts:
 (e.g., feed scanners, multiple web searches), the bottleneck is tool execution
 time — not model latency. Prompt optimisation (fewer steps, smarter tool order)
 is a higher-leverage fix than switching models.
-
-**Haiku for crons (confirmed):** Haiku is the confirmed model for spoon-fed
-cron jobs. The payloads already encode all reasoning — the model just executes
-step-by-step. Haiku performs equivalently to sonnet on structured execution
-tasks while being meaningfully faster, which reduces timeout risk on
-longer-running crons.
 
 ---
 
@@ -727,43 +722,29 @@ loop with the user is faster and more accurate than a sub-agent round-trip.
 
 ## 4. Prompt Architecture Considerations
 
-### The Causal Attention Problem
+### Instruction Placement and Repetition
 
-LLMs process text left-to-right with causal attention. When the model processes
-early context (data, tool outputs), it cannot yet "see" instructions that appear
-later. This creates the "Lost in the Middle" problem in long prompts.
+LLMs process text left-to-right with causal attention — instructions placed
+before data are processed in context; instructions placed after data arrive
+too late to shape how the model interpreted earlier content. This is the
+"Lost in the Middle" problem.
 
-### Why Atomic Execution Mitigates This
+**For OpenClaw crons, this is already solved** by the Spoon-Feeding Pattern:
+`[SYSTEM_DIRECTIVE]` comes first, data collection steps follow, synthesis
+comes last. Each step processes a small focused result — context never
+accumulates into a monolithic block the model has to reason over in one pass.
 
-The Spoon-Feeding Pattern is a structural solution. Each step processes one
-source independently:
+**The "Instruction Sandwich"** (repeating key instructions at top and bottom)
+is useful for single-shot prompts with 10K+ tokens of dense content between
+the instruction and the question — e.g. RAG pipelines stuffing many retrieved
+documents. For spoon-fed crons it adds token overhead without quality gain.
+Don't sandwich working cron prompts.
 
-```
-[instructions]
-[tool_call_1] -> [result_1]    -- small, focused context
-[tool_call_2] -> [result_2]    -- small, focused context
-...
-[synthesize using above]       -- structured tool_call/result pairs in KV cache
-```
-
-Context never grows into a monolithic block. By synthesis time, data is
-organized as clean `tool_call → tool_result` pairs.
-
-### Instruction Repetition (When It Helps)
-
-The "Instruction Sandwich" (repeating key instructions at top and bottom) is
-effective for:
-- Single-shot prompts with 10K+ tokens of dense context between instructions and question
-- RAG retrieval with many stuffed documents
-
-**Not worth doing** for OpenClaw spoon-fed crons — context is already small and
-structured per step. Token overhead adds latency for marginal quality gain.
-
-### Goal-First Priming
-
-State the core objective at the very top of the prompt, before data or tool calls.
-The Spoon-Feeding Pattern already does this via `[SYSTEM_DIRECTIVE]`. This ensures
-all subsequent content is processed through the lens of the goal.
+**Goal-first priming** — stating the core objective before any data or tool
+calls — is what `[CORE OBJECTIVE]` and `[SYSTEM_DIRECTIVE]` accomplish in
+the payload skeleton. Every subsequent tool result is processed through the
+lens of that objective. Putting it last (after all the data steps) degrades
+adherence on longer payloads.
 
 ### Research Tool Orchestration
 
