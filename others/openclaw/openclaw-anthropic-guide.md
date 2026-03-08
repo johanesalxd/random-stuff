@@ -3,7 +3,7 @@
 > Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-07 (v8)
+> **Last updated:** 2026-03-08 (v10)
 
 ---
 
@@ -290,11 +290,41 @@ These archives are NOT injected on every turn, but remain fully searchable
 via `memory_search` (QMD indexes all files in `memory/`). This preserves
 access while reducing boot context.
 
+**memoryFlush configuration:**
+
+OpenClaw's compaction pipeline includes a `memoryFlush` step that writes
+durable notes to disk before compaction summarizes the conversation history.
+The key config is `softThresholdTokens` — the token count at which
+memoryFlush fires *before* compaction begins.
+
+```json5
+// ~/.openclaw/openclaw.json
+"agents": {
+  "defaults": {
+    "compaction": {
+      "memoryFlush": {
+        "softThresholdTokens": 15000
+      }
+    }
+  }
+}
+```
+
+**Why 15,000?** A single large tool response (web fetch, financial data, long
+exec output) can jump 3–8k tokens in one turn. If `softThresholdTokens` is
+set too low (e.g., 4,000), a single large response can push the context past
+the threshold and straight into compaction — skipping the memoryFlush step
+entirely. The result: durable notes that should have been written to disk are
+instead compacted into the session summary and eventually lost.
+
+Setting `softThresholdTokens: 15000` gives a reliable pre-compaction write
+window. Tune upward if your sessions routinely use tools that return very
+large payloads.
+
 **Compaction Workflow (Distill & Flush):**
 
 When transactional state (STM) becomes bloated or a session involves
 many decisions, execute this compaction sequence:
-
 1. Write any active discussion or decision-in-flight → STM as a new
    `## Active Context: <Topic>` section
 2. Move settled lessons, behavioral rules, tool quirks →
@@ -387,6 +417,7 @@ reference — just update the alias target.
 "models": {
   "aliases": {
     "sonnet": "anthropic/claude-sonnet-4-6",
+    "sonnet-gh": "github-copilot/claude-sonnet-4.6",
     "haiku": "anthropic/claude-haiku-4-5",
     "gpt54": "github-copilot/gpt-5.2",
     "gpt5min": "github-copilot/gpt-5-mini",
@@ -395,6 +426,11 @@ reference — just update the alias target.
   }
 }
 ```
+
+> **`sonnet-gh`** maps to `github-copilot/claude-sonnet-4.6` — the Copilot-routed
+> Sonnet variant (125k context). Useful when you want Sonnet without consuming
+> Anthropic direct quota. Route OpenClaw config/optimization tasks through this
+> alias on fresh sessions to preserve Claude Max headroom.
 
 Use aliases in cron payloads, `sessions_spawn`, and `/model` overrides.
 When a provider rotates model names (common with Copilot as new releases land),
@@ -441,9 +477,9 @@ Recommended assignments across OpenClaw contexts:
 
 | Context | Model | Thinking | Rationale |
 |---------|-------|----------|-----------|
-| Conversation (main) | `claude-haiku-4-5` | Low | Interactive default — fast, reliable tool calling, conserves sonnet quota |
+| Conversation (main) | `claude-haiku-4-5` | Medium | Interactive default — good reasoning depth for ambiguous tasks without sonnet quota cost |
 | Research / Deep analysis | `claude-sonnet-4-6` | Low | **Explicit invocation only.** Deep analysis protocol, high-stakes decisions, complex multi-source synthesis. Conserve weekly quota. |
-| Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; haiku is faster and conserves quota on bounded tasks |
+| Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; low thinking is fastest and reduces timeout risk on bounded tasks |
 | Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
@@ -830,6 +866,27 @@ The agent fires all relevant tiers, reads all results, and delivers one coherent
 answer. This mirrors the experience of products like Google AI Mode or Exa Deep
 Research, but with added context-awareness (user history, prior decisions) and
 social signal integration via Bird that neither product provides natively.
+
+### Non-Trivial Task Gate
+
+Before starting any research, analysis, or decision task mid-session — fire
+`memory_search` on the core topic first. This is a mandatory gate, not an
+optional step.
+
+**Why it matters:** An agent deep in a long session may have relevant prior
+decisions, lessons, or facts in memory that aren't in the current injection
+window. Proceeding without a recall step leads to repeated work, contradictory
+decisions, and missed context. The cost of one `memory_search` is trivial;
+the cost of a decision that contradicts a prior lesson is not.
+
+**Rule:** One search, before acting. Applies even when the topic feels familiar
+from current session context. If 0 results on first attempt, refire with
+different keywords before concluding the data is missing (QMD BM25 prefers
+2–4 word keyword queries — see QMD Query Strategy in Section 1).
+
+**Scope:** Any task involving research, synthesis, investment decisions, config
+changes, or anything with durable side effects. Does not apply to simple
+read-only lookups or single-turn factual questions.
 
 ### Deep Analysis Protocol
 
@@ -1244,6 +1301,132 @@ Document active MCP servers in `TOOLS.md` so agents can reference them:
 
 ## 7. Operational Procedures
 
+### Maintenance Cron Pattern
+
+Intelligence crons (news, market data, social signals) collect and deliver
+information. **Maintenance crons** are a distinct category — they run system
+health checks and upkeep tasks on a schedule. Both follow the same
+Spoon-Feeding Pattern, but maintenance crons report on the system itself.
+
+**Reference implementation: `proc-janitor-nightly`**
+
+A nightly maintenance cron typically covers 4 sections:
+
+```
+Section A — Process cleanup
+  Run the process janitor tool.
+  Report full output verbatim (no summarization).
+
+Section B — Memory backend health
+  Check the memory backend status (e.g., openclaw memory status --json).
+  Flag: provider not "qmd" (fallback active), dirty=true (index stale),
+        files=0 (nothing indexed), command failure.
+
+Section C — Token/usage analytics
+  Run token usage analytics script.
+  Report last N days verbatim — every line, no collapsing.
+
+Section D — Bootstrap injection sizes
+  Run workspace size check script.
+  Flag any file at ≥80% of the per-file injection cap (20,000 chars).
+
+Section E — Post-prework context estimate
+  Report estimated context window usage after a typical prework boot.
+  Flag at ≥20% of the full context window.
+```
+
+**Why separate sections matter:** A maintenance cron isn't just cleanup —
+it's a health dashboard. Sections D and E give early warning before injection
+truncation or context bloat degrades session quality. Without them, files can
+silently exceed the bootstrap cap and the agent loses access to critical
+lessons without any error.
+
+**Scheduling:** Run nightly during low-traffic hours (e.g., 03:00 local time).
+No conflicts with intelligence crons if scheduled at a different hour.
+
+**Key payload rules (same as intelligence crons):**
+- `[CRITICAL - DELIVERY]` required — maintenance reports are long; announce
+  delivery fails silently for large outputs (see Section 3 gotcha)
+- `model: haiku`, `thinking: low` — spoon-fed execution, no reasoning needed
+- `wakeMode: now` — prevents scheduler drift
+- Do NOT add `--dry-run` to the process janitor step — the cron exists to
+  actually run the cleanup, not preview it
+
+**Workspace size check script pattern:**
+
+```python
+# workspace_size_check.py — minimal reference pattern
+# Section D: per-file bootstrap injection sizes
+BOOTSTRAP_FILES = [
+    "AGENTS.md", "MEMORY.md", "TOOLS.md", "SOUL.md",
+    "HEARTBEAT.md", "IDENTITY.md", "USER.md"
+]
+PER_FILE_CAP = 20_000   # chars (bootstrapMaxChars)
+TOTAL_CAP = 150_000     # chars (bootstrapTotalMaxChars)
+
+# Section E: post-prework context estimate
+# Estimate: bootstrap + STM + projects.md + recent dated memory + N SKILL.md files
+# Compare against the model's context window (e.g., 200k tokens)
+# Warn at ≥20% (40k tok), flag red at ≥30% (60k tok)
+```
+
+Adapt thresholds to your workspace's actual injection habits.
+
+---
+
+### Operational Rituals
+
+These named rituals standardize recurring maintenance patterns. Define trigger
+words in `AGENTS.md` so the agent executes the correct sequence when invoked.
+
+#### Prework
+
+**Trigger word:** "prework"
+
+A readiness sequence to run before starting a non-trivial task — particularly
+at the start of a new session or after a long break. Ensures the agent has
+current context before acting.
+
+**Steps:**
+1. **Re-execute SESSION START** — Re-read the boot sequence files exactly as
+   defined in `AGENTS.md`. No shortcuts. Confirm understanding.
+2. **Skill scan** — Identify every tool or skill likely needed for the pending
+   task. Read each relevant `SKILL.md` file. Do not guess syntax from memory.
+3. **Confirm back to user** — Report: (a) which memory files were read and any
+   relevant lessons surfaced, (b) which SKILL.md files were loaded with key
+   gotchas per skill, (c) restate the Research and Memory retrieval rules in
+   your own words as confirmation.
+
+The confirmation step is mandatory — it proves prework was completed, not
+skipped. An agent that reads the files but skips confirmation may still proceed
+from stale assumptions.
+
+#### Spa Day (Context Optimization)
+
+**Trigger word:** "spa day" or "context optimization"
+
+A periodic context hygiene pass — more aggressive than Distill & Flush. Run
+when sessions feel sluggish, boot context is growing, or MEMORY.md is
+approaching the injection limit.
+
+**Steps:**
+1. Compress verbose MEMORY.md entries to 1–2 lines each
+2. Archive time-bound content to `memory/YYYY-MM-DD-memory-archive.md`
+3. Check cross-file duplication — remove any entry that already appears
+   in another file
+4. Audit MEMORY.md Lessons Learned and Decisions Log — remove any entry
+   that has been codified into `AGENTS.md`, `TOOLS.md`, or any active
+   `SKILL.md`. MEMORY.md should only hold what isn't captured elsewhere.
+5. Run workspace size check script to verify file sizes and headroom
+6. Run `openclaw sessions cleanup --enforce`
+
+**Target:** MEMORY.md < 15KB, zero truncation, no duplication.
+
+**Frequency:** Monthly, or when the nightly maintenance cron flags Section D
+or E warnings.
+
+---
+
 ### Cron Job Creation Checklist
 
 ```
@@ -1259,6 +1442,7 @@ Document active MCP servers in `TOOLS.md` so agents can reference them:
 [ ] Model set to haiku with low thinking (confirmed for spoon-fed crons)
 [ ] Schedules staggered ≥15min apart from other crons delivering to the same channel
 [ ] agentId NOT set to "main" (use default agent for isolated crons)
+[ ] wakeMode set to "now" (avoids scheduler drift; do NOT use the "timezone" property)
 ```
 
 ### Verification Checklist (after workspace changes)
@@ -1311,6 +1495,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-08 (v10) | **Section 2 model table:** Updated interactive/conversation thinking from `Low` → `Medium` (haiku thinking:medium is the correct interactive default; crons stay at low). Added `sonnet-gh` alias (`github-copilot/claude-sonnet-4.6`, 125k ctx) to Model Aliases section with usage note. **Section 1 context optimization:** Added `memoryFlush.softThresholdTokens` config recommendation (15,000) with rationale — single large tool response can skip a 4k flush window entirely. **Section 3:** Added Maintenance Cron Pattern subsection — documents the 4-section health report structure (process cleanup, memory backend, token analytics, workspace size), workspace size check script pattern, scheduling guidance, and key payload rules. **Section 4:** Added Non-Trivial Task Gate — mandatory `memory_search` before any research/decision task mid-session. **Section 7:** Added Operational Rituals subsection documenting Prework (3-step: re-boot → skill scan → confirm) and Spa Day / Context Optimization (6-step compaction with MEMORY.md audit). **Section 7 checklist:** Added `wakeMode: "now"` to Cron Creation Checklist (item 13) — prevents scheduler drift; "timezone" property causes drift in Beta. |
 | 2026-03-08 (v9) | **Section 1 alignment audit vs official docs:** Added `BOOT.md` entry (gateway-restart checklist, distinct from `HEARTBEAT.md`). Added `BOOTSTRAP.md` to formal file map. Added Workspace Directories section (`skills/`, `canvas/`, `memory/`). Fixed `TOOLS.md` description — added "does not control tool availability" per official docs. Fixed `HEARTBEAT.md` description — added "keep short, token burn risk" per official docs. Fixed injection limit — "~18KB" replaced with official `bootstrapMaxChars: 20,000 chars` + `bootstrapTotalMaxChars: 150,000 chars`. |
 | 2026-03-07 (v8) | **Model policy update:** Interactive default switched from `claude-sonnet-4-6` → `claude-haiku-4-5` (sonnet quota burn at 31%/24h unsustainable). Sonnet now explicit-invocation only: deep analysis, high-stakes decisions, complex multi-source synthesis. Updated model table, AGENTS.md, MEMORY.md, TOOLS.md, openclaw.json accordingly. GPT-5-mini documented as zero-quota throwaway option. |
 | 2026-03-07 (v7) | **draw.io + Mermaid diagrams:** Added 4 Mermaid diagrams to guide (workspace file injection, memory tiers, cron execution sequence, sub-agent decision flowchart). Each diagram has draw.io MCP Tool Server edit link below it. CODE_STANDARDS.md expanded with diagram type guide and examples. |
