@@ -14,22 +14,22 @@ coverage:
 
 ```mermaid
 flowchart TD
-    A["bq-discovery CLI\n(cli.py)"] --> B["scanner.py\n(orchestrator)"]
+    A["bq-discovery CLI<br/>(cli.py)"] --> B["scanner.py<br/>(orchestrator)"]
 
-    B --> C["iam_scanner.py\nscan_iam_policies()"]
-    B --> D["acl_scanner.py\nscan_dataset_acls()"]
-    B -->|"--expand-groups"| E["resolvers/groups.py\nGroupResolver"]
+    B --> C["iam_scanner.py<br/>scan_iam_policies()"]
+    B --> D["acl_scanner.py<br/>scan_dataset_acls()"]
+    B -->|"--expand-groups"| E["resolvers/groups.py<br/>GroupResolver"]
 
-    C -->|"searchAllIamPolicies\norg-wide · single paginated call\nCloud Asset Inventory API"| F["IAM Policy Bindings\n· datasets\n· tables\n· views"]
+    C -->|"searchAllIamPolicies<br/>org-wide · single paginated call<br/>Cloud Asset Inventory API"| F["IAM Policy Bindings<br/>· datasets<br/>· tables<br/>· views"]
 
-    D --> G["resolvers/projects.py\nlist_org_projects()"]
-    G -->|"list projects + folders\nrecursive BFS\nResource Manager API"| H["Project IDs"]
-    H --> I["list datasets per project\nBigQuery API"]
-    I -->|"dataset.access_entries\nBigQuery API"| J["Dataset ACLs\n· legacy READER/WRITER/OWNER\n· specialGroup\n· domain\n· authorizedView/Dataset/Routine"]
+    D --> G["resolvers/projects.py<br/>list_org_projects()"]
+    G -->|"list projects + folders<br/>recursive BFS<br/>Resource Manager API"| H["Project IDs"]
+    H --> I["list datasets per project<br/>BigQuery API"]
+    I -->|"dataset.access_entries<br/>BigQuery API"| J["Dataset ACLs<br/>· legacy READER/WRITER/OWNER<br/>· specialGroup<br/>· domain<br/>· authorizedView/Dataset/Routine"]
 
-    E -->|"groups.lookup +\nsearchTransitiveMemberships\n(falls back to memberships.list)\nCloud Identity API"| K["Expanded Members\ngroup -> individual users"]
+    E -->|"groups.lookup +<br/>searchTransitiveMemberships<br/>(falls back to memberships.list)<br/>Cloud Identity API"| K["Expanded Members<br/>group -> individual users"]
 
-    F --> L["Combined JSON Output\n(merged + deduplicated)"]
+    F --> L["Combined JSON Output<br/>(merged + deduplicated)"]
     J --> L
     K --> L
 ```
