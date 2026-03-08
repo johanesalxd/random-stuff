@@ -334,8 +334,8 @@ and their members are not expanded.
 
 ```bash
 # Format and lint
-uv run ruff format src/
-uv run ruff check src/
+uv run ruff format bq_discovery/ tests/
+uv run ruff check bq_discovery/ tests/
 
 # Run tests (if present)
 uv run pytest
