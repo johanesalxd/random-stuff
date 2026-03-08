@@ -56,6 +56,7 @@ def run_scan(
     """
     if resource_types is None:
         resource_types = {
+            ResourceType.PROJECT,
             ResourceType.DATASET,
             ResourceType.TABLE,
             ResourceType.VIEW,

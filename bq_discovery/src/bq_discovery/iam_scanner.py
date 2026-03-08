@@ -82,6 +82,9 @@ def _build_asset_types(resource_types: set[ResourceType]) -> list[str]:
     """
     asset_types: list[str] = []
 
+    if ResourceType.PROJECT in resource_types:
+        asset_types.append("cloudresourcemanager.googleapis.com/Project")
+
     if ResourceType.DATASET in resource_types:
         asset_types.append("bigquery.googleapis.com/Dataset")
 
@@ -89,6 +92,23 @@ def _build_asset_types(resource_types: set[ResourceType]) -> list[str]:
         asset_types.append("bigquery.googleapis.com/Table")
 
     return asset_types
+
+
+def _parse_project_resource_name(resource: str) -> str:
+    """Parse a project resource name into a project ID.
+
+    Args:
+        resource: Full resource name, e.g.:
+            //cloudresourcemanager.googleapis.com/projects/my-project-id
+
+    Returns:
+        The project ID string.
+    """
+    parts = resource.split("/")
+    for i, part in enumerate(parts):
+        if part == "projects" and i + 1 < len(parts):
+            return parts[i + 1]
+    return ""
 
 
 def _process_result(
@@ -105,20 +125,27 @@ def _process_result(
         project_ids: Optional list of project IDs to filter by.
         entries: List to append matching PermissionEntry objects to.
     """
-    resource = result.resource
-    project_id, dataset_id, resource_id = _parse_resource_name(resource)
-
-    if project_ids and project_id not in project_ids:
-        return
-
     asset_type = result.asset_type
-    if asset_type == "bigquery.googleapis.com/Dataset":
+    resource = result.resource
+
+    # Determine resource type and parse resource name
+    if asset_type == "cloudresourcemanager.googleapis.com/Project":
+        res_type = ResourceType.PROJECT
+        project_id = _parse_project_resource_name(resource)
+        dataset_id = ""
+        resource_id = None
+    elif asset_type == "bigquery.googleapis.com/Dataset":
         res_type = ResourceType.DATASET
+        project_id, dataset_id, resource_id = _parse_resource_name(resource)
     elif asset_type == "bigquery.googleapis.com/Table":
         # Cloud Asset Inventory does not distinguish table vs view.
         # Both are reported as bigquery.googleapis.com/Table.
         res_type = ResourceType.TABLE
+        project_id, dataset_id, resource_id = _parse_resource_name(resource)
     else:
+        return
+
+    if project_ids and project_id not in project_ids:
         return
 
     # Check if this resource type was requested. For TABLE asset type,
