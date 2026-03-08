@@ -7,6 +7,7 @@ import logging
 import sys
 
 from bq_discovery.models import ResourceType
+from bq_discovery.resolvers.projects import list_org_projects_info
 from bq_discovery.scanner import run_scan
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="GCP organization ID (numeric).",
     )
     parser.add_argument(
+        "--list-projects",
+        action="store_true",
+        help=(
+            "List all active projects in the org (project ID and project number) "
+            "and exit. Use this to discover project IDs for --project-ids."
+        ),
+    )
+    parser.add_argument(
         "--skip-acls",
         action="store_true",
         help=(
@@ -36,10 +45,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resource-types",
-        default="dataset,table,view",
+        default="project,dataset,table,view",
         help=(
             "Comma-separated list of resource types to scan. "
-            "Options: dataset, table, view. Default: all."
+            "Options: project, dataset, table, view. Default: all."
         ),
     )
     parser.add_argument(
@@ -59,10 +68,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--format",
+        choices=["json", "jsonl", "csv"],
+        default="json",
+        help=(
+            "Output format. 'json' (default) is pretty-printed with metadata. "
+            "'jsonl' is newline-delimited JSON, one entry per line, compatible "
+            "with BigQuery JSONL import. 'csv' is comma-separated, compatible "
+            "with BigQuery CSV import."
+        ),
+    )
+    parser.add_argument(
         "--output",
         "-o",
         default=None,
-        help="Output file path for JSON results. If not specified, prints to stdout.",
+        help="Output file path. If not specified, prints to stdout.",
     )
     parser.add_argument(
         "--verbose",
@@ -90,6 +110,26 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    # --list-projects: discover and print all projects, then exit
+    if args.list_projects:
+        try:
+            projects = list_org_projects_info(args.org_id)
+        except Exception as e:
+            logger.error("Failed to list projects: %s", e)
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        if not projects:
+            print("No active projects found.", file=sys.stderr)
+            return 0
+        id_width = max(len(p["project_id"]) for p in projects)
+        id_width = max(id_width, len("PROJECT_ID"))
+        print(f"{'PROJECT_ID':<{id_width}}  PROJECT_NUMBER")
+        print(f"{'-' * id_width}  {'-' * 14}")
+        for p in projects:
+            print(f"{p['project_id']:<{id_width}}  {p['project_number']}")
+        print(f"\n{len(projects)} project(s) found.", file=sys.stderr)
+        return 0
 
     # Parse resource types
     resource_types: set[ResourceType] = set()
@@ -125,15 +165,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Output results
-    json_output = result.to_json()
+    # Serialize output in requested format
+    if args.format == "jsonl":
+        output = result.to_jsonl()
+    elif args.format == "csv":
+        output = result.to_csv()
+    else:
+        output = result.to_json()
+
     if args.output:
-        with open(args.output, "w") as f:
-            f.write(json_output)
-            f.write("\n")
+        with open(args.output, "w", newline="") as f:
+            f.write(output)
+            if not output.endswith("\n"):
+                f.write("\n")
         logger.info("Results written to %s", args.output)
     else:
-        print(json_output)
+        print(output, end="" if output.endswith("\n") else "\n")
 
     # Summary to stderr
     print(

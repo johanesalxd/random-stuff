@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -11,6 +13,7 @@ from enum import Enum
 class ResourceType(Enum):
     """BigQuery resource types that can have permissions."""
 
+    PROJECT = "project"
     DATASET = "dataset"
     TABLE = "table"
     VIEW = "view"
@@ -96,7 +99,10 @@ class ScanResult:
     entries: list[PermissionEntry] = field(default_factory=list)
 
     def to_json(self, indent: int = 2) -> str:
-        """Serialize the scan result to JSON."""
+        """Serialize the scan result to pretty-printed JSON.
+
+        Includes a metadata block and an entries array.
+        """
         return json.dumps(
             {
                 "metadata": {
@@ -113,3 +119,59 @@ class ScanResult:
             },
             indent=indent,
         )
+
+    def to_jsonl(self) -> str:
+        """Serialize the scan result to newline-delimited JSON (JSONL).
+
+        Each line is a self-contained JSON object representing one
+        permission entry, with organization_id and scanned_at
+        denormalized into every row. Compatible with BigQuery JSONL
+        import (bq load --source_format=NEWLINE_DELIMITED_JSON).
+
+        Returns:
+            String of newline-separated JSON objects, one per entry.
+        """
+        lines: list[str] = []
+        for entry in self.entries:
+            row = {
+                "organization_id": self.organization_id,
+                "scanned_at": self.scanned_at,
+            }
+            row.update(entry.to_dict())
+            lines.append(json.dumps(row))
+        return "\n".join(lines)
+
+    def to_csv(self) -> str:
+        """Serialize the scan result to CSV.
+
+        Includes a header row. organization_id and scanned_at are
+        denormalized into every row. Compatible with BigQuery CSV import
+        (bq load --source_format=CSV --skip_leading_rows=1).
+
+        Returns:
+            CSV string with header and one data row per permission entry.
+        """
+        fieldnames = [
+            "organization_id",
+            "scanned_at",
+            "project_id",
+            "dataset_id",
+            "resource_id",
+            "resource_type",
+            "role",
+            "member",
+            "member_type",
+            "source",
+            "inherited_from_group",
+        ]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for entry in self.entries:
+            row = {
+                "organization_id": self.organization_id,
+                "scanned_at": self.scanned_at,
+            }
+            row.update(entry.to_dict())
+            writer.writerow(row)
+        return buf.getvalue()
