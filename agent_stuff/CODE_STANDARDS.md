@@ -534,6 +534,13 @@ Tests are documentation of how code works internally, not metrics for coverage p
 
 **Result:** Tests that stay maintainable as code evolves, catch real bugs instead of false positives from mock fantasies, and serve as executable specifications for anyone reading the code.
 
+**Anti-patterns to avoid:**
+- Testing stdlib/framework behavior (e.g., argparse stores a flag, JSON marshaling works)
+- Standalone tests for hardcoded constant assignments — fold into the happy-path test as additional assertions
+- Duplicate tests with trivially different input cardinality (N=1 vs N=3 with no new behavioral insight)
+- Testing implementation patterns (mutation vs return value, internal call ordering)
+- Testing the same code branch with trivially different inputs unless documenting a meaningful taxonomy
+
 ---
 
 Follow the AAA pattern (Arrange, Act, Assert) in all languages.
@@ -546,12 +553,12 @@ Follow the AAA pattern (Arrange, Act, Assert) in all languages.
 | JS/TS | Jest/Vitest | `describe`/`it` blocks | `expect()`, async/await |
 
 **Rules:**
-- Test all public functions/methods
+- Test public functions with meaningful logic; skip thin wrappers that only delegate to external services
 - Test both success and failure paths
 - Test edge cases and boundary conditions
 - Keep tests independent and isolated
 - One logical assertion per test (when practical)
-- Mock external dependencies, prefer in-memory test data
+- Prefer in-memory test data; skip tests that would require extensive mocking over testing real behavior
 
 ## Documentation and Diagrams
 
