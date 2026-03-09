@@ -515,6 +515,27 @@ Before adding a new dependency, evaluate:
 
 ## Testing
 
+### Philosophy: Testing for Understanding
+
+Tests are documentation of how code works internally, not metrics for coverage percentages.
+
+**Core principle:** Each test answers the question "What does this do in this scenario?" Tests should reveal intent, expose internal decision paths, and catch real bugs—not hit arbitrary coverage targets.
+
+**Approach:**
+- Focus on behavior and edge cases that matter, not line count
+- Test the code you wrote, not the mocks you invented (minimal mocking)
+- Assert semantically: "output is a sorted list of active users" not "assert len(x) == 3"
+- One logical scenario per test; multiple assertions are OK if they're all about the same behavior
+- Name tests as documentation: `test_filters_by_date_inclusive` reveals intent better than `test_filter_1`
+
+**When to mock:**
+- Rarely. Mock only external dependencies (APIs, databases, file systems) when integration is too slow or introduces brittleness
+- Never mock internal behavior—test it instead
+
+**Result:** Tests that stay maintainable as code evolves, catch real bugs instead of false positives from mock fantasies, and serve as executable specifications for anyone reading the code.
+
+---
+
 Follow the AAA pattern (Arrange, Act, Assert) in all languages.
 
 | Language | Framework | Test Naming | Key Pattern |

@@ -30,6 +30,16 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 - **Regression Check:** Run tests against both main and feature branch to verify no regressions before submitting changes.
 - **Confirmation:** After fixing errors, request explicit user confirmation before rerunning tests or commands.
 
+## Testing Philosophy
+
+Tests document how code works internally. Write tests to understand behavior, not to hit coverage metrics. Each test should answer: "What does this do in this scenario?" Focus on internal decision paths, edge cases that reveal intent, and failure modes that matter.
+
+- No mocks for internal behavior—test it directly
+- Minimal mocks for external dependencies only
+- Assertions should be semantic, not just count-based
+- One scenario per test; name it so intent is obvious
+- See CODE_STANDARDS.md for language-specific patterns
+
 ## Decision Making
 
 - **Ask vs. Assume:** Ask clarifying questions rather than making large assumptions about user intent. Small, obvious decisions can be made autonomously.
