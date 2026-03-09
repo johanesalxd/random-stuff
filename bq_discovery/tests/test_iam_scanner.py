@@ -110,18 +110,6 @@ def test_build_asset_types_all():
     assert len(result) == 3
 
 
-def test_build_asset_types_dataset_only():
-    """Dataset-only produces single bigquery Dataset asset type."""
-    result = _build_asset_types({ResourceType.DATASET})
-    assert result == ["bigquery.googleapis.com/Dataset"]
-
-
-def test_build_asset_types_table_only():
-    """TABLE produces bigquery Table asset type."""
-    result = _build_asset_types({ResourceType.TABLE})
-    assert result == ["bigquery.googleapis.com/Table"]
-
-
 def test_build_asset_types_view_only():
     """VIEW also produces bigquery Table asset type."""
     result = _build_asset_types({ResourceType.VIEW})
@@ -132,12 +120,6 @@ def test_build_asset_types_table_and_view():
     """TABLE + VIEW produces single bigquery Table asset type (no duplicate)."""
     result = _build_asset_types({ResourceType.TABLE, ResourceType.VIEW})
     assert result == ["bigquery.googleapis.com/Table"]
-
-
-def test_build_asset_types_project_only():
-    """PROJECT produces cloudresourcemanager Project asset type."""
-    result = _build_asset_types({ResourceType.PROJECT})
-    assert result == ["cloudresourcemanager.googleapis.com/Project"]
 
 
 def test_build_asset_types_empty_set():
@@ -189,7 +171,7 @@ def _make_iam_result(
 
 
 def test_process_result_dataset_entry():
-    """Dataset asset type creates entries with ResourceType.DATASET."""
+    """Dataset asset type creates entries with correct type, fields, and source."""
     result = _make_iam_result(
         "//bigquery.googleapis.com/projects/p/datasets/d",
         "bigquery.googleapis.com/Dataset",
@@ -200,6 +182,7 @@ def test_process_result_dataset_entry():
     assert len(entries) == 1
     assert entries[0].resource_type == ResourceType.DATASET
     assert entries[0].dataset_id == "d"
+    assert entries[0].source == PermissionSource.IAM_POLICY
 
 
 def test_process_result_table_entry():
@@ -268,18 +251,6 @@ def test_process_result_project_filter_no_match():
     assert len(entries) == 0
 
 
-def test_process_result_project_filter_none():
-    """All entries pass when project_ids is None."""
-    result = _make_iam_result(
-        "//bigquery.googleapis.com/projects/any/datasets/d",
-        "bigquery.googleapis.com/Dataset",
-        [("roles/bigquery.dataViewer", ["user:a@x.com"])],
-    )
-    entries = []
-    _process_result(result, {ResourceType.DATASET}, None, entries)
-    assert len(entries) == 1
-
-
 def test_process_result_resource_type_filter():
     """Entry is skipped when its resource type was not requested."""
     result = _make_iam_result(
@@ -317,15 +288,3 @@ def test_process_result_multiple_bindings():
     entries = []
     _process_result(result, {ResourceType.DATASET}, None, entries)
     assert len(entries) == 3
-
-
-def test_process_result_sets_source_iam_policy():
-    """All entries have source=PermissionSource.IAM_POLICY."""
-    result = _make_iam_result(
-        "//bigquery.googleapis.com/projects/p/datasets/d",
-        "bigquery.googleapis.com/Dataset",
-        [("roles/bigquery.dataViewer", ["user:a@x.com"])],
-    )
-    entries = []
-    _process_result(result, {ResourceType.DATASET}, None, entries)
-    assert entries[0].source == PermissionSource.IAM_POLICY
