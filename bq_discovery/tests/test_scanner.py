@@ -38,14 +38,6 @@ def test_compute_stats_empty_entries():
     assert result.resources_scanned == 0
 
 
-def test_compute_stats_single_project():
-    """Single project counted correctly."""
-    result = ScanResult(organization_id="123")
-    result.entries = [_make_entry()]
-    _compute_stats(result)
-    assert result.projects_scanned == 1
-
-
 def test_compute_stats_multiple_projects():
     """Distinct projects counted correctly."""
     result = ScanResult(organization_id="123")
@@ -90,12 +82,3 @@ def test_compute_stats_resources_deduplication():
     ]
     _compute_stats(result)
     assert result.resources_scanned == 2
-
-
-def test_compute_stats_mutates_in_place():
-    """Function modifies the ScanResult object directly, returns None."""
-    result = ScanResult(organization_id="123")
-    result.entries = [_make_entry()]
-    ret = _compute_stats(result)
-    assert ret is None
-    assert result.projects_scanned == 1

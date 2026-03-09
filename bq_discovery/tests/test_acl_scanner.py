@@ -95,7 +95,7 @@ def _make_access_entry(
 
 
 def test_parse_access_entry_user():
-    """userByEmail entry produces member='user:email' with member_type='user'."""
+    """userByEmail entry produces member='user:email' with correct fields."""
     entry = _parse_access_entry(
         _make_access_entry("READER", "userByEmail", "alice@x.com"),
         "proj-1",
@@ -105,6 +105,9 @@ def test_parse_access_entry_user():
     assert entry.member == "user:alice@x.com"
     assert entry.member_type == "user"
     assert entry.role == "READER"
+    assert entry.source == PermissionSource.DATASET_ACL
+    assert entry.resource_type == ResourceType.DATASET
+    assert entry.resource_id is None
 
 
 def test_parse_access_entry_group():
@@ -190,34 +193,49 @@ def test_parse_access_entry_none_role():
     assert entry.role == "NONE"
 
 
-def test_parse_access_entry_sets_source_dataset_acl():
-    """All parsed entries have source=PermissionSource.DATASET_ACL."""
+def test_parse_access_entry_view():
+    """View entity type produces authorizedView member with formatted ref."""
     entry = _parse_access_entry(
-        _make_access_entry("READER", "userByEmail", "alice@x.com"),
+        _make_access_entry(
+            "NONE",
+            "view",
+            {"projectId": "p", "datasetId": "d", "tableId": "v"},
+        ),
         "proj-1",
         "ds-1",
     )
     assert entry is not None
-    assert entry.source == PermissionSource.DATASET_ACL
+    assert entry.member == "view:p.d.v"
+    assert entry.member_type == "authorizedView"
 
 
-def test_parse_access_entry_sets_resource_type_dataset():
-    """All parsed entries have resource_type=ResourceType.DATASET."""
+def test_parse_access_entry_dataset_ref():
+    """Dataset entity type produces authorizedDataset member."""
     entry = _parse_access_entry(
-        _make_access_entry("READER", "userByEmail", "alice@x.com"),
+        _make_access_entry(
+            "NONE",
+            "dataset",
+            {"dataset": {"projectId": "p", "datasetId": "d"}},
+        ),
         "proj-1",
         "ds-1",
     )
     assert entry is not None
-    assert entry.resource_type == ResourceType.DATASET
+    assert entry.member == "dataset:p.d"
+    assert entry.member_type == "authorizedDataset"
 
 
-def test_parse_access_entry_resource_id_is_none():
-    """All parsed entries have resource_id=None."""
+def test_parse_access_entry_routine():
+    """Routine entity type produces authorizedRoutine member."""
     entry = _parse_access_entry(
-        _make_access_entry("READER", "userByEmail", "alice@x.com"),
+        _make_access_entry(
+            "NONE",
+            "routine",
+            {"projectId": "p", "datasetId": "d", "routineId": "r"},
+        ),
         "proj-1",
         "ds-1",
     )
     assert entry is not None
-    assert entry.resource_id is None
+    assert entry.member == "routine:p.d.r"
+    assert entry.member_type == "authorizedRoutine"

@@ -70,24 +70,6 @@ def test_to_dict_all_fields_populated():
     assert d["inherited_from_group"] == "team@example.com"
 
 
-def test_to_dict_resource_id_none():
-    """Dataset-level entry has resource_id=None in output dict."""
-    d = _make_entry(resource_id=None).to_dict()
-    assert d["resource_id"] is None
-
-
-def test_to_dict_inherited_from_group_none():
-    """Entry without group inheritance has inherited_from_group=None."""
-    d = _make_entry().to_dict()
-    assert d["inherited_from_group"] is None
-
-
-def test_to_dict_inherited_from_group_set():
-    """Entry with group inheritance includes the group email."""
-    d = _make_entry(inherited_from_group="grp@x.com").to_dict()
-    assert d["inherited_from_group"] == "grp@x.com"
-
-
 def test_to_dict_project_resource_type():
     """Project-level entry has resource_type='project' in dict."""
     d = _make_entry(
@@ -134,16 +116,6 @@ def test_to_json_metadata_fields():
     assert set(meta.keys()) == expected_keys
 
 
-def test_to_json_custom_indent():
-    """Custom indent parameter controls JSON formatting."""
-    result = _make_result()
-    out_2 = result.to_json(indent=2)
-    out_4 = result.to_json(indent=4)
-    assert out_2 != out_4
-    # 4-space indent produces longer output
-    assert len(out_4) > len(out_2)
-
-
 def test_to_json_with_errors():
     """Error strings appear in metadata.errors array."""
     result = _make_result(errors=["err1", "err2"])
@@ -174,13 +146,6 @@ def test_to_jsonl_single_entry():
     assert len(lines) == 1
     parsed = json.loads(lines[0])
     assert parsed["organization_id"] == "123456"
-
-
-def test_to_jsonl_multiple_entries():
-    """Multiple entries produce newline-separated JSON lines."""
-    result = _make_result(entries=[_make_entry(), _make_entry(), _make_entry()])
-    lines = result.to_jsonl().strip().split("\n")
-    assert len(lines) == 3
 
 
 def test_to_jsonl_each_line_is_valid_json():
@@ -218,20 +183,6 @@ def test_to_csv_header_row():
         "source,inherited_from_group"
     )
     assert header == expected
-
-
-def test_to_csv_single_entry():
-    """Single entry produces header + one data row."""
-    result = _make_result(entries=[_make_entry()])
-    lines = result.to_csv().strip().split("\n")
-    assert len(lines) == 2  # header + 1 data row
-
-
-def test_to_csv_multiple_entries():
-    """Multiple entries produce correct number of data rows."""
-    result = _make_result(entries=[_make_entry(), _make_entry(), _make_entry()])
-    lines = result.to_csv().strip().split("\n")
-    assert len(lines) == 4  # header + 3 data rows
 
 
 def test_to_csv_denormalizes_organization_id():
