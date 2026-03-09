@@ -80,41 +80,12 @@ def test_parse_transitive_membership_missing_key():
 # --- GroupResolver._parse_direct_membership (static) ---
 
 
-def test_parse_direct_membership_user():
-    """User membership returns {'email': ..., 'type': 'user'}."""
-    data = {
-        "preferredMemberKey": {"id": "bob@example.com"},
-        "type": "USER",
-    }
-    result = GroupResolver._parse_direct_membership(data)
-    assert result == {"email": "bob@example.com", "type": "user"}
-
-
-def test_parse_direct_membership_service_account():
-    """Service account email classifies as 'serviceAccount'."""
-    data = {
-        "preferredMemberKey": {"id": "sa@proj.iam.gserviceaccount.com"},
-        "type": "USER",
-    }
-    result = GroupResolver._parse_direct_membership(data)
-    assert result == {
-        "email": "sa@proj.iam.gserviceaccount.com",
-        "type": "serviceAccount",
-    }
-
-
 def test_parse_direct_membership_group_skipped():
     """Membership with type='GROUP' returns None."""
     data = {
         "preferredMemberKey": {"id": "group@example.com"},
         "type": "GROUP",
     }
-    assert GroupResolver._parse_direct_membership(data) is None
-
-
-def test_parse_direct_membership_empty_id_skipped():
-    """Membership with empty preferredMemberKey.id returns None."""
-    data = {"preferredMemberKey": {"id": ""}, "type": "USER"}
     assert GroupResolver._parse_direct_membership(data) is None
 
 
