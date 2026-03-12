@@ -8,3 +8,5 @@ dist/
 build/
 .ruff_cache/
 results*.json
+reports/*
+!reports/.gitkeep
