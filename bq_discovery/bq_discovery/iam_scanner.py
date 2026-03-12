@@ -1,8 +1,9 @@
 """IAM policy scanner using Cloud Asset Inventory.
 
-Uses searchAllIamPolicies to efficiently discover all IAM policy bindings
-for BigQuery resources across an entire organization in a single paginated
-API call.
+Uses searchAllIamPolicies to discover all IAM policy bindings for BigQuery
+resources. When project_ids are specified, scopes each call to
+projects/{project_id} to avoid org-wide rate limits. When no project_ids
+are specified, performs a single paginated call across the entire organization.
 
 Limitations:
     - Only captures IAM policies, not legacy dataset ACLs (use acl_scanner
@@ -178,16 +179,19 @@ def scan_iam_policies(
     resource_types: set[ResourceType],
     project_ids: list[str] | None = None,
 ) -> tuple[list[PermissionEntry], list[str]]:
-    """Scan BigQuery IAM policies org-wide using Cloud Asset Inventory.
+    """Scan BigQuery IAM policies using Cloud Asset Inventory.
 
-    Performs a single paginated searchAllIamPolicies call across the
-    entire organization scope, covering datasets, tables, and views.
+    When project_ids are provided, performs one searchAllIamPolicies call
+    per project scoped to projects/{project_id}, avoiding org-wide rate
+    limits. When project_ids is None, performs a single paginated call
+    scoped to organizations/{organization_id}.
 
     Args:
         organization_id: Numeric GCP organization ID.
         resource_types: Set of resource types to include in results.
-        project_ids: Optional list of project IDs to filter results.
-            If None, results from all projects are included.
+        project_ids: Optional list of project IDs. When provided, scopes
+            each CAI call to the individual project. When None, scans the
+            entire organization.
 
     Returns:
         Tuple of (entries, errors) where entries is a list of
@@ -201,24 +205,45 @@ def scan_iam_policies(
     if not asset_types:
         return entries, errors
 
-    scope = f"organizations/{organization_id}"
-    logger.info(
-        "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
-        scope,
-    )
-
-    try:
-        request = asset_v1.SearchAllIamPoliciesRequest(
-            scope=scope,
-            asset_types=asset_types,
+    if project_ids:
+        for project_id in project_ids:
+            scope = f"projects/{project_id}"
+            logger.info(
+                "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
+                scope,
+            )
+            try:
+                request = asset_v1.SearchAllIamPoliciesRequest(
+                    scope=scope,
+                    asset_types=asset_types,
+                )
+                for result in client.search_all_iam_policies(request=request):
+                    _process_result(result, resource_types, None, entries)
+            except Exception as e:
+                logger.error(
+                    "Cloud Asset Inventory scan failed for project %s: %s",
+                    project_id,
+                    e,
+                )
+                errors.append(
+                    f"Cloud Asset Inventory scan failed for project {project_id}: {e}"
+                )
+    else:
+        scope = f"organizations/{organization_id}"
+        logger.info(
+            "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
+            scope,
         )
-
-        for result in client.search_all_iam_policies(request=request):
-            _process_result(result, resource_types, project_ids, entries)
-
-    except Exception as e:
-        logger.error("Cloud Asset Inventory scan failed: %s", e)
-        errors.append(f"Cloud Asset Inventory scan failed: {e}")
+        try:
+            request = asset_v1.SearchAllIamPoliciesRequest(
+                scope=scope,
+                asset_types=asset_types,
+            )
+            for result in client.search_all_iam_policies(request=request):
+                _process_result(result, resource_types, project_ids, entries)
+        except Exception as e:
+            logger.error("Cloud Asset Inventory scan failed: %s", e)
+            errors.append(f"Cloud Asset Inventory scan failed: {e}")
 
     logger.info(
         "IAM policy scan complete: %s entries found",

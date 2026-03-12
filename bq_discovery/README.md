@@ -8,8 +8,9 @@ single command.
 
 - Discovers all projects in your GCP organization (or scans a specific
   allowlist via `--project-ids`)
-- Scans project-level, dataset-level, and table/view-level IAM policies
-  org-wide via Cloud Asset Inventory (~1-2 seconds)
+- Scans project-level, dataset-level, and table/view-level IAM policies via
+  Cloud Asset Inventory — org-wide in a single call, or per-project when
+  `--project-ids` is specified (avoids org-wide rate limits)
 - Scans dataset legacy ACLs (READER/WRITER/OWNER, special groups, domains,
   authorized views) via the BigQuery API
 - Optionally expands Google Group memberships to individual users via
@@ -49,7 +50,7 @@ flowchart TD
     B --> D["acl_scanner.py<br/>scan_dataset_acls()"]
     B -->|"--expand-groups"| E["resolvers/groups.py<br/>GroupResolver"]
 
-    C -->|"searchAllIamPolicies<br/>org-wide · single paginated call<br/>Cloud Asset Inventory API"| F["IAM Policy Bindings<br/>· projects<br/>· datasets<br/>· tables<br/>· views"]
+    C -->|"searchAllIamPolicies<br/>org-wide (default) or per-project (--project-ids)<br/>Cloud Asset Inventory API"| F["IAM Policy Bindings<br/>· projects<br/>· datasets<br/>· tables<br/>· views"]
 
     D --> G["resolvers/projects.py<br/>list_org_projects()"]
     G -->|"list projects + folders<br/>recursive BFS<br/>Resource Manager API"| H["Project IDs"]
@@ -95,7 +96,9 @@ gcloud services enable \
 
 ### IAM roles required
 
-All roles must be granted at the **organization level**.
+#### Org-wide scan (default)
+
+All roles granted at the **organization level**:
 
 | Role | Purpose |
 |------|---------|
@@ -103,8 +106,6 @@ All roles must be granted at the **organization level**.
 | `roles/browser` | List projects and folders |
 | `roles/bigquery.metadataViewer` | List datasets and read dataset ACLs |
 | `roles/cloudidentity.groupsViewer` | Resolve group memberships (`--expand-groups` only) |
-
-Grant at org level:
 
 ```bash
 ORG_ID=YOUR_ORG_ID
@@ -118,6 +119,33 @@ gcloud organizations add-iam-policy-binding $ORG_ID \
 
 gcloud organizations add-iam-policy-binding $ORG_ID \
   --member=$MEMBER --role=roles/bigquery.metadataViewer
+```
+
+#### Single-project scan (`--project-ids`)
+
+When scanning specific projects, `roles/cloudasset.viewer` and
+`roles/bigquery.metadataViewer` can be granted at the **project level**
+instead of org level. `roles/browser` is not required (project discovery
+is skipped when `--project-ids` is specified).
+
+| Role | Level | Purpose |
+|------|-------|---------|
+| `roles/cloudasset.viewer` | Project | Search IAM policies within the project |
+| `roles/bigquery.metadataViewer` | Project | List datasets and read dataset ACLs |
+| `roles/serviceusage.serviceUsageConsumer` | Project | Required by Python client libraries for API quota |
+
+```bash
+PROJECT_ID=YOUR_PROJECT_ID
+MEMBER=user:you@example.com
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=$MEMBER --role=roles/cloudasset.viewer
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=$MEMBER --role=roles/bigquery.metadataViewer
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=$MEMBER --role=roles/serviceusage.serviceUsageConsumer
 ```
 
 ## Installation
@@ -147,7 +175,7 @@ Step 3: Resolve group members    --expand-groups
 | Step | Scenario | Flags | What you get | Time |
 |------|----------|-------|--------------|------|
 | 0 | **Discover projects** — find all project IDs/numbers in the org | `--list-projects` | Printed table of project IDs and numbers; use to build `--project-ids` allowlist | ~3-5s |
-| 1 | **Quick IAM audit** — who has IAM access? | `--skip-acls` | IAM policy bindings for projects, datasets, tables, and views org-wide via Cloud Asset Inventory | ~1-2s |
+| 1 | **Quick IAM audit** — who has IAM access? | `--skip-acls` | IAM policy bindings for projects, datasets, tables, and views via Cloud Asset Inventory (org-wide, or per-project when `--project-ids` is set — avoids rate limits) | ~1-2s |
 | 2 | **Full audit** — complete picture | *(default)* | Step 1 + dataset ACLs: legacy READER/WRITER/OWNER, specialGroups, domains, authorized views/datasets/routines | ~1 min per 50 datasets |
 | 3 | **Full audit + group resolution** — see actual humans behind groups | `--expand-groups` | Step 2 + each `group:` entry expanded to individual `user:` entries via Cloud Identity | Adds ~1s per group |
 
@@ -170,25 +198,26 @@ env -u GOOGLE_APPLICATION_CREDENTIALS \
 
 # Step 1: Quick IAM audit (~1-2 seconds)
 env -u GOOGLE_APPLICATION_CREDENTIALS \
-  uv run bq-discovery --org-id YOUR_ORG_ID --skip-acls -v -o results.jsonl --format jsonl
+  uv run bq-discovery --org-id YOUR_ORG_ID --skip-acls -v -o reports/results.jsonl --format jsonl
 
 # Step 2: Full audit — IAM policies + dataset ACLs (recommended)
 env -u GOOGLE_APPLICATION_CREDENTIALS \
-  uv run bq-discovery --org-id YOUR_ORG_ID -v -o results.json
+  uv run bq-discovery --org-id YOUR_ORG_ID -v -o reports/results.json
 
 # Step 3: Full audit + expand group memberships to individual users
 env -u GOOGLE_APPLICATION_CREDENTIALS \
-  uv run bq-discovery --org-id YOUR_ORG_ID --expand-groups -v -o results.csv --format csv
+  uv run bq-discovery --org-id YOUR_ORG_ID --expand-groups -v -o reports/results.csv --format csv
 
 # Scoped: scan specific projects only (use Step 0 output to build this list)
 env -u GOOGLE_APPLICATION_CREDENTIALS \
   uv run bq-discovery --org-id YOUR_ORG_ID \
-  --project-ids dde-prj-americas,dde-prj-emea,dde-prj-quality -v -o results.json
+  --project-ids dde-prj-americas,dde-prj-emea,dde-prj-quality \
+  -v -o reports/results.jsonl --format jsonl
 
 # Scoped: BigQuery-specific permissions only (exclude project-level IAM)
 env -u GOOGLE_APPLICATION_CREDENTIALS \
   uv run bq-discovery --org-id YOUR_ORG_ID \
-  --resource-types dataset,table,view -v -o results.json
+  --resource-types dataset,table,view -v -o reports/results.json
 ```
 
 ### Loading into BigQuery
@@ -201,7 +230,7 @@ bq load \
   --source_format=NEWLINE_DELIMITED_JSON \
   --autodetect \
   MY_PROJECT:MY_DATASET.bq_permissions \
-  results.jsonl
+  reports/results.jsonl
 
 # Load CSV into BigQuery (auto-detect schema, skip header row)
 bq load \
@@ -209,7 +238,7 @@ bq load \
   --autodetect \
   --skip_leading_rows=1 \
   MY_PROJECT:MY_DATASET.bq_permissions \
-  results.csv
+  reports/results.csv
 ```
 
 ### CLI reference
@@ -337,6 +366,6 @@ and their members are not expanded.
 uv run ruff format bq_discovery/ tests/
 uv run ruff check bq_discovery/ tests/
 
-# Run tests (if present)
+# Run tests
 uv run pytest
 ```
