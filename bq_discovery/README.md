@@ -222,23 +222,64 @@ env -u GOOGLE_APPLICATION_CREDENTIALS \
 
 ### Loading into BigQuery
 
-The JSONL and CSV formats are designed for direct `bq load` import:
+The JSONL and CSV formats are designed for direct `bq load` import. By
+convention, name the table after the JSONL file with hyphens replaced by
+underscores (e.g., `my-project-id.jsonl` → table `my_project_id`).
 
 ```bash
+# Create the dataset (first time only)
+bq mk --project_id=MY_PROJECT MY_DATASET
+
 # Load JSONL into BigQuery (auto-detect schema)
 bq load \
+  --project_id=MY_PROJECT \
   --source_format=NEWLINE_DELIMITED_JSON \
   --autodetect \
-  MY_PROJECT:MY_DATASET.bq_permissions \
-  reports/results.jsonl
+  --replace \
+  MY_PROJECT:MY_DATASET.my_project_id \
+  reports/my-project-id.jsonl
 
 # Load CSV into BigQuery (auto-detect schema, skip header row)
 bq load \
+  --project_id=MY_PROJECT \
   --source_format=CSV \
   --autodetect \
+  --replace \
   --skip_leading_rows=1 \
-  MY_PROJECT:MY_DATASET.bq_permissions \
-  reports/results.csv
+  MY_PROJECT:MY_DATASET.my_project_id \
+  reports/my-project-id.csv
+```
+
+### Sample queries
+
+Replace `MY_PROJECT.MY_DATASET.my_project_id` with your actual table reference.
+
+```sql
+-- Permission summary by resource type and source
+SELECT resource_type, source, COUNT(*) AS cnt
+FROM `MY_PROJECT.MY_DATASET.my_project_id`
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- All human users with direct access (excludes service accounts and groups)
+SELECT DISTINCT member, role, resource_type, dataset_id, resource_id
+FROM `MY_PROJECT.MY_DATASET.my_project_id`
+WHERE member_type = 'user'
+ORDER BY member, resource_type;
+
+-- Datasets accessible by external domains or allUsers/allAuthenticatedUsers
+SELECT dataset_id, member, member_type, role
+FROM `MY_PROJECT.MY_DATASET.my_project_id`
+WHERE member_type IN ('domain', 'specialGroup')
+  AND resource_type = 'dataset'
+ORDER BY dataset_id;
+
+-- Who has broad project-level access (owner/editor/admin)?
+SELECT member, member_type, role
+FROM `MY_PROJECT.MY_DATASET.my_project_id`
+WHERE resource_type = 'project'
+  AND role IN ('roles/owner', 'roles/editor', 'roles/bigquery.admin')
+ORDER BY role, member;
 ```
 
 ### CLI reference
