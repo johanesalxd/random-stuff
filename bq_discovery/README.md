@@ -211,7 +211,7 @@ env -u GOOGLE_APPLICATION_CREDENTIALS \
 # Scoped: scan specific projects only (use Step 0 output to build this list)
 env -u GOOGLE_APPLICATION_CREDENTIALS \
   uv run bq-discovery --org-id YOUR_ORG_ID \
-  --project-ids dde-prj-americas,dde-prj-emea,dde-prj-quality \
+  --project-ids proj-a,proj-b,proj-c \
   -v -o reports/results.jsonl --format jsonl
 
 # Scoped: BigQuery-specific permissions only (exclude project-level IAM)
@@ -280,6 +280,37 @@ FROM `MY_PROJECT.MY_DATASET.my_project_id`
 WHERE resource_type = 'project'
   AND role IN ('roles/owner', 'roles/editor', 'roles/bigquery.admin')
 ORDER BY role, member;
+```
+
+### Understanding the results
+
+The tool captures *where permissions are granted*, not where they cascade
+to. BigQuery IAM follows a hierarchy: **project → dataset → table**.
+Access granted at a higher level cascades to all resources below it.
+
+| `resource_type` | `resource_id` | What it means |
+|-----------------|---------------|---------------|
+| `project` | null | Roles bound to the project — cascades to all datasets and tables |
+| `dataset` | null | Roles/ACLs on the dataset — cascades to all tables within |
+| `table` | table or view ID | Roles granted directly on a specific table or view |
+
+A project with hundreds of tables but only a few `table`-level entries is
+normal — most access is granted at the project or dataset level. To see
+how many actual tables exist compared to direct table-level grants:
+
+```sql
+-- Count actual tables/views in the scanned project
+-- Replace SCANNED_PROJECT and REGION (e.g. region-eu, region-us)
+SELECT table_schema AS dataset_id, table_type, COUNT(*) AS cnt
+FROM `SCANNED_PROJECT`.`REGION`.INFORMATION_SCHEMA.TABLES
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- Compare with direct table-level grants from the scan
+SELECT resource_id, dataset_id, role, member
+FROM `MY_PROJECT.MY_DATASET.my_project_id`
+WHERE resource_type = 'table'
+ORDER BY dataset_id, resource_id;
 ```
 
 ### CLI reference
