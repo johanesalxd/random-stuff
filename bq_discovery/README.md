@@ -284,8 +284,15 @@ ORDER BY role, member;
 
 ### Understanding the results
 
-The tool captures *where permissions are granted*, not where they cascade
-to. BigQuery IAM follows a hierarchy: **project → dataset → table**.
+The output is a **complete list of every principal that can read data from
+the scanned project's BigQuery resources**. Critically, BigQuery separates
+*data access* from *compute*: a user only needs to appear in this list to
+query the data — they can run that query job from **any** GCP project where
+they have `bigquery.jobs.create` (e.g. `roles/bigquery.user` or
+`roles/bigquery.jobUser`). They do not need to be a member of the scanned
+project to issue queries against it.
+
+BigQuery IAM follows a hierarchy: **project → dataset → table**.
 Access granted at a higher level cascades to all resources below it.
 
 | `resource_type` | `resource_id` | What it means |
