@@ -3,7 +3,7 @@
 > Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-08 (v10)
+> **Last updated:** 2026-03-13 (v12)
 
 ---
 
@@ -170,21 +170,15 @@ catches them while vectors handle meaning.
 - Build QMD from source (bun blocks postinstall scripts by default):
 
 ```bash
-# Install from GitHub
-bun install -g https://github.com/tobi/qmd
-
-# Trust and run postinstall scripts
-cd ~/.bun/install/global && bun pm trust --all
-
-# Build the dist/ bundle (not built automatically from source)
-cd ~/.bun/install/global/node_modules/@tobilu/qmd
-bun install && bun run build
-
-# Fix the binary symlink to point at the built dist
-ln -sf ~/.bun/install/global/node_modules/@tobilu/qmd/dist/qmd.js ~/.bun/bin/qmd
+# Install latest published package
+bun install -g @tobilu/qmd
 
 # Verify
 ~/.bun/bin/qmd --version
+
+# If native bindings fail after install (common on bun because postinstall is blocked)
+cd ~/.bun/install/global/node_modules/better-sqlite3
+npm run build-release
 ```
 
 **Config (`~/.openclaw/openclaw.json`):**
@@ -419,7 +413,7 @@ reference — just update the alias target.
     "sonnet": "anthropic/claude-sonnet-4-6",
     "sonnet-gh": "github-copilot/claude-sonnet-4.6",
     "haiku": "anthropic/claude-haiku-4-5",
-    "gpt54": "github-copilot/gpt-5.2",
+    "gpt54": "github-copilot/gpt-5.4",
     "gpt5min": "github-copilot/gpt-5-mini",
     "gemini-pro": "google/gemini-3.1-pro-preview",
     "gemini-flash": "google/gemini-3-flash-preview"
@@ -438,20 +432,19 @@ you update one alias and all references inherit the change.
 
 ### Model Comparison
 
-| Aspect | Haiku | Sonnet |
-|--------|-------|--------|
-| Latency | Very low (~1-3s) | Low-Medium (~3-8s) |
-| Cost (Max plan) | Included | Included |
-| Instruction-following | Good | Excellent |
-| Reasoning depth | Adequate for structured tasks; medium thinking adds useful depth for ambiguous interactive work | Strong — high-quality synthesis, complex orchestration, deep analysis |
-| Best for | Interactive conversation, cron jobs, atomic tool execution | Explicit invocation only: deep analysis, high-stakes decisions, complex multi-source research |
+| Aspect | Haiku | Sonnet | Opus |
+|--------|-------|--------|------|
+| Latency | Very low (~1-3s) | Low-Medium (~3-8s) | Higher |
+| Cost / quota pressure | Lowest | Balanced default | Highest |
+| Instruction-following | Good on spoon-fed tasks | Excellent | Excellent |
+| Reasoning depth | Adequate for structured cron work | Strong default for conversation, research, and orchestration | Highest ceiling on subtle judgment and deep multi-hop reasoning |
+| Best for | Cron jobs, schema-rigid short tasks | Interactive default, research, analysis, synthesis, coding orchestration | Explicit escalation when Sonnet is capped or the task genuinely benefits from frontier depth |
 
-**Claude Max plan note:** On Claude Max, cost-per-call is not the primary
-concern — execution time and quality are. Haiku handles the full interactive
-workload (conversation, orchestration, research) at medium thinking, and is
-also the right choice for crons at low thinking due to its lower latency.
-Sonnet is reserved for tasks where reasoning depth materially changes the
-output — deep analysis, high-stakes decisions, complex multi-source synthesis.
+**Current workspace policy (2026-03-13):** Sonnet is the interactive default at
+**thinking: low**. Haiku is reserved for cron/intelligence protocols. GPT-5.4
+is the overflow path when Sonnet quota is capped. Opus is optional, manual, and
+best reserved for hard depth-first work where its larger output ceiling or
+reasoning robustness materially changes the result.
 
 ### Thinking Budget Levels
 
@@ -478,8 +471,9 @@ Recommended assignments across OpenClaw contexts:
 
 | Context | Model | Thinking | Rationale |
 |---------|-------|----------|-----------|
-| Conversation (main) | `claude-haiku-4-5` | Medium | Interactive default — good reasoning depth for ambiguous tasks without sonnet quota cost |
-| Research / Deep analysis | `claude-sonnet-4-6` | Low | **Explicit invocation only.** Deep analysis protocol, high-stakes decisions, complex multi-source synthesis. Conserve weekly quota. |
+| Conversation (main) | `claude-sonnet-4-6` | Low | Interactive default — best reliability/quality tradeoff for research, orchestration, and synthesis |
+| Weekly quota overflow | `github-copilot/gpt-5.4` | Low / default | Use when Sonnet quota is capped and you still need strong general performance |
+| Research / Deep analysis | `claude-sonnet-4-6` | Low | Default path unless the task explicitly justifies Opus or a dedicated Deep Analysis protocol spawn |
 | Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; low thinking is fastest and reduces timeout risk on bounded tasks |
 | Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
 
@@ -819,6 +813,20 @@ handles chunking natively and is not affected by this regression. Keep
 `delivery.mode: announce` in place as a fallback safety net — if the
 `message` tool send succeeds, announce is skipped automatically (duplicate
 guard); if it fails, the announce fallback still fires.
+
+**2026.3.11 delivery contract tightening.** Isolated crons with `delivery.mode: "none"`
+can no longer rely on ad-hoc `message` tool sends to reach the user. If a job was
+configured as silent-but-still-sending, it now goes silent by design. The fix is to
+move the job to explicit `delivery.mode: "announce"` or `delivery.mode: "webhook"`
+and keep direct `message` sends only as a deliberate in-payload fallback.
+
+**Open issue (#43177, 2026-03-11): false-positive delivery status.** Some isolated
+cron runs can be recorded as `delivered: true` / `deliveryStatus: delivered` even when
+Telegram did not actually receive the message. Suspected root cause: the shared
+subagent/cron announce path treats a successful internal `callGateway(... deliver: true)`
+as successful external delivery without verifying the lower transport send. Treat cron
+run history as advisory; if a report matters, verify against actual channel delivery or
+gateway logs.
 
 **Slow tools still dominate runtime.** In complex multi-step crons, execution
 time is driven by tool calls (feed scanners can take 30–40s alone, multiple
@@ -1305,20 +1313,22 @@ For stdio-based (local process) servers:
 
 ```bash
 # List all configured servers and their tools
-mcporter list
+mcporter --config ~/clawd/config/mcporter.json list
 
 # Inspect a server's available tools and schema
-mcporter list <server-name> --schema
+mcporter --config ~/clawd/config/mcporter.json list <server-name> --schema
 
-# Call a tool (key=value syntax)
-mcporter call "<server-name>.<tool-name>" param="value"
-
-# Call a tool (JSON payload)
-mcporter call "<server-name>.<tool-name>" --args '{"param": "value"}'
-
-# Machine-readable output
-mcporter call "<server-name>.<tool-name>" param="value" --output json
+# Preferred call pattern: always use explicit config + JSON args
+mcporter --config ~/clawd/config/mcporter.json call "<server-name>.<tool-name>" --args '{"param":"value"}'
 ```
+
+**Current workspace rule:** always use all 3 pieces together:
+1. `--config ~/clawd/config/mcporter.json`
+2. quoted tool name in `"server.tool"` format
+3. JSON payload via `--args '{...}'`
+
+Avoid key=value shorthand in operational prompts — JSON `--args` is the most
+reliable and matches the live workspace convention.
 
 ### Example: HTTP MCP Server (Google Developer Knowledge)
 
@@ -1346,17 +1356,16 @@ developer documentation (GCP, Firebase, Android, Gemini APIs, Maps, etc.).
 | Tool | Description |
 |------|-------------|
 | `search_documents` | Semantic search across all indexed Google docs |
-| `get_document` | Fetch a specific document by ID |
-| `batch_get_documents` | Fetch multiple documents by ID |
+| `get_documents` | Fetch one or more full documents by name |
 
 **Usage:**
 
 ```bash
 # Search Google developer docs
-mcporter call "google-dev-knowledge.search_documents" query="Cloud Run cold start optimization"
+mcporter --config ~/clawd/config/mcporter.json call "google-dev-knowledge.search_documents" --args '{"query":"Cloud Run cold start optimization"}'
 
-# Fetch a specific document
-mcporter call "google-dev-knowledge.get_document" id="<document-id>"
+# Fetch one or more full documents (names come from search results)
+mcporter --config ~/clawd/config/mcporter.json call "google-dev-knowledge.get_documents" --args '{"names":["documents/docs.cloud.google.com/run/docs/configuring/healthchecks"]}'
 ```
 
 ### Example: Financial Data MCP Server
@@ -1380,7 +1389,7 @@ balance sheets, SEC filings, earnings, and live/historical crypto prices.
 }
 ```
 
-**Key tools (13 total):**
+**Key tools (17 total in the live workspace as of 2026-03-13):**
 
 | Tool | Description |
 |------|-------------|
@@ -1399,13 +1408,13 @@ balance sheets, SEC filings, earnings, and live/historical crypto prices.
 
 ```bash
 # Income statement (last 4 annual periods)
-mcporter call "financial-datasets.getIncomeStatement(ticker: \"GOOGL\", period: \"annual\", limit: 4)"
+mcporter --config ~/clawd/config/mcporter.json call "financial-datasets.getIncomeStatement" --args '{"ticker":"GOOGL","period":"annual","limit":4}'
 
 # Live BTC price
-mcporter call "financial-datasets.getCryptoPriceSnapshot(ticker: \"BTC-USD\")"
+mcporter --config ~/clawd/config/mcporter.json call "financial-datasets.getCryptoPriceSnapshot" --args '{"ticker":"BTC-USD"}'
 
 # Financial metrics (TTM)
-mcporter call "financial-datasets.getFinancialMetrics(ticker: \"AAPL\", period: \"ttm\", limit: 1)"
+mcporter --config ~/clawd/config/mcporter.json call "financial-datasets.getFinancialMetrics" --args '{"ticker":"AAPL","period":"ttm","limit":1}'
 ```
 
 **Note:** This is a PAYG (pay-as-you-go) API. Load credits before use.
@@ -1418,7 +1427,7 @@ Once configured, reference MCP tools in cron payloads or interactive tasks
 using the `exec` tool (mcporter is a shell CLI):
 
 ```
-Step N: exec: mcporter call "google-dev-knowledge.search_documents" query="your query here" --output json
+Step N: exec: mcporter --config /absolute/path/to/config/mcporter.json call "google-dev-knowledge.search_documents" --args '{"query":"your query here"}'
 ```
 
 **Spoon-feeding rules still apply:**
@@ -1428,7 +1437,7 @@ Step N: exec: mcporter call "google-dev-knowledge.search_documents" query="your 
   from a cron (isolated agent has no working directory):
 
 ```
-exec: mcporter --config /absolute/path/to/config/mcporter.json call "server.tool" param="value"
+exec: mcporter --config /absolute/path/to/config/mcporter.json call "server.tool" --args '{"key":"value"}'
 ```
 
 ### MCP in TOOLS.md
@@ -1440,8 +1449,8 @@ Document active MCP servers in `TOOLS.md` so agents can reference them:
 - Config: `<workspace>/config/mcporter.json`
 - Active Servers:
   - `google-dev-knowledge` — Google Developer docs (GCP, Firebase, Gemini APIs, etc.)
-    Tools: search_documents, get_document, batch_get_documents
-    Usage: `mcporter call "google-dev-knowledge.search_documents" query="..."`
+    Tools: search_documents, get_documents
+    Usage: `mcporter --config ~/clawd/config/mcporter.json call "google-dev-knowledge.search_documents" --args '{"query":"..."}'`
 ```
 
 ---
@@ -1642,6 +1651,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-13 (v12) | **Alignment refresh vs live workspace:** corrected model policy drift (interactive default back to sonnet low; gpt54 overflow; haiku cron-only), updated `gpt54` alias to `github-copilot/gpt-5.4`, replaced stale QMD source-build instructions with live bun package + `better-sqlite3` rebuild flow, updated mcporter examples to the current `--config ... call "server.tool" --args ...` pattern, corrected Google Developer Knowledge tool names (`search_documents`, `get_documents`), updated Financial Datasets count to 17, and documented the 2026.3.11 isolated-cron delivery contract tightening plus issue #43177 false-positive delivery status bug. |
 | 2026-03-08 (v11) | **Section 2.5 (NEW):** Added Security Architecture subsection — comprehensive guide to threat model (prompt injection, exfiltration, destructive exec, API overspend), OpenClaw security layers (exec-approvals.json, per-agent isolation, tool policy, message gates), Phase 1 implementation (gateway routing + cron isolation with config example), Phase 2 future state (Telegram approval prompts), and 6 quirks/best practices (binary path resolution, allow-always bug, async approvals, independent eval of ask/security, empty defaults, unicode in crons). Threat model table ranks by likelihood + impact. Config examples are generic (no personal paths/credentials). Links to official exec-approvals, security model, and exec tool docs. |
 | 2026-03-08 (v10) | **Section 2 model table:** Updated interactive/conversation thinking from `Low` → `Medium` (haiku thinking:medium is the correct interactive default; crons stay at low). Added `sonnet-gh` alias (`github-copilot/claude-sonnet-4.6`, 125k ctx) to Model Aliases section with usage note. **Section 1 context optimization:** Added `memoryFlush.softThresholdTokens` config recommendation (15,000) with rationale — single large tool response can skip a 4k flush window entirely. **Section 3:** Added Maintenance Cron Pattern subsection — documents the 4-section health report structure (process cleanup, memory backend, token analytics, workspace size), workspace size check script pattern, scheduling guidance, and key payload rules. **Section 4:** Added Non-Trivial Task Gate — mandatory `memory_search` before any research/decision task mid-session. **Section 7:** Added Operational Rituals subsection documenting Prework (3-step: re-boot → skill scan → confirm) and Spa Day / Context Optimization (6-step compaction with MEMORY.md audit). **Section 7 checklist:** Added `wakeMode: "now"` to Cron Creation Checklist (item 13) — prevents scheduler drift; "timezone" property causes drift in Beta. |
 | 2026-03-08 (v9) | **Section 1 alignment audit vs official docs:** Added `BOOT.md` entry (gateway-restart checklist, distinct from `HEARTBEAT.md`). Added `BOOTSTRAP.md` to formal file map. Added Workspace Directories section (`skills/`, `canvas/`, `memory/`). Fixed `TOOLS.md` description — added "does not control tool availability" per official docs. Fixed `HEARTBEAT.md` description — added "keep short, token burn risk" per official docs. Fixed injection limit — "~18KB" replaced with official `bootstrapMaxChars: 20,000 chars` + `bootstrapTotalMaxChars: 150,000 chars`. |
