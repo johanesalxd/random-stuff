@@ -190,6 +190,7 @@ func CalculateTotal(items []Item, taxRate float64) (float64, error) {
 
 Use table-driven tests with `t.Run()` for subtests. Use Example functions for testable documentation.
 
+{% raw %}
 ```go
 func TestCalculateTotal(t *testing.T) {
     tests := []struct {
@@ -216,6 +217,7 @@ func TestCalculateTotal(t *testing.T) {
     }
 }
 ```
+{% endraw %}
 
 ### Dependencies
 
