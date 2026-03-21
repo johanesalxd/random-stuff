@@ -443,7 +443,7 @@ deployments, three provider paths are available:
 | **GitHub Copilot** | `openclaw models auth login-github-copilot` | Hybrid supplement — GPT-5.x, Grok, Gemini via Copilot subscription |
 
 **GitHub Copilot as an OpenClaw provider** is useful when you want access to
-non-Anthropic frontier models (GPT-5.2, GPT-5-mini, Grok, Gemini Pro) within
+non-Anthropic frontier models (GPT-5.4, GPT-5-mini, Grok, Gemini Pro) within
 the same agent context, without managing separate API keys. Auth via GitHub
 OAuth; models appear in `openclaw models list --all` once configured.
 
@@ -575,7 +575,7 @@ OpenClaw provides multiple configuration points for constraint enforcement:
 
 #### 1. Exec Approvals System
 
-The **exec-approvals.json** file (located at `~/.clawdbot/exec-approvals.sock` on macOS) defines per-agent execution policy:
+The **exec-approvals.json** file defines per-agent execution policy:
 
 ```json
 {
