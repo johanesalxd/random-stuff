@@ -89,7 +89,7 @@ explicitly instruct the agent to read them at session start.
 | File | Purpose | Memory Tier |
 |------|---------|-------------|
 | `short-term-memory.md` | Transactional task state tracking | L1 (STM) |
-| `memory/projects.md` | Project context, active state | L2 (Projects) |
+| `memory/projects.md` | Project context, active state | L2 (Persistent context) |
 
 ### On-Demand Files (searched, not loaded at boot)
 
@@ -143,8 +143,6 @@ graph LR
     Cron --> TOOLS
 ```
 
-> *(Generated via draw.io MCP Tool Server — `npx @drawio/mcp`)* [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22jZRhb5swEIZ%2FDVI7iYlS5QeQQJtMoVSEfOinyTHXxCvYmW2i9t%2FPZxsypdlchMQZHw%2Fv3b2wl%2BR4iNJkXUdJZq7TqYbd3u9lgxbRbB6lKUYx47%2BAamjNDpxAfpirHiQ329Esv6D8fWaPxVOz8SAbf%2B%2FbaLbgz1JoQUWnbJ7ZTnZCaNQAvwfgFILoTbVdOzBGIxakEpxMUC14mLTKjbBV8%2BJo48oTn0gPE06KLozbboraoTDymK0CafaOUryyLzCaqlr7ttnQU1b8VZ6LA66Z%2FrAFqCBxWWR1My%2ByxlGnpScvgXQaB08PQN%2BCtLIoq9o3zMWesxgkcT7pBN%2FHGmRv4h56gaa5QgXe4p1%2FGnGOtrDvqYEgl%2BizWW7g%2FdgxyvRt2C5N6TDqIKS2wmInyytf36FfqWYnnLcm6i3c1Oe6%2BuGoY4UPZsL4qaiRmmKau4fdFVzDuw6C86wp8gvyiznisozzfGTfm8waqPGBCVrfd%2FTXdeWhVlc8h56YJPveisetW6bJiZFpij8VEEkP4YYbhy2WFzV8G%2B3GlBaSUdLhRA3Odv2rmkvCuPceRmZse9sD%2B3yaxHF0X0T%2BH3blyXOGNdd%2FM6aefBKxkMKLsBHee8Cyh11MrBxT5g1TosO53H4W5%2F6MV5jnHPvp%2FwE%3D%22%7D)
-
 > **Key rule:** Cron and sub-agents only receive `AGENTS.md` + `TOOLS.md`.
 > All other context must be spoon-fed explicitly in the cron payload.
 
@@ -162,7 +160,7 @@ graph LR
 | Infrastructure (IPs, entities, paths) | `TOOLS.md` | |
 | Health check protocol | `HEARTBEAT.md` | |
 | Active project state | `memory/projects.md` (L2) | |
-| Transactional task tracking | `short-term-memory.md` | |
+| Transactional task tracking | `short-term-memory.md` (L1) | |
 | Recent session context | `memory/*.md` (last 48h, L2) | |
 
 ### Memory Tier Architecture
@@ -507,7 +505,7 @@ you update one alias and all references inherit the change.
 | Reasoning depth | Adequate for structured cron work | Strong default for conversation, research, and orchestration | Highest ceiling on subtle judgment and deep multi-hop reasoning |
 | Best for | Cron jobs, schema-rigid short tasks | Interactive default, research, analysis, synthesis, coding orchestration | Explicit escalation when Sonnet is capped or the task genuinely benefits from frontier depth. Alias: `opus` |
 
-**Current workspace policy (2026-03-13):** Sonnet is the interactive default at
+**Current workspace policy (2026-03-21):** Sonnet is the interactive default at
 **thinking: low**. Haiku is reserved for cron/intelligence protocols. GPT-5.4
 is the overflow path when Sonnet quota is capped. Opus is optional, manual, and
 best reserved for hard depth-first work where its larger output ceiling or
@@ -1821,6 +1819,7 @@ When upgrading tools used in cron jobs:
 | mcporter | http://mcporter.dev |
 | QMD (Tobi Lütke) | https://github.com/tobi/qmd |
 | Financial Datasets MCP | https://financialdatasets.ai/ |
+| ClawHub (Skills Registry) | https://clawhub.com |
 
 ---
 
