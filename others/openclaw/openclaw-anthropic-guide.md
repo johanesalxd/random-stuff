@@ -3,7 +3,7 @@
 > Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-13 (v12)
+> **Last updated:** 2026-03-21 (v13)
 
 ---
 
@@ -28,6 +28,21 @@ agent turn. Do NOT duplicate their content in cron job payloads.
 `AGENTS.md` + `TOOLS.md`. This is why cron payloads must be self-contained
 — the agent cannot rely on persona, user profile, or memory files.
 
+### PROTOCOLS.md (Triggered Procedure Store)
+
+The live workspace centralizes triggered protocol details in `PROTOCOLS.md` at the
+workspace root. This file is NOT auto-injected — it is read on demand when a protocol
+is triggered by name. It contains the authoritative step-by-step procedures for:
+
+- Deep Analysis Protocol
+- Distill & Flush Protocol
+- Spa Day (Context Optimization) Protocol
+- Coding Task Protocol (Orchestrator Loop)
+
+The guide's inline descriptions of these protocols are public-facing summaries.
+`PROTOCOLS.md` is the source of truth for operational detail in a live workspace.
+`AGENTS.md` references it explicitly in its prework steps.
+
 ### One-Time / Restart Files
 
 These files serve specific lifecycle events — not injected on every session turn.
@@ -47,6 +62,25 @@ These files serve specific lifecycle events — not injected on every session tu
 | `canvas/` | Canvas UI files for node displays | e.g. `canvas/index.html`. Optional. |
 | `memory/` | All dated logs, project context, archives | Indexed by QMD. Not injected automatically — read via boot sequence or `memory_search`. |
 
+### Skills Registry: ClawHub
+
+Browse and install community skills at https://clawhub.com — the public skills
+registry for OpenClaw.
+
+```bash
+# Install a skill into your workspace
+clawhub install <skill-slug>
+
+# Update all installed skills
+clawhub update --all
+
+# Sync (scan local skills + publish)
+clawhub sync --all
+```
+
+Skills install into `./skills` under your workspace root by default, giving them
+the highest precedence in the load order (workspace > managed > bundled).
+
 ### Non-Standard Files (loaded via boot sequence)
 
 These files are NOT auto-injected. The boot sequence in `AGENTS.md` must
@@ -61,13 +95,14 @@ explicitly instruct the agent to read them at session start.
 
 | Path | Purpose | Access Method | Memory Tier |
 |------|---------|---------------|-------------|
-| `memory/*.md` (recent, last 48h) | Recent session context | Boot step: read today's + yesterday's dated file | L3 |
-| `memory/*.md` (older) | Historical journal archive | `memory_search` | L3 |
+| `memory/*.md` (recent, last 48h) | Recent session context | Boot step: read today's + yesterday's dated file | L2 |
+| `memory/*.md` (older) | Historical journal archive | `memory_search` | L2 |
 
 > **Boot pattern (2026-03-04):** Read today's and yesterday's main dated files
 > (`memory/YYYY-MM-DD.md`) if they exist. If none within 48h, read the single
 > most recent one. Sub-files (e.g. `2026-03-02-session-name.md`) are auto-generated
 > session transcripts — skip at boot, available via `memory_search` if needed.
+> These files are L2 (persistent context); `memory_search` is the retrieval mechanism for L2+L3.
 
 > **STM is the sole source of truth for active tasks (2026-03-01):** Dated memory
 > files (`memory/*.md`) and session transcript logs are **reference/intel records
@@ -93,11 +128,11 @@ graph LR
     subgraph Boot["Read at boot (explicit)"]
         STM["short-term-memory.md\nL1 Active tasks"]
         PROJ["memory/projects.md\nL2 Project context"]
-        DATED["memory/YYYY-MM-DD.md\nL3 Recent dated files"]
+        DATED["memory/YYYY-MM-DD.md\nL2 Recent dated files"]
     end
 
-    subgraph OnDemand["On-demand via memory_search"]
-        SEARCH["memory/*.md\nHistorical archive"]
+    subgraph OnDemand["On-demand via memory_search (retrieves L2+L3)"]
+        SEARCH["memory/*.md + MEMORY.md\nHistorical archive"]
     end
 
     Main["Main Agent"] --> Auto
@@ -118,37 +153,38 @@ graph LR
 | Content Type | Belongs In | NOT In |
 |---|---|---|
 | Operational protocols, rules, boot sequence | `AGENTS.md` | ~~MEMORY.md~~ |
-| Curated facts, decisions, lessons learned (durable, timeless) | `MEMORY.md` | ~~AGENTS.md~~ |
-| Time-bound intel, research outputs, event records | `memory/YYYY-MM-DD.md` | ~~MEMORY.md~~ |
-| Archived detail from context optimization | `memory/YYYY-MM-DD-memory-archive.md` | ~~MEMORY.md~~ |
+| Curated facts, decisions, lessons learned (durable, timeless) | `MEMORY.md` (L3 — auto-injected) | ~~AGENTS.md~~ |
+| Time-bound intel, research outputs, event records | `memory/YYYY-MM-DD.md` (L2) | ~~MEMORY.md~~ |
+| Archived detail from context optimization | `memory/YYYY-MM-DD-memory-archive.md` (L2) | ~~MEMORY.md~~ |
 | Persona, tone, vibe, journaling protocol | `SOUL.md` | |
 | Identity card (name, creature, emoji) | `IDENTITY.md` | |
 | User profile | `USER.md` | |
 | Infrastructure (IPs, entities, paths) | `TOOLS.md` | |
 | Health check protocol | `HEARTBEAT.md` | |
-| Active project state | `memory/projects.md` | |
+| Active project state | `memory/projects.md` (L2) | |
 | Transactional task tracking | `short-term-memory.md` | |
-| Recent session context | `memory/*.md` (last 48h) | |
+| Recent session context | `memory/*.md` (last 48h, L2) | |
 
 ### Memory Tier Architecture
 
 ```mermaid
 graph TD
     Boot["Session Boot"] --> L1["L1 — STM\nshort-term-memory.md\nActive tasks · read at boot"]
-    Boot --> L2["L2 — Projects\nmemory/projects.md\nProject context · read at boot"]
-    Boot --> L3["L3 — Search\nmemory_search\nSearches memory/*.md + MEMORY.md"]
+    Boot --> L2["L2 — Persistent context\nmemory/ folder\nprojects.md + dated files\n(project-scoped vs session-scoped\nis organizational, not a tier boundary)"]
+    Boot --> L3["L3 — Curated durables\nMEMORY.md\nAuto-injected every turn\nDecisions, lessons, preferences"]
 
-    L3 --> QMD["QMD backend\nBM25 + vectors + reranker\n(optional, experimental)"]
-    L3 --> SQLite["Built-in SQLite\n(default)"]
+    Recall["memory_search\n(retrieval mechanism for L2+L3)"] --> QMD["QMD backend\nBM25 + vectors + reranker\n(optional, experimental)"]
+    Recall --> SQLite["Built-in SQLite\n(default)"]
 
     style L1 fill:#d4edda,stroke:#28a745
     style L2 fill:#d1ecf1,stroke:#17a2b8
     style L3 fill:#fff3cd,stroke:#ffc107
+    style Recall fill:#f8f9fa,stroke:#6c757d
     style QMD fill:#f8f9fa,stroke:#6c757d
     style SQLite fill:#f8f9fa,stroke:#6c757d
 ```
 
-> *(Generated via draw.io MCP Tool Server — `npx @drawio/mcp`)* [Open / edit in draw.io →](https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#create=%7B%22type%22%3A%22mermaid%22%2C%22compressed%22%3Atrue%2C%22data%22%3A%22pZJvb4IwEMY%2FTZO5hAWKDH0p6l5JNufe7NVSy3Uy%2FpS01ei332ERhUiyZAnJtU%2Bvz%2F3uyrdi1Y5Q92NB3BnG9oukNCSICKUb0DqV5UWjlAQL3DgO8ZcYV55Nw4gXl5RMXDId43rzEZNgXuqdVMYxoAqngEKq01OR1PqMm%2FQAmGeYznR9d05JFOJCAUswMKzlbq8l7%2FDdUNCGgvYo3pT8AW50XdLWJ%2FSlasQGpcnBbC5LA0fzbxq%2FofH7MwGm%2BO7K8qVbwR5BPYmW87EGrAugmRsv49f3z7NyIehCnKtdENbxwjLUCyRnPIPy3G0U06A1PWDfUul2r0CxMgNVJz7IyuDDs5zQOR7BsQKVFlAalo%2FuTqEDsFmvUgOWIdqnuXHS8kZG%2BwQE2%2BdmNNSPNqcc7B9GXZHmOfHx3E%2FGkCQMmbRRMgMr0gkLx8GQAe0aeMCF1zPwQka3kyEDv2MghPB50jMQgntuOGBgH%2BHGYSKmot%2FDMw%2BDMBlwaOb2R5Nf%22%7D)
+> **memory_search** is the retrieval mechanism that searches L2 + L3 on demand — not a tier itself.
 
 ### Memory Backend: QMD (Optional, Experimental)
 
@@ -252,6 +288,22 @@ before concluding the data is missing.
 hardware — poor accuracy and significantly slower. On 8 GB unified memory
 systems in particular, stick to BM25 `search` as the default. Hybrid search
 may improve on higher-spec machines as QMD matures.
+
+### Memory Tools
+
+OpenClaw exposes two agent-facing tools for memory files:
+
+- **`memory_search`** — semantic recall over indexed snippets (BM25 + optional vector).
+  Use when you need to find relevant content across `memory/*.md` and `MEMORY.md` by
+  topic or keyword. Prefers short 2–4 word keyword queries (see QMD Query Strategy above).
+
+- **`memory_get`** — targeted read of a specific Markdown file or line range.
+  Use when you know the exact file path (e.g. today's dated log, a specific project file).
+  Degrades gracefully when a file doesn't exist — returns empty string, not an error.
+  This makes it safe to call for today's dated file even before the first write of the day.
+
+**Rule of thumb:** Use `memory_search` for discovery (what exists?); use `memory_get`
+for retrieval (read this specific file).
 
 ### Context Optimization & Memory Compaction
 
@@ -408,23 +460,38 @@ Aliases let you switch providers without updating every cron prompt or config
 reference — just update the alias target.
 
 ```json5
-"models": {
-  "aliases": {
-    "sonnet": "anthropic/claude-sonnet-4-6",
-    "sonnet-gh": "github-copilot/claude-sonnet-4.6",
-    "haiku": "anthropic/claude-haiku-4-5",
-    "gpt54": "github-copilot/gpt-5.4",
-    "gpt5min": "github-copilot/gpt-5-mini",
-    "gemini-pro": "google/gemini-3.1-pro-preview",
-    "gemini-flash": "google/gemini-3-flash-preview"
+"agents": {
+  "defaults": {
+    "models": {
+      "anthropic/claude-sonnet-4-6": { "alias": "sonnet" },
+      "anthropic/claude-haiku-4-5": { "alias": "haiku" },
+      "anthropic/claude-opus-4-6": { "alias": "opus" },
+      "github-copilot/gpt-5.4": { "alias": "gpt54" },
+      "github-copilot/gpt-5.4-mini": { "alias": "gpt54min" },
+      "github-copilot/gpt-5-mini": { "alias": "gpt5min" },
+      "github-copilot/claude-sonnet-4.6": { "alias": "sonnet-gh" },
+      "github-copilot/grok-code-fast-1": { "alias": "grok" },
+      "google/gemini-3.1-pro-preview": { "alias": "gemini-pro" },
+      "google/gemini-3-flash-preview": { "alias": "gemini-flash" },
+      "openrouter/moonshotai/kimi-k2.5": { "alias": "kimi" },
+      "openrouter/minimax/minimax-m2.5": { "alias": "minimax" },
+      "openrouter/deepseek/deepseek-v3.2": { "alias": "deepseek" },
+      "lmstudio/qwen3.5-27b": { "alias": "qwen-local" }
+    }
   }
 }
 ```
+
+> **Config structure note:** Aliases are defined under `agents.defaults.models[<full-model-id>].alias`
+> — not the older `models.aliases` flat map. Each model entry is keyed by its full provider ID.
 
 > **`sonnet-gh`** maps to `github-copilot/claude-sonnet-4.6` — the Copilot-routed
 > Sonnet variant (125k context). Useful when you want Sonnet without consuming
 > Anthropic direct quota. Route OpenClaw config/optimization tasks through this
 > alias on fresh sessions to preserve Claude Max headroom.
+
+> **`qwen-local`** maps to `lmstudio/qwen3.5-27b` — a local LMStudio model.
+> Instance-specific; omit if you don't run local models.
 
 Use aliases in cron payloads, `sessions_spawn`, and `/model` overrides.
 When a provider rotates model names (common with Copilot as new releases land),
@@ -438,7 +505,7 @@ you update one alias and all references inherit the change.
 | Cost / quota pressure | Lowest | Balanced default | Highest |
 | Instruction-following | Good on spoon-fed tasks | Excellent | Excellent |
 | Reasoning depth | Adequate for structured cron work | Strong default for conversation, research, and orchestration | Highest ceiling on subtle judgment and deep multi-hop reasoning |
-| Best for | Cron jobs, schema-rigid short tasks | Interactive default, research, analysis, synthesis, coding orchestration | Explicit escalation when Sonnet is capped or the task genuinely benefits from frontier depth |
+| Best for | Cron jobs, schema-rigid short tasks | Interactive default, research, analysis, synthesis, coding orchestration | Explicit escalation when Sonnet is capped or the task genuinely benefits from frontier depth. Alias: `opus` |
 
 **Current workspace policy (2026-03-13):** Sonnet is the interactive default at
 **thinking: low**. Haiku is reserved for cron/intelligence protocols. GPT-5.4
@@ -474,8 +541,9 @@ Recommended assignments across OpenClaw contexts:
 | Conversation (main) | `claude-sonnet-4-6` | Low | Interactive default — best reliability/quality tradeoff for research, orchestration, and synthesis |
 | Weekly quota overflow | `github-copilot/gpt-5.4` | Low / default | Use when Sonnet quota is capped and you still need strong general performance |
 | Research / Deep analysis | `claude-sonnet-4-6` | Low | Default path unless the task explicitly justifies Opus or a dedicated Deep Analysis protocol spawn |
+| Explicit frontier depth | `claude-opus-4-6` | Low | Manual escalation only — reserve for tasks where Sonnet's output ceiling materially limits quality. Alias: `opus` |
 | Cron / Automation | `claude-haiku-4-5` | Low | Spoon-fed prompts handle complexity; low thinking is fastest and reduces timeout risk on bounded tasks |
-| Coding (opencode) | `claude-sonnet-4-6` | Low | Via `opencode run -m anthropic/claude-sonnet-4-6` (see instance note in Section 5) |
+| Coding (opencode) | `claude-sonnet-4-6` | Low | Via ACP session spawn (see Section 5) |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
 (observed ~120s in practice). For complex multi-step payloads with slow tools
@@ -615,16 +683,30 @@ A working deployment combines exec-approvals with per-agent scoping:
 
 **Result:** Crons run with pre-approved binary sets; main agent can prompt on unknown binaries (when ask mode is toggled). Policies are independent — change one without affecting the other.
 
-### Phase 2 (Future): Telegram Approval Prompts
+### Phase 2: Telegram Approval Prompts
 
-When ready, enable per-action approval via Telegram:
+The approvals config block is available in `openclaw.json` but disabled by default
+(`enabled: false`). To activate:
 
-1. Fix `allow-always` persistence bug (pending OpenClaw update)
+```json5
+"approvals": {
+  "exec": {
+    "enabled": true,
+    "mode": "session",
+    "agentFilter": ["main"],
+    "targets": [{ "channel": "telegram", "to": "<your-telegram-id>" }]
+  }
+}
+```
+
+**To enable:**
+1. Set `enabled: true` in the approvals block above
 2. Pre-seed binary allowlist with resolved paths (`which <binary>` on your system)
-3. Toggle `ask: "on-miss"` in exec-approvals main agent
-4. Configure Telegram target in `openclaw.json` approvals section
+3. Toggle `ask: "on-miss"` in exec-approvals.json for the main agent
 
-**Before Phase 2:** All execs run silently. Phase 2 adds interruptible prompts.
+**Known limitation:** The `allow-always` persistence bug (v2026.3.7) remains —
+approved binaries are not written to exec-approvals.json. Use `allow-once` for
+temporary approvals and pre-seed binary allowlists manually for permanent approvals.
 
 ### Quirks & Best Practices
 
@@ -669,6 +751,34 @@ As of OpenClaw v2026.2.22, cron jobs support **parallel execution** — multiple
 crons can run concurrently without queuing. This removes the hard blocking
 behaviour of older versions, but scheduling discipline still matters (see
 race condition gotcha below).
+
+### Payload Configuration Fields
+
+Key fields in the `agentTurn` payload for cron jobs:
+
+```json5
+{
+  "sessionTarget": "isolated",  // isolated (default), main, current, session:custom-id
+  "agentId": "cron",            // routes through cron-level exec policy
+  "wakeMode": "now",            // explicit; also the default
+  "lightContext": true          // optional — skip workspace bootstrap file injection
+                                // CLI: openclaw cron add --light-context
+}
+```
+
+**`sessionTarget` values:**
+
+| Value | Behavior |
+|-------|----------|
+| `"isolated"` | Fresh isolated agent context per run. Default for most crons. |
+| `"main"` | Routes through main session. Avoid — causes announce fragility (see gotchas). |
+| `"current"` | Binds to the session where the cron was created (resolved at creation time). |
+| `"session:custom-id"` | Runs in a persistent named session that maintains context across runs. Useful for daily standups or monitors that build on previous summaries. |
+
+**`lightContext: true`:** Skips workspace bootstrap file injection (`AGENTS.md`,
+`TOOLS.md`). Use for simple data collection crons that don't need workspace context.
+Reduces bootstrap overhead and speeds up isolated job startup. Omit (default false)
+for crons that reference workspace file paths or need AGENTS.md rules.
 
 ### The Spoon-Feeding Pattern
 
@@ -932,22 +1042,35 @@ into one coherent answer — the user sees only the synthesis, not the raw tool 
 
 | Tier | Tools | Mode | When to Use |
 |------|-------|------|-------------|
-| 1 | Brave (`web_search`) + Bird CLI + `exa.web_search_exa` | Always parallel | Every query. Brave=keyword/news, Bird=social signals, Exa=semantic/editorial diversity |
+| 1 | Brave (`web_search`) + Bird CLI + `exa.web_search_exa` + Gemini Grounding (`gemini_search.py`) | Always parallel | Every query. Brave=keyword/news, Bird=social signals, Exa=semantic/editorial diversity, Gemini=Google index+AI synthesis+full-page reads |
 | 2 | `web_fetch` + `exa.crawling_exa` | Parallel, on-demand | When full article body is needed from a known URL. Both fire simultaneously. |
-| 3 | `exa.web_search_advanced_exa` + `exa.company_research_exa` | On-demand, not parallel by default | Precision filters (date/domain/category) or structured company intel |
-| 4 | Browser (`profile:openclaw` / `profile:chrome`) | On-demand, last resort | JS-rendered pages, interactive flows, login-gated dashboards |
+| 3 | Browser (`profile:openclaw` / `profile:chrome`) | On-demand, fallback from Tier 2 | JS-rendered pages, SPAs, login-gated dashboards, dynamic content. Natural escalation when Tier 2 returns empty/broken content. |
+| 4 | Specialized precision tools — on-demand by query type | On-demand, not parallel by default | `exa.web_search_advanced_exa` (date/domain/category filters), `exa.company_research_exa` (company intel), `goplaces` (location lookup), `financial-datasets` (US stock/crypto), `polymarket` (prediction market odds), `serper` (raw Google SERP), `context7` (live library docs), `google-dev-knowledge` (Google developer docs) |
 
 **Tier 1 — always parallel:**
-Fire Brave + Bird + `exa.web_search_exa` simultaneously on every research query.
-No exceptions. These three tools surface different signals: Brave for speed and news
-freshness, Bird for unfiltered social reactions and disinformation detection, Exa for
-semantic match and non-dominant editorial angles.
+Fire Brave + Bird + `exa.web_search_exa` + Gemini Grounding simultaneously on every
+research query. No exceptions. These four tools surface different signals: Brave for
+speed and news freshness, Bird for unfiltered social reactions and disinformation
+detection, Exa for semantic match and non-dominant editorial angles, Gemini for
+Google index + AI synthesis + full source page reads (the only Tier 1 tool that reads
+full content, not just snippets).
+
+**Gemini Grounding execution:**
+- Command: `cd ~/gemini-search && uv run gemini_search.py search "<query>"`
+- Always use flash model (default). Pro is reserved exclusively for the Deep Analysis protocol.
+- Requires `yieldMs: 30000` minimum in parallel exec blocks (API latency 15–25s). Do NOT use 25s or lower.
+
+**Pre-flight gate (MANDATORY):** Before firing any Tier 1 research block, narrate a
+visible checklist: `Tier 1: Brave ☐ / Bird ☐ / Exa ☐ / Gemini ☐` — mark each tool ☑
+when included in the parallel call block. If a tool is temporarily unavailable
+(rate-limited, errored), mark it ☐ with a short reason and proceed with remaining tools.
+The gate blocks execution only when a tool is omitted without reason.
 
 **Breaking event rule (MANDATORY):** For any breaking event <48h old — fire Brave +
-Bird + Exa as one parallel block. Do not fire Brave-only and call it done. Breaking
-events are where all three signals diverge most: Brave catches wire headlines, Bird
-catches unfiltered reactions and disinformation, Exa surfaces editorial analysis from
-sources Brave doesn't rank highly.
+Bird + Exa + Gemini as one parallel block, no exceptions. Breaking events are where
+all four signals diverge most: Brave catches wire headlines, Bird catches unfiltered
+reactions and disinformation, Exa surfaces editorial analysis from sources Brave
+doesn't rank highly, Gemini synthesizes across sources with full-page reads.
 
 **Query pattern — anchor + angle:** Never fire two near-identical queries in parallel.
 One query anchors the core fact (`event + key actors + outcome`); the parallel query
@@ -961,6 +1084,10 @@ When you need the full body of a specific article, fire `web_fetch` and
 `exa.crawling_exa` handles paywalled and JS-heavy pages better than `web_fetch`
 (e.g. bypasses Reuters 401 errors, returns complete Medium articles where `web_fetch`
 truncates). `web_fetch` is faster on clean, non-paywalled pages.
+
+**Pre-flight gate (MANDATORY):** Before firing any Tier 2 block on a known URL, narrate:
+`Tier 2 [<url>]: web_fetch ☐ / crawling_exa ☐` — mark each tool ☑ when included.
+X.com exception: skip Tier 2, Bird (Tier 1) already covers all X content.
 
 > **X.com exception:** Both `web_fetch` and `exa.crawling_exa` are blocked on
 > x.com/twitter.com — `web_fetch` returns a login wall, `exa.crawling_exa` is
@@ -980,40 +1107,60 @@ source hit to a Tier 2 crawl alongside Tier 1 search. The quality ceiling of
 snippet-only research is meaningfully lower than full-document synthesis for these
 session types.
 
-**Tier 3 — on-demand precision:**
+**Tier 3 — browser, on-demand escalation from Tier 2:**
+- `profile:openclaw`: isolated browser, no saved logins. Use for public JS-rendered
+  pages where lower tiers return empty content — e.g. live trading charts, SPAs,
+  public dashboards with dynamic content. Natural fallback when Tier 2 returns
+  broken or empty content.
+- `profile:chrome`: your active Chrome session with existing cookies. Use for
+  login-gated pages. Requires the user to attach the tab via the Browser Relay
+  toolbar button first.
+
+**Tier 4 — specialized precision, on-demand by query type:**
 - `exa.web_search_advanced_exa`: date filters (`startPublishedDate`), domain
   restrictions (`includeDomains`), category filters (`"news"`, `"financial report"`,
   `"research paper"`). Trigger when precision matters more than speed.
 - `exa.company_research_exa`: structured company profile — headcount, funding
   history, tech stack, competitors, key executives. Trigger on explicit due diligence
   questions. NOT for breaking news about a company (Tier 1 covers that).
-
-**Tier 4 — interactive/visual, last resort:**
-- `profile:openclaw`: isolated browser, no saved logins. Use for public JS-rendered
-  pages where lower tiers return empty content — e.g. live trading charts, SPAs,
-  public dashboards with dynamic content.
-- `profile:chrome`: your active Chrome session with existing cookies. Use for
-  login-gated pages. Requires the user to attach the tab via the Browser Relay
-  toolbar button first.
+- `goplaces`: location and place lookup. Trigger for geographic / local business queries.
+- `financial-datasets`: US stock and crypto data — income statements, filings,
+  prices. Trigger for structured financial analysis. NOT for cron polling loops.
+- `polymarket`: prediction market odds. Trigger when the user asks about event
+  probabilities or market consensus on outcomes.
+- `serper`: raw Google SERP results. Trigger when Brave coverage is insufficient
+  or you need direct Google ranking signals.
+- `context7`: live library and framework documentation. Trigger for API reference,
+  version-specific docs, code examples.
+- `google-dev-knowledge`: Google developer docs (GCP, Firebase, Android, Gemini APIs).
+  Trigger for Google product integration questions.
 
 **Decision flow:**
 ```
 Any query →
-  Always fire Tier 1 (Brave + Bird + Exa search) in parallel
+  Pre-flight: narrate Tier 1 checklist (Brave ☐ / Bird ☐ / Exa ☐ / Gemini ☐)
+  Fire Tier 1 (Brave + Bird + Exa + Gemini) in parallel
 
   Need full article from a URL?
+  → Pre-flight: narrate Tier 2 checklist (web_fetch ☐ / crawling_exa ☐)
   → Fire Tier 2 (web_fetch + crawling_exa) in parallel
   → URL is X.com? → Skip Tier 2, Bird already covered it in Tier 1
-
-  Need date/domain/category precision?
-  → Fire web_search_advanced_exa (Tier 3)
-
-  Need company structure/funding/headcount?
-  → Fire company_research_exa (Tier 3)
+  → Tier 2 returned empty/broken?
+    → Escalate to Tier 3 (Browser)
 
   Content is JS-rendered or requires login?
-  → Fire Browser (Tier 4)
+  → Fire Tier 3 (Browser)
   → Needs session auth? → profile:chrome, user must attach tab
+
+  Need date/domain/category precision?
+  → Fire exa.web_search_advanced_exa (Tier 4)
+
+  Need company structure/funding/headcount?
+  → Fire exa.company_research_exa (Tier 4)
+
+  Need location, financial, prediction market, raw SERP, or live docs data?
+  → Fire the relevant Tier 4 specialized tool (goplaces, financial-datasets,
+    polymarket, serper, context7, google-dev-knowledge)
 ```
 
 **Why the orchestrator synthesizes, not the tools:**
@@ -1059,8 +1206,10 @@ context, and delivers.
 Orchestrator                              GPT Sub-agent
     │                                          │
     ├── Full tiered research                   │
-    │   (Tier 1 mandatory,                     │
-    │    Tier 2 FORCED on every key source)    │
+    │   (Tier 1 mandatory — Gemini uses Pro    │
+    │    model for Deep Analysis, NOT flash;   │
+    │    Brave + Bird + Exa fire as normal)    │
+    │   (Tier 2 FORCED on every key source)    │
     │                                          │
     ├── Compile spoon-fed brief:               │
     │   - Tier 1+2 findings                    │
@@ -1068,9 +1217,9 @@ Orchestrator                              GPT Sub-agent
     │   - User's personal situation            │
     │                                          │
     ├── Spawn sub-agent ──────────────────►  Receives compiled brief
-    │   model: GPT (e.g. gpt-5.2)             + analysis task
-    │   runTimeoutSeconds: 300                 + output path instruction
-    │                                          │
+    │   model: gpt54                           + analysis task
+    │   (github-copilot/gpt-5.4)              + output path instruction
+    │   runTimeoutSeconds: 300                 │
     │                                          ├── Deep analysis compute
     │                                          │
     │                                          └── Writes full output to:
@@ -1096,6 +1245,12 @@ Orchestrator                              GPT Sub-agent
     └── Deliver orchestrator-enhanced output
         split into ≤3,500 char chunks (1/N, 2/N)
 ```
+
+> **Gemini Pro for Deep Analysis:** The Deep Analysis protocol uses Gemini Grounding with
+> the Pro model (`--model gemini-3.1-pro-preview`), not flash. Pro delivers deeper synthesis
+> and more cited sources (15–27 vs 5–11 on flash). Pass `--model gemini-3.1-pro-preview`
+> explicitly. Flash remains the default for all other research. Gemini Pro is reserved
+> exclusively for this protocol.
 
 **Key implementation details:**
 
@@ -1146,34 +1301,25 @@ Orchestrator                              GPT Sub-agent
 
 ### Skill-First Approach
 
-Coding tasks are delegated via the **coding-agent skill** and the
-**opencode-wrapper skill** rather than raw command invocations. The skills own
-the HOW (PTY, tmux session management, background mode, process monitoring,
-run-manifest provenance, auto-notify on completion); the orchestrator
+Coding tasks are delegated via the **opencode-acp skill** rather than raw command
+invocations. The skill owns the HOW (ACP transport, plan file handoff, explore
+workflow, completion detection, and the full Orchestrator Loop); the orchestrator
 (AGENTS.md) owns the project-level constraints.
 
-**Read each skill's SKILL.md before spawning a coding task.** They contain
-current command syntax, PTY requirements, and background monitoring patterns
-that may change with OpenClaw updates. Hardcoding CLI syntax in AGENTS.md
-creates maintenance debt.
-
-**Two complementary skills:**
+**Read the skill's SKILL.md before spawning a coding task.** It contains current
+command syntax and patterns that may change with OpenClaw updates. Hardcoding
+mechanics in AGENTS.md creates maintenance debt.
 
 | Skill | Role |
 |-------|------|
-| `coding-agent` | Spawns and monitors the coding agent (Codex, Claude Code, opencode, Pi); handles PTY, background mode, and completion detection |
-| `opencode-wrapper` | Wraps opencode specifically — manages tmux session naming, log paths, model selection, run-manifest.json, and context threshold routing |
+| `opencode-acp` | Delegates coding tasks to OpenCode via ACP (Agent Client Protocol). Handles plan file handoff, explore workflow, completion detection, and the full Orchestrator Loop. Replaces the former `opencode-wrapper` skill. |
 
-**Preferred agent:** `opencode` via Anthropic provider (`claude-sonnet-4-6`, Thinking: Low).
-Other supported agents: Codex, Claude Code (`claude`), Pi.
+**Preferred model:** `claude-sonnet-4-6` (Thinking: Low) via Anthropic or Google Vertex.
 
-> **Instance Note (2026-02-23):** Anthropic direct OAuth is broken in some deployments.
-> Working fallback: **Google Vertex ADC**. Model: `google-vertex-anthropic/claude-sonnet-4-6@default`.
-> Config in `~/.config/opencode/opencode.json`: set your GCP `project` and
-> `location: us-east5` (Claude Sonnet 4.x unavailable in `us-central1` or `global`).
-> Auth via Application Default Credentials (ADC).
-> This is a deployment-specific workaround — the generic Anthropic provider pattern above
-> remains correct for setups where OAuth is functional.
+> **Instance Note (2026-03-21):** The live workspace uses
+> `google-vertex-anthropic/claude-sonnet-4-6@default` as the OpenCode default model,
+> configured via ADC (Application Default Credentials) with `location: us-east5`.
+> Anthropic direct OAuth remains an alternative for setups where it is functional.
 
 **Key rules (orchestrator-level — put these in AGENTS.md, not the skill):**
 - Planning stays at orchestrator level — present a plan, get approval, then delegate to skill
@@ -1182,58 +1328,85 @@ Other supported agents: Codex, Claude Code (`claude`), Pi.
 - Project root: your preferred git directory (e.g., `~/Developer/git/`)
 
 **Why skill-first over raw commands:**
-- Skills stay up-to-date with OpenClaw releases (PTY flags, auto-notify pattern, etc.)
+- Skills stay up-to-date with OpenClaw releases (ACP flags, completion patterns, etc.)
 - Decouples orchestrator from implementation detail
 - Single source of truth for HOW; AGENTS.md only carries project constraints
 
+### ACP Transport
+
+OpenCode sessions are spawned via ACP (Agent Client Protocol) using `sessions_spawn`:
+
+```python
+sessions_spawn(
+    task="Implement the plan at /absolute/path/.opencode/plans/plan-NNN-<slug>.md",
+    runtime="acp",
+    agentId="opencode",
+    mode="run",
+    cwd="/absolute/path/to/repo"
+)
+```
+
+- `cwd` is mandatory and must be an absolute path to the repo root.
+- `mode="run"` is always one-shot (completes and exits).
+- `agentId="opencode"` routes the session to the opencode agent config.
+
+**acpx backend:** acpx is the ACP execution backend bundled as an OpenClaw plugin
+extension. The binary lives at the plugin path. OpenClaw upgrades wipe it — reinstall
+with `cd <openclaw>/extensions/acpx && npm install` after any OpenClaw upgrade. Never
+pin a specific acpx version — the extension's `package.json` declares the correct one.
+
 ### Prompt-in-File Standard
 
-When delegating to a coding agent, **always write the prompt to a file**
-(e.g., `prompt.txt`) in the project workdir and pass it via stdin or file
-argument — never embed long prompts inline in bash.
+**Always write the plan to a file** before spawning — never embed long prompts inline.
+Plan files live in `.opencode/plans/` inside the repo using the naming convention
+`plan-NNN-<slug>.md`.
 
 **Why this matters:** Vague language in inline prompts ("create a module",
 "include tests") causes text-only responses — the agent describes what it
-would do but writes no files to disk. Explicit, file-based prompts with
-clear directives ("write these files to the current working directory") are
-reliably executed.
+would do but writes no files to disk. Explicit plan files with clear directives
+are reliably executed.
 
-**Pattern:**
-
-```bash
-# Write the prompt to a file first
-cat > /path/to/project/prompt.txt << 'EOF'
-Build a Flask API with the following endpoints...
-Write all files to the current working directory.
-Include a requirements.txt and README.md.
-EOF
-
-# Pass to opencode via stdin or skill wrapper
-opencode run --model anthropic/claude-sonnet-4-6 < /path/to/project/prompt.txt
-```
-
-**Mandatory phrasing in every prompt:**
-- ✅ "Write these files to the current working directory."
+**Mandatory phrasing in every plan:**
+- ✅ "Write the following files to the current working directory."
 - ✅ "Create the following files on disk: ..."
 - ❌ "Create a module" (too vague — agent may respond with text only)
 - ❌ "Include tests" (too vague — may not write files)
 
+**Plan file path:** `.opencode/plans/plan-NNN-<slug>.md` inside the target repo.
+
 ### Run Completion Detection
 
-After spawning a coding agent, check completion before reading output:
+After spawning a coding session, check completion before reading output:
 
 ```bash
-# Primary: tmux session gone = run finished
-tmux list-sessions 2>/dev/null | grep <session-name>
-# No output = FINISHED
+# Primary: grep gateway log for the done sentinel
+grep "<SLUG>-DONE\|<uuid>" ~/.openclaw/logs/gateway.log | tail -5
 
-# Fallback: process check
-ps aux | grep opencode | grep -v grep
-# No output = FINISHED
+# Fallback: check sessions.json for state: idle
+# For explore tasks: cat <repo>/.opencode/artifacts/explore-<slug>-<date>.txt
 ```
 
-The opencode-wrapper skill writes a `run-manifest.json` to the project
-workdir on completion — use this for provenance (model used, tokens, duration).
+Session output is available as JSONL at:
+`~/.openclaw/agents/opencode/sessions/<sessionId>.jsonl`
+
+### Orchestrator Loop
+
+For non-trivial coding tasks, use the iterative Orchestrator Loop rather than a single
+one-shot spawn:
+
+| Step | Label | Action |
+|------|-------|--------|
+| 1 | `[ANALYZE]` | Spawn `@explore` sub-agent → read output from `.opencode/artifacts/explore-<slug>-<date>.txt` |
+| 2 | `[PLAN]` | Present implementation blueprint to user, wait for Go |
+| 3 | `[APPROVE]` | User says Go |
+| 4 | `[BRIEF]` | Write `.opencode/plans/plan-NNN-<slug>.md`, spawn ACP build session |
+| 5 | `[REVIEW]` | Read session JSONL, verify implementation against plan |
+| 6 | `[ITERATE]` | If gaps found, write a new plan with incremented NNN and re-spawn |
+| 7 | `[COMMIT]` | `git add` + `git commit` locally (no push) |
+
+**Explore artifacts** go to `.opencode/artifacts/explore-<slug>-<date>.txt` inside the
+repo. The `@explore` step reads source files; the orchestrator reads its output before
+writing the plan.
 
 ### Vertex AI / Gemini SDK Notes (google.genai)
 
@@ -1548,7 +1721,11 @@ current context before acting.
    defined in `AGENTS.md`. No shortcuts. Confirm understanding.
 2. **Skill scan** — Identify every tool or skill likely needed for the pending
    task. Read each relevant `SKILL.md` file. Do not guess syntax from memory.
-3. **Confirm back to user** — Report: (a) which memory files were read and any
+3. **Protocol awareness** — Note that `PROTOCOLS.md` (workspace root) contains
+   full procedure details for triggered protocols: Deep Analysis, Distill & Flush,
+   Spa Day, Coding Task Protocol (incl. Orchestrator Loop). These are referenced
+   from `AGENTS.md` but only read when explicitly triggered by name.
+4. **Confirm back to user** — Report: (a) which memory files were read and any
    relevant lessons surfaced, (b) which SKILL.md files were loaded with key
    gotchas per skill, (c) restate the Research and Memory retrieval rules in
    your own words as confirmation.
@@ -1651,6 +1828,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-03-21 (v13) | **Full alignment refresh vs live workspace (2026-03-21) + official docs audit.** Research Protocol: Gemini Grounding promoted to mandatory Tier 1 (4th tool); pre-flight gate narration rule added for both Tier 1 and Tier 2; Tier 3/4 renumbered (Browser→T3, Specialized precision tools→T4, with 6 new domain-specific tools documented); breaking event rule updated to include Gemini. Coding Architecture: `opencode-wrapper` replaced by `opencode-acp` skill; ACP transport (`sessions_spawn(runtime="acp")`) replaces PTY/tmux; plan files in `.opencode/plans/plan-NNN-<slug>.md`; explore artifacts in `.opencode/artifacts/`; completion via gateway log grep; acpx backend concept added; Orchestrator Loop steps added with ACP-era labels. Memory tiers: L2 = full `memory/` folder (projects + dated files, organizational not tier boundary); L3 = MEMORY.md (auto-injected); `memory_search` reframed as retrieval mechanism, not a tier. Model aliases: config structure updated to `agents.defaults.models[id].alias`; 7 new aliases added (opus, gpt54min, grok, kimi, minimax, deepseek, qwen-local); Opus row added to assignment table. Medium additions: PROTOCOLS.md triggered procedure store documented; Deep Analysis Gemini Pro distinction noted (Pro for DA, flash for all other research) + gpt54 sub-agent model updated; `memory_get` tool documented alongside `memory_search`; `lightContext` + `sessionTarget` current/session:custom-id added to cron payload fields; approvals block updated from future to configurable (enabled: false); ClawHub registry added. Prework ritual updated to 4 steps (protocol awareness added as step 3). Draw.io edit links removed from diagrams with content changes. |
 | 2026-03-13 (v12) | **Alignment refresh vs live workspace:** corrected model policy drift (interactive default back to sonnet low; gpt54 overflow; haiku cron-only), updated `gpt54` alias to `github-copilot/gpt-5.4`, replaced stale QMD source-build instructions with live bun package + `better-sqlite3` rebuild flow, updated mcporter examples to the current `--config ... call "server.tool" --args ...` pattern, corrected Google Developer Knowledge tool names (`search_documents`, `get_documents`), updated Financial Datasets count to 17, and documented the 2026.3.11 isolated-cron delivery contract tightening plus issue #43177 false-positive delivery status bug. |
 | 2026-03-08 (v11) | **Section 2.5 (NEW):** Added Security Architecture subsection — comprehensive guide to threat model (prompt injection, exfiltration, destructive exec, API overspend), OpenClaw security layers (exec-approvals.json, per-agent isolation, tool policy, message gates), Phase 1 implementation (gateway routing + cron isolation with config example), Phase 2 future state (Telegram approval prompts), and 6 quirks/best practices (binary path resolution, allow-always bug, async approvals, independent eval of ask/security, empty defaults, unicode in crons). Threat model table ranks by likelihood + impact. Config examples are generic (no personal paths/credentials). Links to official exec-approvals, security model, and exec tool docs. |
 | 2026-03-08 (v10) | **Section 2 model table:** Updated interactive/conversation thinking from `Low` → `Medium` (haiku thinking:medium is the correct interactive default; crons stay at low). Added `sonnet-gh` alias (`github-copilot/claude-sonnet-4.6`, 125k ctx) to Model Aliases section with usage note. **Section 1 context optimization:** Added `memoryFlush.softThresholdTokens` config recommendation (15,000) with rationale — single large tool response can skip a 4k flush window entirely. **Section 3:** Added Maintenance Cron Pattern subsection — documents the 4-section health report structure (process cleanup, memory backend, token analytics, workspace size), workspace size check script pattern, scheduling guidance, and key payload rules. **Section 4:** Added Non-Trivial Task Gate — mandatory `memory_search` before any research/decision task mid-session. **Section 7:** Added Operational Rituals subsection documenting Prework (3-step: re-boot → skill scan → confirm) and Spa Day / Context Optimization (6-step compaction with MEMORY.md audit). **Section 7 checklist:** Added `wakeMode: "now"` to Cron Creation Checklist (item 13) — prevents scheduler drift; "timezone" property causes drift in Beta. |
