@@ -19,6 +19,7 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 - **Task Tracking:** Use TodoWrite to plan and track multi-step tasks. Break complex work into smaller steps and mark progress as you go.
 - **Subagent Delegation:** Delegate codebase exploration, multi-file searches, and independent parallel workstreams to subagents. Keep the main context focused on the primary task.
 - **Context Budget:** Be aware that system prompts, instruction files, and tool definitions consume context. Avoid unnecessary tool calls that return large outputs when a targeted search suffices.
+- **Parallelism:** Use multiple parallel sessions for independent tasks when available. Consider git worktrees when working across multiple branches simultaneously.
 
 ## Rule Compounding
 
@@ -32,29 +33,13 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 
 ## Testing Philosophy
 
-Tests document how code works internally. Write tests to understand behavior, not to hit coverage metrics. Each test should answer: "What does this do in this scenario?" Focus on internal decision paths, edge cases that reveal intent, and failure modes that matter.
-
-- No mocks for internal behavior—test it directly
-- Minimal mocks for external dependencies only
-- Assertions should be semantic, not just count-based
-- One scenario per test; name it so intent is obvious
-- See CODE_STANDARDS.md for language-specific patterns
+Write tests to understand behavior, not to hit coverage metrics. Each test should answer: "What does this do in this scenario?" No mocks for internal behavior; minimal mocks for external dependencies only. See CODE_STANDARDS.md for language-specific patterns, anti-patterns, and examples.
 
 ## Decision Making
 
 - **Ask vs. Assume:** Ask clarifying questions rather than making large assumptions about user intent. Small, obvious decisions can be made autonomously.
 - **Instruction Precedence:** Project-level rules (AGENTS.md in repo) take precedence over global rules when they conflict. Note the conflict and follow the project-level rule.
 - **Uncertainty:** When uncertain about an approach, investigate the codebase first rather than guessing. Use grep, glob, and file reads to gather evidence before proposing solutions.
-
-## Subagents and Delegation
-
-- Use subagents for tasks requiring significant compute or multi-step discovery.
-- Offload specific tasks to keep the main context window focused and clean.
-
-## Parallelism and Workflows
-
-- Use multiple parallel sessions for independent tasks when available.
-- Consider git worktrees when working across multiple branches simultaneously.
 
 ## Skill and Tool Promotion
 
