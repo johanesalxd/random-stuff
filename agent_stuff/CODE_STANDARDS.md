@@ -190,7 +190,6 @@ func CalculateTotal(items []Item, taxRate float64) (float64, error) {
 
 Use table-driven tests with `t.Run()` for subtests. Use Example functions for testable documentation.
 
-{% raw %}
 ```go
 func TestCalculateTotal(t *testing.T) {
     tests := []struct {
@@ -200,8 +199,18 @@ func TestCalculateTotal(t *testing.T) {
         want    float64
         wantErr bool
     }{
-        {name: "with tax", items: []Item{{Price: 10}, {Price: 20}}, taxRate: 0.1, want: 33.0},
-        {name: "negative tax", items: nil, taxRate: -0.1, wantErr: true},
+        {
+            name:    "with tax",
+            items:   []Item{{Price: 10}, {Price: 20}},
+            taxRate: 0.1,
+            want:    33.0,
+        },
+        {
+            name:    "negative tax",
+            items:   nil,
+            taxRate: -0.1,
+            wantErr: true,
+        },
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -217,7 +226,6 @@ func TestCalculateTotal(t *testing.T) {
     }
 }
 ```
-{% endraw %}
 
 ### Dependencies
 
@@ -417,6 +425,180 @@ main() {
 }
 
 main "$@"
+```
+
+## SQL
+
+Base: [Google SQL Style Guide](https://google.github.io/styleguide/sqlguide.html)
+
+These standards apply to all SQL dialects. BigQuery-specific patterns are explicitly labeled.
+
+### Formatting
+
+- **Keywords:** uppercase (`SELECT`, `FROM`, `WHERE`, `JOIN`, `GROUP BY`)
+- **Identifiers:** lowercase `snake_case` (`user_id`, `order_total`)
+- **Indentation:** 2 spaces
+- **One clause per line:** each major clause starts on its own line
+- **Trailing commas** in column lists (easier to diff and reorder)
+
+```sql
+SELECT
+  user_id,
+  order_date,
+  SUM(order_total) AS total_revenue,
+FROM
+  orders
+WHERE
+  status = 'completed'
+  AND order_date >= '2024-01-01'
+GROUP BY
+  user_id,
+  order_date
+```
+
+### Naming
+
+- Tables and columns: `snake_case`
+- Boolean columns: `is_` or `has_` prefix (`is_active`, `has_subscription`)
+- Timestamp columns: `_at` suffix (`created_at`, `updated_at`)
+- Date columns: `_date` suffix (`order_date`, `expiry_date`)
+- CTEs: descriptive `snake_case` names that read like a pipeline (`raw_events`, `filtered_users`, `daily_summary`)
+- Avoid reserved words as identifiers (`date`, `user`, `order`, `value`)
+
+### CTEs Over Subqueries
+
+Always prefer CTEs over nested subqueries. CTEs are named, reusable, and readable top-to-bottom.
+
+```sql
+-- Good: named pipeline of CTEs
+WITH
+active_users AS (
+  SELECT
+    user_id,
+    created_at,
+  FROM users
+  WHERE is_active = TRUE
+),
+
+recent_orders AS (
+  SELECT
+    user_id,
+    COUNT(*) AS order_count,
+    SUM(total) AS lifetime_value,
+  FROM orders
+  WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+  GROUP BY user_id
+)
+
+SELECT
+  u.user_id,
+  u.created_at,
+  COALESCE(o.order_count, 0) AS order_count,
+  COALESCE(o.lifetime_value, 0.0) AS lifetime_value,
+FROM active_users AS u
+LEFT JOIN recent_orders AS o USING (user_id)
+
+-- Bad: nested subquery
+SELECT u.user_id, o.order_count
+FROM users AS u
+LEFT JOIN (
+  SELECT user_id, COUNT(*) AS order_count FROM orders GROUP BY user_id
+) AS o ON u.user_id = o.user_id
+WHERE u.is_active = TRUE
+```
+
+### Joins
+
+- Always use explicit `JOIN` type (`INNER JOIN`, `LEFT JOIN`; never bare `JOIN` or implicit comma joins)
+- Use `USING (column)` when join key has the same name in both tables; otherwise use `ON a.id = b.id`
+- Alias all tables with short, meaningful names
+
+### Deduplication
+
+**Standard SQL / PostgreSQL** -- use a CTE with `ROW_NUMBER()`:
+
+```sql
+WITH ranked AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (
+      PARTITION BY user_id
+      ORDER BY created_at DESC
+    ) AS row_num,
+  FROM events
+)
+SELECT * EXCEPT (row_num)
+FROM ranked
+WHERE row_num = 1
+```
+
+**BigQuery / Snowflake** -- `QUALIFY` is cleaner when supported:
+
+```sql
+SELECT *
+FROM events
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY user_id
+  ORDER BY created_at DESC
+) = 1
+```
+
+### Explicit Column Lists
+
+Never use `SELECT *` in production queries or views. Always list columns explicitly. This prevents silent schema changes from breaking downstream consumers.
+
+```sql
+-- Good
+SELECT user_id, email, created_at FROM users
+
+-- Bad
+SELECT * FROM users
+```
+
+Exception: `SELECT * EXCEPT (col)` is acceptable in BigQuery for explicitly dropping one column from a wide table.
+
+### BigQuery-Specific Patterns
+
+The following apply to BigQuery only and may not be valid in other SQL dialects.
+
+**Project-qualified references** -- use backticks for project-dataset-table paths:
+
+```sql
+FROM `my-project.my_dataset.my_table`
+```
+
+**Safe arithmetic** -- use `SAFE_DIVIDE()` to avoid division-by-zero errors:
+
+```sql
+SELECT SAFE_DIVIDE(revenue, sessions) AS revenue_per_session
+```
+
+**Schema introspection** -- use `INFORMATION_SCHEMA` views for metadata queries:
+
+```sql
+SELECT table_name, creation_time, row_count
+FROM `my_project.my_dataset.INFORMATION_SCHEMA.TABLES`
+```
+
+**Struct and Array types** -- use `STRUCT` for nested records and `UNNEST` to flatten arrays:
+
+```sql
+SELECT
+  event_name,
+  param.value.string_value AS param_value,
+FROM events,
+UNNEST(event_params) AS param
+WHERE param.key = 'page_location'
+```
+
+**Partitioning and clustering** -- always filter on the partition column to avoid full table scans:
+
+```sql
+-- Good: partition pruning applies
+WHERE DATE(event_timestamp) BETWEEN '2024-01-01' AND '2024-01-31'
+
+-- Bad: function wrapping prevents partition pruning
+WHERE YEAR(event_timestamp) = 2024
 ```
 
 ## Git Commit Messages
