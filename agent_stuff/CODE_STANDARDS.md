@@ -200,8 +200,11 @@ func TestCalculateTotal(t *testing.T) {
         wantErr bool
     }{
         {
-            name:    "with tax",
-            items:   []Item{{Price: 10}, {Price: 20}},
+            name: "with tax",
+            items: []Item{
+                {Price: 10},
+                {Price: 20},
+            },
             taxRate: 0.1,
             want:    33.0,
         },
@@ -358,6 +361,30 @@ Always use:
 - Constants: `UPPER_SNAKE_CASE`
 - Type parameters: single letter `T` or `UpperCamelCase`
 
+### Testing
+
+- Framework: Jest or Vitest (prefer Vitest for new projects; it is faster and native ESM)
+- File naming: `<module>.test.ts` co-located with the source file
+- Use `describe` blocks to group related tests; `it` for individual cases
+- Assertions: `expect()` matchers; `toThrow()` for exceptions
+- No mocks for internal logic; use `vi.mock()` or `jest.mock()` only for external modules (network, filesystem)
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { calculateTotal } from './calculate';
+
+describe('calculateTotal', () => {
+  it('includes tax in the total', () => {
+    const items = [{ price: 10 }, { price: 20 }];
+    expect(calculateTotal(items, 0.1)).toBe(33);
+  });
+
+  it('throws on negative tax rate', () => {
+    expect(() => calculateTotal([], -0.1)).toThrow('cannot be negative');
+  });
+});
+```
+
 ### Dependencies
 
 - Use lock files (`package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`)
@@ -439,15 +466,14 @@ These standards apply to all SQL dialects. BigQuery-specific patterns are explic
 - **Identifiers:** lowercase `snake_case` (`user_id`, `order_total`)
 - **Indentation:** 2 spaces
 - **One clause per line:** each major clause starts on its own line
-- **Trailing commas** in column lists (easier to diff and reorder)
+- **Trailing commas** in column lists -- supported in BigQuery and Snowflake; omit for PostgreSQL, MySQL, and standard SQL
 
 ```sql
 SELECT
   user_id,
   order_date,
-  SUM(order_total) AS total_revenue,
-FROM
-  orders
+  SUM(order_total) AS total_revenue
+FROM orders
 WHERE
   status = 'completed'
   AND order_date >= '2024-01-01'
@@ -475,7 +501,7 @@ WITH
 active_users AS (
   SELECT
     user_id,
-    created_at,
+    created_at
   FROM users
   WHERE is_active = TRUE
 ),
@@ -484,9 +510,12 @@ recent_orders AS (
   SELECT
     user_id,
     COUNT(*) AS order_count,
-    SUM(total) AS lifetime_value,
+    SUM(total) AS lifetime_value
   FROM orders
-  WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+  -- Use dialect-appropriate date arithmetic:
+  -- BigQuery:    DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+  -- PostgreSQL:  CURRENT_DATE - INTERVAL '90 days'
+  WHERE order_date >= CURRENT_DATE - INTERVAL '90 days'
   GROUP BY user_id
 )
 
@@ -494,7 +523,7 @@ SELECT
   u.user_id,
   u.created_at,
   COALESCE(o.order_count, 0) AS order_count,
-  COALESCE(o.lifetime_value, 0.0) AS lifetime_value,
+  COALESCE(o.lifetime_value, 0.0) AS lifetime_value
 FROM active_users AS u
 LEFT JOIN recent_orders AS o USING (user_id)
 
@@ -515,19 +544,24 @@ WHERE u.is_active = TRUE
 
 ### Deduplication
 
-**Standard SQL / PostgreSQL** -- use a CTE with `ROW_NUMBER()`:
+**Standard SQL / PostgreSQL** -- use a CTE with `ROW_NUMBER()` and explicit column selection:
 
 ```sql
 WITH ranked AS (
   SELECT
-    *,
+    user_id,
+    event_type,
+    created_at,
     ROW_NUMBER() OVER (
       PARTITION BY user_id
       ORDER BY created_at DESC
-    ) AS row_num,
+    ) AS row_num
   FROM events
 )
-SELECT * EXCEPT (row_num)
+SELECT
+  user_id,
+  event_type,
+  created_at
 FROM ranked
 WHERE row_num = 1
 ```
@@ -535,7 +569,10 @@ WHERE row_num = 1
 **BigQuery / Snowflake** -- `QUALIFY` is cleaner when supported:
 
 ```sql
-SELECT *
+SELECT
+  user_id,
+  event_type,
+  created_at
 FROM events
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY user_id
@@ -555,7 +592,7 @@ SELECT user_id, email, created_at FROM users
 SELECT * FROM users
 ```
 
-Exception: `SELECT * EXCEPT (col)` is acceptable in BigQuery for explicitly dropping one column from a wide table.
+Exception: `SELECT * EXCEPT (col)` is acceptable in BigQuery for explicitly dropping one column from a wide table. This syntax is BigQuery-specific and not valid in PostgreSQL or standard SQL.
 
 ### BigQuery-Specific Patterns
 
@@ -585,7 +622,7 @@ FROM `my_project.my_dataset.INFORMATION_SCHEMA.TABLES`
 ```sql
 SELECT
   event_name,
-  param.value.string_value AS param_value,
+  param.value.string_value AS param_value
 FROM events,
 UNNEST(event_params) AS param
 WHERE param.key = 'page_location'
