@@ -21,10 +21,6 @@ Core behavioral directives for AI coding agents. For code style and formatting, 
 - **Context Budget:** Be aware that system prompts, instruction files, and tool definitions consume context. Avoid unnecessary tool calls that return large outputs when a targeted search suffices.
 - **Parallelism:** Use multiple parallel sessions for independent tasks when available. Consider git worktrees when working across multiple branches simultaneously.
 
-## Rule Compounding
-
-- **Continuous Learning:** After every correction or mistake, suggest updates to instruction files for user review. Do not modify instruction files without explicit approval.
-
 ## Verification and Review
 
 - **Self-Testing:** Do not submit PRs until you have challenged your own changes.
@@ -40,6 +36,7 @@ Write tests to understand behavior, not to hit coverage metrics. Each test shoul
 - **Ask vs. Assume:** Ask clarifying questions rather than making large assumptions about user intent. Small, obvious decisions can be made autonomously.
 - **Instruction Precedence:** Project-level rules (AGENTS.md in repo) take precedence over global rules when they conflict. Note the conflict and follow the project-level rule.
 - **Uncertainty:** When uncertain about an approach, investigate the codebase first rather than guessing. Use grep, glob, and file reads to gather evidence before proposing solutions.
+- **Continuous Learning:** After every correction or mistake, suggest updates to instruction files for user review. Do not modify instruction files without explicit approval.
 
 ## Skill and Tool Promotion
 
