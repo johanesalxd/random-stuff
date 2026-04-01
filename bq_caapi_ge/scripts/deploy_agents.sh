@@ -27,11 +27,6 @@ if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
     exit 1
 fi
 
-if [ -z "$OAUTH_CLIENT_ID" ] || [ -z "$OAUTH_CLIENT_SECRET" ]; then
-    echo -e "${RED}ERROR: OAuth credentials not set${NC}"
-    exit 1
-fi
-
 echo -e "${GREEN}Environment loaded${NC}"
 echo "  Project: $GOOGLE_CLOUD_PROJECT"
 echo ""

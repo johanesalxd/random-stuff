@@ -23,6 +23,8 @@ sequenceDiagram
 ```
 
 **Key Feature:** OAuth identity passthrough ensures queries execute with the end user's BigQuery permissions.
+Gemini Enterprise deposits the user's access token into the ADK session state; `DataAgentCredentialsConfig`
+reads it directly via `external_access_token_key` on every tool call — no custom callback required.
 
 ## Project Structure
 
@@ -98,18 +100,20 @@ Create per-agent `.env` files:
 cat > app/orders/.env << EOF
 GOOGLE_CLOUD_PROJECT=your-project-id
 AGENT_ORDERS_ID=your-orders-data-agent-id
-OAUTH_CLIENT_ID=your-oauth-client-id
-OAUTH_CLIENT_SECRET=your-oauth-client-secret
+AUTH_RESOURCE_ORDERS=bq-caapi-oauth
 EOF
 
 # app/inventory/.env
 cat > app/inventory/.env << EOF
 GOOGLE_CLOUD_PROJECT=your-project-id
 AGENT_INVENTORY_ID=your-inventory-data-agent-id
-OAUTH_CLIENT_ID=your-oauth-client-id
-OAUTH_CLIENT_SECRET=your-oauth-client-secret
+AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
 EOF
 ```
+
+> `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` are **not** needed by the deployed agents.
+> They are only required by `scripts/setup_auth.py` to create the Gemini Enterprise
+> authorization resources. Keep them in the root `.env` for that script.
 
 ### 3. Create Backend Data Agents
 
