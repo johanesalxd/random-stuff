@@ -14,7 +14,7 @@ pip install -r requirements.txt
 1. OAuth redirect URI configured in Google Cloud Console:
    - Add `http://localhost:8080/auth/callback` to your OAuth client
 
-2. Agent deployed to Agent Engine with the token bridge callback
+2. Agent deployed to Agent Engine
 
 3. Environment variables in `../.env`:
    - `OAUTH_CLIENT_ID`
@@ -36,8 +36,9 @@ Open http://localhost:8080 in your browser.
 1. Login with Google OAuth
 2. App captures your access token
 3. When you send a query:
-   - Creates Agent Engine session with token in `sessionState["bq-caapi-oauth"]`
+   - Creates Agent Engine session with token in `sessionState[AUTH_RESOURCE_ORDERS]`
    - Calls `:streamQuery`
-   - Agent's bridge callback copies token to `data_agent_token_cache`
+   - `DataAgentCredentialsConfig(external_access_token_key=...)` reads the token
+     directly from session state on each tool call
    - DataAgentToolset uses your token for BigQuery queries
 4. Results displayed in chat
