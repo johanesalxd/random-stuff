@@ -1,9 +1,13 @@
-# OpenClaw + Anthropic: Workspace & Prompt Architecture Guide
+# OpenClaw: Workspace & Prompt Architecture Guide
 
-> Practical patterns for running OpenClaw with Anthropic Claude models (Claude Max plan).
+> Practical patterns for running OpenClaw in a personal workspace: agent architecture,
+> memory layout, research/coding flows, cron design, and operational guardrails.
+>
+> Historical note: this file keeps the old `openclaw-anthropic-guide.md` filename for
+> continuity, but the guide content is now provider-agnostic.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-03-31 (v14.2)
+> **Last updated:** 2026-04-06 (v15)
 
 ---
 
@@ -34,10 +38,13 @@ The live workspace centralizes triggered protocol details in `PROTOCOLS.md` at t
 workspace root. This file is NOT auto-injected — it is read on demand when a protocol
 is triggered by name. It contains the authoritative step-by-step procedures for:
 
-- Deep Analysis Protocol
 - Distill & Flush Protocol
 - Spa Day (Context Optimization) Protocol
+- Research Modes & llm-wiki Invocation Policy
 - Coding Task Protocol (Orchestrator Loop)
+
+Deep Analysis itself now lives in the dedicated `deep-analysis` skill, not inside
+`PROTOCOLS.md`.
 
 The guide's inline descriptions of these protocols are public-facing summaries.
 `PROTOCOLS.md` is the source of truth for operational detail in a live workspace.
@@ -58,7 +65,7 @@ These files serve specific lifecycle events — not injected on every session tu
 
 | Path | Purpose | Notes |
 |------|---------|-------|
-| `skills/` | Workspace-specific skills | Load order (highest to lowest): (1) `~/.openclaw/skills/<name>/SKILL.md` — user-managed global; (2) `~/.agents/skills/<name>/SKILL.md` — agent-shared; (3) `<workspace>/.agents/skills/<name>/SKILL.md` — workspace-agent; (4) `<workspace>/skills/<name>/SKILL.md` — workspace-specific (this directory); (5) `~/.openclaw/extensions/<plugin>/skills/` — plugin-provided; (6) OpenClaw bundled skills — lowest. When names collide, higher-tier entry wins. |
+| `skills/` | Workspace-specific skills | Load order (highest to lowest): (1) `<workspace>/skills/<name>/SKILL.md` — workspace-specific (this directory, highest precedence); (2) `<workspace>/.agents/skills/<name>/SKILL.md` — workspace-agent; (3) `~/.agents/skills/<name>/SKILL.md` — agent-shared; (4) `~/.openclaw/skills/<name>/SKILL.md` — managed/global; (5) OpenClaw bundled skills; (6) `skills.load.extraDirs` / other low-precedence injected skill dirs. When names collide, higher-tier entry wins. |
 | `canvas/` | Canvas UI files for node displays | e.g. `canvas/index.html`. Optional. |
 | `memory/` | All dated logs, project context, archives | Indexed by QMD. Not injected automatically — read via boot sequence or `memory_search`. |
 
@@ -79,7 +86,11 @@ clawhub sync --all
 ```
 
 Skills install into `./skills` under your workspace root by default, giving them
-the highest precedence in the load order (workspace > managed > bundled).
+the highest precedence in the load order.
+
+**SKILL.md frontmatter gotcha:** quote values containing `:` or non-ASCII characters,
+and keep frontmatter keys single-line. Silent YAML/frontmatter parse breakage is a real
+failure mode in live workspaces.
 
 ### Non-Standard Files (loaded via boot sequence)
 
@@ -237,7 +248,9 @@ memory: {
     scope: {
       default: "deny",
       rules: [
-        { "action": "allow", "match": { "chatType": "direct" } }
+        { "action": "allow", "match": { "chatType": "direct" } },
+        { "action": "allow", "match": { "rawKeyPrefix": "agent:main:subagent:" } },
+        { "action": "allow", "match": { "rawKeyPrefix": "agent:vader-yolo:subagent:" } }
       ]
     }
   }
@@ -432,78 +445,76 @@ models.
 
 ---
 
-## 2. Anthropic Model Strategy
+## 2. Model Strategy (Provider-Agnostic)
 
 ### Model Providers
 
-OpenClaw supports multiple model providers simultaneously. For Anthropic-first
-deployments, three provider paths are available:
+OpenClaw supports multiple providers at the same time. In practice, a healthy
+personal-assistant setup usually keeps at least three lanes available:
 
-| Provider | Auth Method | Best For |
-|----------|-------------|----------|
-| Anthropic direct | OAuth / API key | Primary — full model access |
-| Google Vertex ADC | Application Default Credentials | Fallback when Anthropic OAuth is broken; Claude models via Vertex |
-| **GitHub Copilot** | `openclaw models auth login-github-copilot` | Hybrid supplement — GPT-5.x, Grok, Gemini via Copilot subscription |
+| Provider lane | Auth method | Best for |
+|---|---|---|
+| GitHub Copilot | `openclaw models auth login-github-copilot` | Low-friction daily-driver GPT / Claude / Grok access through the Copilot subscription |
+| Anthropic direct or Anthropic via Vertex | OAuth, API key, or Google ADC | Claude-native paths, stronger fallback diversity, and provider redundancy |
+| Google / local / third-party providers | API key, ADC, or local server | Gemini workflows, local LM Studio / Ollama fallback, or specialized models |
 
-**GitHub Copilot as an OpenClaw provider** is useful when you want access to
-non-Anthropic frontier models (GPT-5.4, GPT-5-mini, Grok, Gemini Pro) within
-the same agent context, without managing separate API keys. Auth via GitHub
-OAuth; models appear in `openclaw models list --all` once configured.
-
-Copilot includes 1,500 premium requests/month with overage pricing beyond that.
-Check current model availability with `openclaw models list --all` — models
-showing `configured,missing` are not yet in the Copilot API catalog.
+**Practical takeaway:** keep aliases stable and swap provider targets behind them. That lets
+you change providers without rewriting prompts, cron payloads, or session conventions.
 
 ### Model Aliases
 
-OpenClaw supports user-defined model aliases in `~/.openclaw/openclaw.json`.
-Aliases let you switch providers without updating every cron prompt or config
-reference — just update the alias target.
+OpenClaw supports user-defined aliases in `~/.openclaw/openclaw.json`.
+Aliases let you treat models as roles instead of hardcoded provider IDs.
 
 ```json5
 "agents": {
   "defaults": {
     "models": {
-      // Anthropic direct
+      "github-copilot/gpt-5.4-mini": { "alias": "gpt54min" },
+      "github-copilot/gpt-5.4": { "alias": "gpt54" },
+      "github-copilot/gpt-5-mini": { "alias": "gpt5min" },
+      "github-copilot/grok-code-fast-1": { "alias": "grok" },
+      "github-copilot/claude-haiku-4-5": { "alias": "haiku-gh" },
+      "github-copilot/claude-sonnet-4-6": { "alias": "sonnet-gh" },
       "anthropic/claude-sonnet-4-6": { "alias": "sonnet" },
       "anthropic/claude-haiku-4-5": { "alias": "haiku" },
-      // GitHub Copilot (GPT, Grok, Gemini via Copilot subscription)
-      "github-copilot/gpt-5.4": { "alias": "gpt54" },
-      // Google (Gemini models via API key or ADC)
+      "anthropic/claude-opus-4-6": { "alias": "opus" },
+      "anthropic-vertex/claude-sonnet-4-6": { "alias": "sonnet-av" },
+      "anthropic-vertex/claude-opus-4-6": { "alias": "opus-av" },
+      "google/gemini-3-flash-preview": { "alias": "gemini-flash" },
       "google/gemini-3.1-pro-preview": { "alias": "gemini-pro" },
-      // OpenRouter (third-party frontier models)
-      "openrouter/deepseek/deepseek-v3.2": { "alias": "deepseek" }
+      "openrouter/deepseek/deepseek-v3.2": { "alias": "deepseek" },
+      "openrouter/moonshotai/kimi-k2.5": { "alias": "kimi" },
+      "openrouter/minimax/minimax-m2.5": { "alias": "minimax" },
+      "lmstudio/qwen3.5-35b-a3b": { "alias": "qwen-local" }
     }
   }
 }
 ```
 
-> **Config structure note:** Aliases are defined under `agents.defaults.models[<full-model-id>].alias`
-> — not the older `models.aliases` flat map. Each model entry is keyed by its full provider ID.
-
-> **Add your own aliases** for any provider/model combination you use. The examples above
-> show one alias per provider category — Anthropic direct, GitHub Copilot, Google, and
-> OpenRouter. Local model providers (e.g., LMStudio, Ollama) and Vertex AI routing
-> aliases follow the same `"provider/model-id": { "alias": "short-name" }` pattern.
+> **Config structure note:** aliases live under
+> `agents.defaults.models[<full-model-id>].alias`, not the older flat `models.aliases` map.
 
 Use aliases in cron payloads, `sessions_spawn`, and `/model` overrides.
-When a provider rotates model names (common with Copilot as new releases land),
-you update one alias and all references inherit the change.
+If a provider changes its public model ID, you update one alias target and the
+rest of the workspace stays stable.
+
+The table above is illustrative, not mandatory canon. Real workspaces often carry more
+aliases than they use daily; document the stable operational ones and keep the rest as
+available fallbacks.
 
 ### Model Comparison
 
-| Aspect | Haiku | Sonnet | Opus |
-|--------|-------|--------|------|
-| Latency | Very low (~1-3s) | Low-Medium (~3-8s) | Higher |
-| Cost / quota pressure | Lowest | Balanced default | Highest |
-| Instruction-following | Good on spoon-fed tasks | Excellent | Excellent |
-| Reasoning depth | Adequate for structured cron work | Strong default for conversation, research, and orchestration | Highest ceiling on subtle judgment and deep multi-hop reasoning |
-| Best for | Cron jobs, schema-rigid short tasks | Interactive default, research, analysis, synthesis, coding orchestration | Explicit escalation when Sonnet is capped or the task genuinely benefits from frontier depth. |
+| Role | Typical aliases | Best for |
+|---|---|---|
+| Daily driver | `gpt54min`, `sonnet` | Main conversation, routine orchestration, most research and planning |
+| Escalation / harder judgment | `gpt54`, `sonnet`, `opus`, `opus-av` | Contested decisions, deeper synthesis, tougher orchestration calls |
+| Cheap atomic / throwaway | `gpt5min`, `haiku` | Short disposable tasks, simple cron work, low-stakes structured execution |
+| Local fallback | `qwen-local` | Offline-ish recovery path, local experimentation, resilience |
 
-**Recommended policy:** Sonnet is the interactive default at **thinking: low**. Haiku
-is reserved for cron and automation tasks. A GPT-class model (via Copilot or API) serves
-as the overflow path when Claude quota is capped. Opus is optional and manual — best
-reserved for depth-critical work where Sonnet's output ceiling is a limiting factor.
+**Recommended policy:** choose one reliable low-cost daily-driver alias as the workspace default,
+keep one or two stronger escalation aliases for harder judgment, and reserve the cheapest models
+for throwaway or tightly spoon-fed tasks.
 
 ### Thinking Budget Levels
 
@@ -529,13 +540,12 @@ data sources) — not just *how* to do it.
 Recommended assignments across OpenClaw contexts:
 
 | Context | Model | Thinking | Rationale |
-|---------|-------|----------|-----------|
-| Conversation (main) | Claude Sonnet | Low | Interactive default — best reliability/quality tradeoff |
-| Weekly quota overflow | GPT-5.x (via Copilot) | Low / default | Use when Claude quota is capped |
-| Research / Deep analysis | Claude Sonnet | Low | Default unless task justifies Opus or Deep Analysis protocol |
-| Explicit frontier depth | Claude Opus | Low | Manual escalation for depth-critical tasks |
-| Cron / Automation | Claude Haiku | Low | Spoon-fed prompts; fastest and cheapest |
-| Coding (opencode) | Claude Sonnet | Low | Via ACP session spawn |
+|---|---|---:|---|
+| Conversation (main) | Daily-driver alias (`gpt54min` or `sonnet`) | Low | Best default tradeoff for normal orchestration |
+| Higher-stakes decisions | Stronger alias (`gpt54`, `sonnet`, `opus`) | Low / as needed | Use when judgment quality matters more than cheap throughput |
+| Research / Deep analysis | Daily driver by default, escalate selectively | Low | Only jump upward when the task actually demands it |
+| Cron / Automation | Cheap but reliable alias (`gpt54min`, `haiku`, or equivalent) | Low | Spoon-fed prompts, tool discipline, predictable cost |
+| Coding (opencode / ACP) | Repo-appropriate coding alias | Low | Via ACP session spawn; pick the strongest model justified by scope |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
 (observed ~120s in practice). For complex multi-step payloads with slow tools
@@ -573,7 +583,6 @@ The **exec-approvals.json** file defines per-agent execution policy:
 
 ```json
 {
-  // Simplified single-tier example — see Section 2.6.2 for three-agent config
   "version": 1,
   "defaults": {
     "security": "deny",
@@ -581,11 +590,11 @@ The **exec-approvals.json** file defines per-agent execution policy:
   },
   "agents": {
     "main": {
-      "security": "full",
-      "ask": "off"
+      "security": "allowlist",
+      "ask": "on-miss"
     },
     "cron": {
-      "security": "full",
+      "security": "allowlist",
       "ask": "off"
     }
   }
@@ -616,7 +625,7 @@ This allows crons to run with a **different security policy than the main intera
     "ask": "on-miss"
   },
   "cron": {
-    "security": "full",
+    "security": "allowlist",
     "ask": "off"
   }
 }
@@ -664,8 +673,8 @@ A working deployment combines exec-approvals with per-agent scoping:
 2. **Define per-agent policy in exec-approvals.json:**
    ```json
    "agents": {
-     "main": { "security": "full", "ask": "off" },
-     "cron": { "security": "full", "ask": "off" }
+     "main": { "security": "allowlist", "ask": "on-miss" },
+     "cron": { "security": "allowlist", "ask": "off" }
    }
    ```
 
@@ -734,9 +743,9 @@ The workspace runs three distinct agents, each with its own execution policy and
 
 | Agent | Role | Exec Policy | Model |
 |-------|------|-------------|-------|
-| `main` | Primary interactive assistant | `allowlist/on-miss` | Sonnet |
-| `cron` | Scheduled automation | `allowlist/off` | Haiku |
-| `vader-yolo` | Privileged exec worker (yolo mode) | `full/off` | Haiku (gpt54min fallback) |
+| `main` | Primary interactive assistant | `allowlist/on-miss` | `gpt54min` |
+| `cron` | Scheduled automation | `allowlist/off` | `gpt54min` |
+| `vader-yolo` | Privileged exec worker (yolo mode) | `full/off` | `gpt54min` |
 
 > **Naming convention:** The agent names above (`main`, `cron`, `vader-yolo`) are
 > illustrative. Replace `vader-yolo` with any agent ID that fits your naming convention
@@ -803,7 +812,7 @@ The `subagents.allowAgents` key controls which agent IDs `sessions_spawn` is all
 
 **Trigger:** User says "yolo mode" / "no approvals" / "go yolo"
 
-**Worker:** `vader-yolo` agent (`exec: full/off`, haiku model). Fallback: `gpt54min` if Claude quota capped.
+**Worker:** `vader-yolo` agent (`exec: full/off`, typically `gpt54min`). Use a stronger override only when the task genuinely needs it.
 
 **Pattern:**
 - Main orchestrates: plans, briefs, reads back output, updates STM
@@ -830,6 +839,10 @@ sessions_spawn(
 
 ### 2.6.5 Execution Modes Table
 
+**First principle:** prefer built-in tools over `exec` for file reads, text edits,
+HTTP fetches, searches, and similar actions that native tools already cover.
+Reserve `exec` for CLIs, git, and true system commands.
+
 All five execution modes, ranked by decision priority:
 
 | Mode | Tool | Timeout | Use for |
@@ -839,6 +852,9 @@ All five execution modes, ranked by decision priority:
 | 3. Ad-hoc sub-agent | `sessions_spawn` (runtime: subagent) | `runTimeoutSeconds: 300` | Parallel independent research/data tasks — READ/COMPUTE ONLY |
 | 4. ACP coding session | `sessions_spawn` (runtime: acp, agentId: opencode) | `runTimeoutSeconds: 300` | Delegated coding tasks via opencode-acp skill |
 | 5. Yolo Agent | `sessions_spawn` (agentId: "vader-yolo", runtime: subagent) | `runTimeoutSeconds: 300` | No-approval exec — coding builds, free-form tasks when user says "yolo mode" |
+
+**Mode 2 anti-pattern:** never combine `yieldMs` with `timeout` on long-running jobs.
+A timeout kills the backgrounded process; drop `timeout` entirely when intentionally using long exec.
 
 **Decision path (check in order):**
 
@@ -1306,6 +1322,27 @@ different keywords before concluding the data is missing (QMD BM25 prefers
 **Scope:** Any task involving research, synthesis, investment decisions, config
 changes, or anything with durable side effects. Does not apply to simple
 read-only lookups or single-turn factual questions.
+
+### llm-wiki / Preservation-First Mode
+
+Not every research request is answer-first. Some are **preservation-first**: the user is
+trying to turn a source into durable memory instead of just getting a one-shot answer.
+
+Use llm-wiki mode when the request is effectively:
+- ingest this
+- harvest this
+- store this properly
+- make this part of memory
+- preserve this source for later retrieval
+
+Operationally, this is a different path from casual search or Light/Deep Analysis:
+- casual search = answer-first
+- Light / Deep Analysis = report-first
+- llm-wiki = preservation-first
+
+In live workspaces this policy typically lives in `PROTOCOLS.md` as **Research Modes &
+llm-wiki Invocation Policy**. Keep the high-level distinction in the guide even if the
+exact local filing rules stay instance-specific.
 
 ### Deep Analysis Protocol
 
@@ -1793,7 +1830,7 @@ No conflicts with intelligence crons if scheduled at a different hour.
 **Key payload rules (same as intelligence crons):**
 - `[CRITICAL - DELIVERY]` required — maintenance reports are long; announce
   delivery fails silently for large outputs (see Section 3 gotcha)
-- `model: haiku`, `thinking: low` — spoon-fed execution, no reasoning needed
+- `model: low-cost reliable alias`, `thinking: low` — `gpt54min` is a strong default; `haiku` is fine for Claude-centered setups
 - `wakeMode: "now"` (explicit; this is also the default when omitted)
 - Do NOT add `--dry-run` to the process janitor step — the cron exists to
   actually run the cleanup, not preview it
@@ -1841,9 +1878,10 @@ current context before acting.
    in the system prompt). Exception: if STM identifies a specific skill as actively
    in-progress for the session, read that one SKILL.md only.
 3. **Protocol awareness** — Note that `PROTOCOLS.md` (workspace root) contains
-   full procedure details for triggered protocols: Deep Analysis, Distill & Flush,
-   Spa Day, Coding Task Protocol (incl. Orchestrator Loop). These are referenced
-   from `AGENTS.md` but only read when explicitly triggered by name.
+   full procedure details for triggered protocols such as Distill & Flush,
+   Spa Day, Research Modes / llm-wiki routing, and the Coding Task Protocol.
+   Deep Analysis often lives in a dedicated skill instead of `PROTOCOLS.md`.
+   These are referenced from `AGENTS.md` but only read when explicitly triggered by name.
 4. **Confirm back to user** — Report: (a) which memory files were read and any
    relevant lessons surfaced, (b) which SKILL.md files were loaded with key
    gotchas per skill, (c) restate the Research and Memory retrieval rules in
@@ -1891,7 +1929,7 @@ or E warnings.
 [ ] NO_REPLY guard in [CRITICAL] block for announce delivery jobs
 [ ] [CRITICAL - DELIVERY] block added with message tool instruction (channel + target hardcoded)
 [ ] For CLIs with known startup warnings, add [CRITICAL - <TOOL>] guard explaining noise
-[ ] Model set to haiku with low thinking (confirmed for spoon-fed crons)
+[ ] Model set to an appropriate low-cost alias with low thinking (`gpt54min` preferred; `haiku` acceptable for Claude-centric setups)
 [ ] Schedules staggered ≥15min apart from other crons delivering to the same channel
 [ ] agentId NOT set to "main" (use default agent for isolated crons)
 [ ] wakeMode set to "now" (default, but explicit is cleaner — avoids ambiguity when cloning/migrating crons)
@@ -1948,6 +1986,7 @@ When upgrading tools used in cron jobs:
 
 | Date | Change |
 |------|--------|
+| 2026-04-06 (v15) | Provider-agnostic refresh. Title/intro de-Anthropicized while keeping the historical filename, model strategy rewritten around stable aliases and multi-provider routing, execution modes updated with the built-in-tools-first rule and the Mode 2 `yieldMs` + `timeout` anti-pattern. Companion `WORKSPACE_REFERENCE.md` refreshed first so the public guide continues to stay generic while the personal overlay carries instance-specific truth. Later same day: guide-sync audit re-run against a fresh dated artifact (`explore-guide-sync-20260406.txt`) corrected stale Sonnet/Haiku-era leftovers, fixed skills precedence order, updated PROTOCOLS/llm-wiki wording, expanded alias examples, corrected multi-agent model rows, and refreshed cron-model wording. |
 | 2026-03-31 (v14.2) | Multi-agent setup + yolo mode (NEW Section 2.6): vader-yolo agent architecture, exec security tiers (main=allowlist/on-miss, cron=allowlist/off, vader-yolo=full/off), subagents.allowAgents config key, yolo mode UX pattern (trigger/worker/exit/audit trail), Mode 5 added to execution modes table. Priority 2 fixes: QMD includeDefaultMemory=false, prework skill scan lazy pattern, pre-flight gate narration added to Tier 1+2 research, [COMMIT] step updated with branch push policy, opus-av alias added, skills precedence tiers corrected to 6 levels. v14.1: scrubbed personal references (personal names → user), generalized model aliases to representative examples by provider category, removed instance-specific config notes, generalized agent naming. v14.2: generalized ~/gemini-search and ~/clawd paths to placeholders, added model ID age qualifier, clarified revision history reversion notes, added exec-approvals section comment. |
 | 2026-03-21 (v13) | **Full alignment refresh vs live workspace (2026-03-21) + official docs audit.** Research Protocol: Gemini Grounding promoted to mandatory Tier 1 (4th tool); pre-flight gate narration rule added for both Tier 1 and Tier 2; Tier 3/4 renumbered (Browser→T3, Specialized precision tools→T4, with 6 new domain-specific tools documented); breaking event rule updated to include Gemini. Coding Architecture: `opencode-wrapper` replaced by `opencode-acp` skill; ACP transport (`sessions_spawn(runtime="acp")`) replaces PTY/tmux; plan files in `.opencode/plans/plan-NNN-<slug>.md`; explore artifacts in `.opencode/artifacts/`; completion via gateway log grep; acpx backend concept added; Orchestrator Loop steps added with ACP-era labels. Memory tiers: L2 = full `memory/` folder (projects + dated files, organizational not tier boundary); L3 = MEMORY.md (auto-injected); `memory_search` reframed as retrieval mechanism, not a tier. Model aliases: config structure updated to `agents.defaults.models[id].alias`; 7 new aliases added (opus, gpt54min, grok, kimi, minimax, deepseek, qwen-local); Opus row added to assignment table. Medium additions: PROTOCOLS.md triggered procedure store documented; Deep Analysis Gemini Pro distinction noted (Pro for DA, flash for all other research) + gpt54 sub-agent model updated; `memory_get` tool documented alongside `memory_search`; `lightContext` + `sessionTarget` current/session:custom-id added to cron payload fields; approvals block updated from future to configurable (enabled: false); ClawHub registry added. Prework ritual updated to 4 steps (protocol awareness added as step 3). Draw.io edit links removed from diagrams with content changes. |
 | 2026-03-13 (v12) | **Alignment refresh vs live workspace:** corrected model policy drift (interactive default back to sonnet low; gpt54 overflow; haiku cron-only), updated `gpt54` alias to `github-copilot/gpt-5.4`, replaced stale QMD source-build instructions with live bun package + `better-sqlite3` rebuild flow, updated mcporter examples to the current `--config ... call "server.tool" --args ...` pattern, corrected Google Developer Knowledge tool names (`search_documents`, `get_documents`), updated Financial Datasets count to 17, and documented the 2026.3.11 isolated-cron delivery contract tightening plus issue #43177 false-positive delivery status bug. |
