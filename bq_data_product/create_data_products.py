@@ -606,12 +606,11 @@ def _add_documentation(pid: str, content: str) -> None:
     logger.info("  Documentation attached.")
 
 
-def _add_contract(pid: str, product: dict) -> None:
+def _add_contract(pid: str, frequency: str) -> None:
     """Attach a refresh-cadence contract via the system aspect.
 
     Ref: https://cloud.google.com/dataplex/docs/create-data-products#add-a-contract
     """
-    frequency = product["contract_frequency"]
     logger.info("  Attaching refresh-cadence contract (%s) ...", frequency)
     _cadence_type = (
         "projects/dataplex-types/locations/global/aspectTypes/refresh-cadence"
@@ -798,7 +797,7 @@ def cmd_create() -> None:
         for asset in product["assets"]:
             _add_asset(product["id"], asset)
         _add_documentation(product["id"], product["documentation"])
-        _add_contract(product["id"], product)
+        _add_contract(product["id"], product["contract_frequency"])
 
     logger.info("")
     logger.info("All data products created successfully.")
