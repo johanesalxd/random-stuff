@@ -348,11 +348,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+_TOKEN_CACHE: dict = {}
+_TOKEN_TTL_S = 50 * 60  # 50 minutes; ADC tokens are valid for 60 minutes
+
+
 def _get_access_token() -> str:
-    """Return a short-lived ADC token.
+    """Return a short-lived ADC token, cached for up to 50 minutes.
 
     Run `gcloud auth application-default login` once before using this script.
     """
+    now = time.monotonic()
+    if _TOKEN_CACHE.get("token") and now - _TOKEN_CACHE.get("ts", 0) < _TOKEN_TTL_S:
+        return _TOKEN_CACHE["token"]
     try:
         result = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
@@ -360,7 +367,10 @@ def _get_access_token() -> str:
             text=True,
             check=True,
         )
-        return result.stdout.strip()
+        token = result.stdout.strip()
+        _TOKEN_CACHE["token"] = token
+        _TOKEN_CACHE["ts"] = now
+        return token
     except subprocess.CalledProcessError as exc:
         logger.error(
             "Failed to obtain an ADC token. "
@@ -647,47 +657,6 @@ def _add_contract(pid: str, frequency: str) -> None:
     logger.info("  Contract attached.")
 
 
-def _add_contacts(pid: str) -> None:
-    """Attach a contacts aspect with ownership and stewardship roles.
-
-    Ref: https://cloud.google.com/dataplex/docs/enrich-entries-metadata
-    """
-    logger.info("  Attaching contacts ...")
-    _contacts_type = "projects/dataplex-types/locations/global/aspectTypes/contacts"
-    payload = {
-        "aspects": {
-            "dataplex-types.global.contacts": {
-                "aspectType": _contacts_type,
-                "data": {
-                    "identities": [
-                        {
-                            "role": "owner",
-                            "name": "Data Platform Team",
-                            "id": OWNER_EMAIL,
-                        },
-                        {
-                            "role": "steward",
-                            "name": "Data Steward",
-                            "id": OWNER_EMAIL,
-                        },
-                    ]
-                },
-            }
-        }
-    }
-    resp = requests.patch(
-        _entry_url(pid),
-        headers=_headers(),
-        params={"updateMask": "aspects"},
-        json=payload,
-        timeout=30,
-    )
-    resp.raise_for_status()
-    logger.info("  Contract attached.")
-
-
-# ---------------------------------------------------------------------------
-# DataScan helpers (data profile)
 # ---------------------------------------------------------------------------
 # DataScan helpers (data profile)
 # ---------------------------------------------------------------------------
