@@ -591,7 +591,18 @@ def _add_documentation(pid: str, content: str) -> None:
         "aspects": {
             "dataplex-types.global.overview": {
                 "aspectType": _overview_type,
-                "data": {"content": content},
+                "data": {
+                    "content": content,
+                    "links": [
+                        {
+                            "url": (
+                                "https://console.cloud.google.com/bigquery"
+                                "?p=bigquery-public-data&d=thelook_ecommerce"
+                            ),
+                            "title": "Source dataset in BigQuery",
+                        },
+                    ],
+                },
             }
         }
     }
@@ -636,6 +647,47 @@ def _add_contract(pid: str, frequency: str) -> None:
     logger.info("  Contract attached.")
 
 
+def _add_contacts(pid: str) -> None:
+    """Attach a contacts aspect with ownership and stewardship roles.
+
+    Ref: https://cloud.google.com/dataplex/docs/enrich-entries-metadata
+    """
+    logger.info("  Attaching contacts ...")
+    _contacts_type = "projects/dataplex-types/locations/global/aspectTypes/contacts"
+    payload = {
+        "aspects": {
+            "dataplex-types.global.contacts": {
+                "aspectType": _contacts_type,
+                "data": {
+                    "identities": [
+                        {
+                            "role": "owner",
+                            "name": "Data Platform Team",
+                            "id": OWNER_EMAIL,
+                        },
+                        {
+                            "role": "steward",
+                            "name": "Data Steward",
+                            "id": OWNER_EMAIL,
+                        },
+                    ]
+                },
+            }
+        }
+    }
+    resp = requests.patch(
+        _entry_url(pid),
+        headers=_headers(),
+        params={"updateMask": "aspects"},
+        json=payload,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    logger.info("  Contract attached.")
+
+
+# ---------------------------------------------------------------------------
+# DataScan helpers (data profile)
 # ---------------------------------------------------------------------------
 # DataScan helpers (data profile)
 # ---------------------------------------------------------------------------
@@ -801,6 +853,10 @@ def cmd_create() -> None:
 
     logger.info("")
     logger.info("All data products created successfully.")
+    logger.info(
+        "Note: re-running 'create' will skip existing products and assets "
+        "but always re-applies aspects (documentation, contract) — this is expected."
+    )
     logger.info(
         "Explore in Dataplex Universal Catalog:\n"
         "  https://console.cloud.google.com/dataplex/govern/data-products"
