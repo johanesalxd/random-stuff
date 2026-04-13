@@ -105,7 +105,7 @@ Each data product is provisioned with:
 - Labels: `domain=ecommerce`, `team=data-platform`, `source=bigquery-public-data`
 - BigQuery view assets linked via full resource names
 - Rich-text documentation with sample SQL queries (ready to run in BigQuery Studio)
-- Refresh-cadence contract aspect (`frequency`, `refresh_time`, `threshold`, `cron_schedule`)
+- Refresh-cadence contract aspect (`frequency` — informational metadata only, not a scheduler)
 
 ---
 
