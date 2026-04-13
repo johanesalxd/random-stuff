@@ -104,8 +104,9 @@ Each data product is provisioned with:
 - Display name, description, and owner email
 - Labels: `domain=ecommerce`, `team=data-platform`, `source=bigquery-public-data`
 - BigQuery view assets linked via full resource names
-- Rich-text documentation with sample SQL queries (ready to run in BigQuery Studio)
+- Rich-text documentation with sample SQL queries and source dataset link
 - Refresh-cadence contract aspect (`frequency` — informational metadata only, not a scheduler)
+- Contacts aspect — auto-populated by Dataplex from `owner_emails` (read-only, not writable via API)
 
 ---
 
@@ -127,8 +128,10 @@ Grant these on your GCP project:
 | `roles/dataplex.dataProductsAdmin` | Create, update, delete data products and assets |
 | `roles/dataplex.entryOwner` | Attach aspects (documentation, contract) |
 | `roles/dataplex.catalogViewer` | Search and browse catalog assets |
-| `roles/dataplex.catalogEditor` | Edit system aspects (overview, refresh-cadence) |
+| `roles/dataplex.catalogEditor` | Edit system aspects (overview, refresh-cadence, contacts) |
 | `roles/bigquery.dataEditor` | Create the views dataset and views |
+| `roles/dataplex.dataScanAdmin` | Create, trigger, and delete data profile scans (`profile`, `cleanup-scans`) |
+| `roles/dataplex.dataProductsConsumer` | Search and discover data products — grant to consumers for the `search` command |
 
 ---
 
