@@ -28,6 +28,10 @@ env/
 *.pyo
 *.pyd
 
+# Python build artifacts
+dist/
+*.egg-info/
+
 # Dataform credentials
 .df-credentials.json
 **/.df-credentials.json

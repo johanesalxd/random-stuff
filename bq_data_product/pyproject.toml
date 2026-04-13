@@ -1,0 +1,20 @@
+[project]
+name = "bq-data-product"
+version = "0.1.0"
+description = "Dataplex Data Product demo using TheLook e-commerce dataset"
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "requests>=2.32",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.10",
+]
