@@ -622,9 +622,6 @@ def _add_contract(pid: str, product: dict) -> None:
                 "aspectType": _cadence_type,
                 "data": {
                     "frequency": frequency,
-                    "refresh_time": product.get("contract_refresh_time", "08:00 UTC"),
-                    "threshold": product.get("contract_threshold", "30"),
-                    "cron_schedule": product.get("contract_cron_schedule", "0 8 * * *"),
                 },
             }
         }
@@ -663,6 +660,7 @@ def _create_data_scan(table: str) -> str:
     payload = {
         "type": "DATA_PROFILE",
         "data": {"resource": resource},
+        "dataProfileSpec": {},
     }
     resp = requests.post(
         _scan_url(),
