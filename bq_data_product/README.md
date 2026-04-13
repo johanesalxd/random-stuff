@@ -106,7 +106,9 @@ Each data product is provisioned with:
 - BigQuery view assets linked via full resource names
 - Rich-text documentation with sample SQL queries and source dataset link
 - Refresh-cadence contract aspect (`frequency` — informational metadata only, not a scheduler)
-- Contacts aspect — auto-populated by Dataplex from `owner_emails` (read-only, not writable via API)
+
+> Dataplex automatically populates a `contacts` aspect from `owner_emails` at product creation.
+> It is visible in the Aspects tab but is a restricted system aspect — not writable via the API.
 
 ---
 
@@ -175,7 +177,7 @@ SCAN_LOCATION=us-central1
 OWNER_EMAIL=you@example.com
 ```
 
-> `.env` is listed in `.gitignore` and is never committed.
+> `.env` is covered by the repository's `.gitignore` and is never committed.
 
 ---
 
