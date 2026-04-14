@@ -1,0 +1,28 @@
+# Demo config: users (merge / upsert)
+#
+# Demonstrates: upsert from Cloud SQL Postgres -> BigQuery using MERGE DML.
+# Rows are matched on user_id; existing rows are updated, new rows are inserted.
+# Safe to run multiple times -- idempotent.
+#
+# GCS path (after make deploy): gs://<bucket>/configs/thelook/public/users.yaml
+
+source:
+  type: postgres
+  # Secret Manager resource name -- populated by infra/setup.sh
+  jdbc_url_secret: projects/MY_PROJECT/secrets/thelook-db-jdbc-url/versions/latest
+  table: public.users
+  fetch_size: 10000
+
+target:
+  project: MY_PROJECT
+  dataset: raw_thelook
+  table: users
+  write_mode: merge
+  merge_keys:
+    - id
+  clustering_fields:
+    - country
+    - gender
+
+extraction:
+  mode: full
