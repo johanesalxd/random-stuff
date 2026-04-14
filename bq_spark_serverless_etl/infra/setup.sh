@@ -93,6 +93,8 @@ else
     --display-name="Spark ETL Demo SA" \
     --project="${GCP_PROJECT}" \
     --quiet
+  # Allow IAM propagation before binding roles
+  sleep 10
 fi
 
 echo "      Granting IAM roles..."
@@ -177,16 +179,36 @@ if gcloud sql instances describe "${SQL_INSTANCE}" \
     --project="${GCP_PROJECT}" &>/dev/null; then
   echo "      Instance already exists, skipping."
 else
+  # Use --async so gcloud returns immediately instead of timing out waiting.
+  # Pin zone to avoid GCP zone-selection delay.
   gcloud sql instances create "${SQL_INSTANCE}" \
     --project="${GCP_PROJECT}" \
     --region="${GCP_REGION}" \
+    --zone="${GCP_REGION}-f" \
     --database-version=POSTGRES_15 \
     --tier=db-f1-micro \
     --storage-size=10GB \
     --storage-type=HDD \
+    --availability-type=ZONAL \
     --no-backup \
+    --async \
     --quiet
-  echo "      Cloud SQL instance created."
+  echo "      Cloud SQL create submitted, waiting for RUNNABLE state..."
+  for _i in $(seq 1 40); do
+    _STATE=$(gcloud sql instances describe "${SQL_INSTANCE}" \
+      --project="${GCP_PROJECT}" \
+      --format='value(state)' 2>/dev/null || true)
+    echo "      [${_i}/40] state=${_STATE}"
+    if [[ "${_STATE}" == "RUNNABLE" ]]; then
+      echo "      Instance is RUNNABLE."
+      break
+    fi
+    if [[ "${_i}" -eq 40 ]]; then
+      echo "ERROR: Cloud SQL instance did not become RUNNABLE after 10 minutes." >&2
+      exit 1
+    fi
+    sleep 15
+  done
 fi
 
 echo "[6b/9] Setting root password..."
