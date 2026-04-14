@@ -70,9 +70,8 @@ OPTIONS (
         ("spark.pyspark.python.pip.packages",
             "pydantic==2.13.0,google-cloud-secret-manager==2.16.0,google-cloud-storage==2.10.0,pyyaml==6.0.2"),
         ("spark.dataproc.scaling.version", "2"),
-        ("spark.executor.memory",          "4g"),
-        ("spark.executor.cores",           "2"),
-        ("spark.driver.memory",            "2g")
+        ("spark.executor.cores",           "4"),
+        ("spark.driver.memory",            "4g")
     ]
 )
 LANGUAGE PYTHON;

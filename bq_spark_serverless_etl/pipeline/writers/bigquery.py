@@ -20,6 +20,8 @@ Reference:
 import logging
 from datetime import datetime, timezone
 
+from google.api_core.exceptions import NotFound
+from google.cloud import bigquery as _bq
 from pyspark.sql import DataFrame, SparkSession
 
 from pipeline.config import ExtractionMode, PipelineConfig, WriteMode
@@ -99,22 +101,35 @@ class BigQueryWriter(BaseWriter):
     ) -> None:
         """Upsert via BigQuery MERGE DML.
 
-        Strategy:
+        On first run (target table absent) falls back to a direct overwrite so
+        that partitioning and clustering are applied correctly via _base_writer.
+
+        On subsequent runs:
         1. Write the incoming DataFrame to a short-lived staging table
            (overwrite, same dataset as target).
         2. Execute a MERGE statement that updates matching rows and
            inserts new ones based on merge_keys.
         3. Drop the staging table.
 
-        This avoids loading the full DataFrame into driver memory and keeps
-        the merge logic inside BigQuery where it is most efficient.
-
         Args:
             df: Incoming DataFrame.
             config: Pipeline configuration.
-            spark: Active SparkSession (used to run BQ DML via bigquery format).
+            spark: Active SparkSession (unused directly; kept for API consistency).
         """
         tgt = config.target
+
+        # Check whether target table exists before staging anything.
+        bq_client = _bq.Client(project=tgt.project)
+        try:
+            bq_client.get_table(tgt.full_table_id)
+        except NotFound:
+            logger.info(
+                "Target table %s does not exist -- falling back to overwrite for initial load.",
+                tgt.full_table_id,
+            )
+            self._write_overwrite(df, config)
+            return
+
         run_ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         staging_table = f"{tgt.project}.{tgt.dataset}._staging_{tgt.table}_{run_ts}"
 
@@ -161,12 +176,13 @@ class BigQueryWriter(BaseWriter):
         """
         logger.info("Executing MERGE DML for table: %s", tgt.full_table_id)
 
-        # Run DML via the BigQuery connector's query option
-        spark.read.format("bigquery").option("query", merge_sql).load()
+        # Run DML via the BigQuery Python client (the Spark BQ connector's
+        # "query" option is for SELECT reads only, not DML).
+        bq_client.query(merge_sql).result()
 
         # Step 3: clean up staging table
         drop_sql = f"DROP TABLE IF EXISTS `{staging_table}`"
-        spark.read.format("bigquery").option("query", drop_sql).load()
+        bq_client.query(drop_sql).result()
         logger.info("Dropped staging table: %s", staging_table)
 
     # ------------------------------------------------------------------
@@ -253,7 +269,8 @@ class BigQueryWriter(BaseWriter):
         """
 
         try:
-            spark.read.format("bigquery").option("query", merge_sql).load()
+            bq_client = _bq.Client(project=tgt.project)
+            bq_client.query(merge_sql).result()
             logger.info("Watermark updated to: %s", new_watermark)
         except Exception:
             # A watermark write failure must not fail the overall pipeline run.
