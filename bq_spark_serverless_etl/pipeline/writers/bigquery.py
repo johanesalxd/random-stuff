@@ -268,8 +268,19 @@ class BigQueryWriter(BaseWriter):
                 VALUES (S.source_name, S.db_name, S.tbl_name, S.watermark_value, S.updated_at)
         """
 
+        create_sql = f"""
+            CREATE TABLE IF NOT EXISTS `{watermark_table}` (
+                source_name     STRING NOT NULL,
+                db_name         STRING NOT NULL,
+                tbl_name        STRING NOT NULL,
+                watermark_value STRING NOT NULL,
+                updated_at      TIMESTAMP NOT NULL
+            )
+        """
+
         try:
             bq_client = _bq.Client(project=tgt.project)
+            bq_client.query(create_sql).result()
             bq_client.query(merge_sql).result()
             logger.info("Watermark updated to: %s", new_watermark)
         except Exception:

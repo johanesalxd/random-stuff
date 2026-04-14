@@ -16,6 +16,8 @@ Supports:
 
 import logging
 
+from google.api_core.exceptions import NotFound
+from google.cloud import bigquery as _bq
 from pyspark.sql import DataFrame, SparkSession
 
 from pipeline.config import ExtractionMode, PipelineConfig, resolve_secret
@@ -143,16 +145,23 @@ class PostgresExtractor(BaseExtractor):
             f"{tgt.project}.{tgt.dataset}._watermarks"
         )
 
+        project = tgt.project
+        query = f"""
+            SELECT MAX(watermark_value) AS last_value
+            FROM `{watermark_table}`
+            WHERE source_name = '{config.source_name}'
+              AND db_name = '{config.db_name}'
+              AND tbl_name = '{config.tbl_name}'
+        """
         try:
-            query = f"""
-                SELECT MAX(watermark_value) AS last_value
-                FROM `{watermark_table}`
-                WHERE source_name = '{config.source_name}'
-                  AND db_name = '{config.db_name}'
-                  AND tbl_name = '{config.tbl_name}'
-            """
-            row = spark.read.format("bigquery").option("query", query).load().first()
-            return row["last_value"] if row and row["last_value"] else None
+            bq_client = _bq.Client(project=project)
+            rows = list(bq_client.query(query).result())
+            if rows and rows[0]["last_value"] is not None:
+                return rows[0]["last_value"]
+            return None
+        except NotFound:
+            # Table doesn't exist yet — first run.
+            return None
         except Exception:
             logger.warning(
                 "Could not read watermark from %s -- treating as first run.",
