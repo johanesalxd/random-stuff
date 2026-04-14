@@ -390,7 +390,8 @@ Two service accounts are involved. `infra/setup.sh` creates and configures both 
 |------|---------|
 | `roles/dataproc.worker` | Submit and run Dataproc Serverless batches |
 | `roles/storage.objectAdmin` | Read/write pipeline artifacts in GCS |
-| `roles/bigquery.dataEditor` | Read from and write to BigQuery tables |
+| `roles/bigquery.dataEditor` | Write to BigQuery tables |
+| `roles/bigquery.dataViewer` | Read via BigQuery Storage Read API (`bigquery.readsessions.create`) |
 | `roles/bigquery.jobUser` | Run BigQuery jobs |
 | `roles/secretmanager.secretAccessor` | Resolve JDBC URL secrets |
 | `roles/logging.logWriter` | Write Spark logs to Cloud Logging |
@@ -400,7 +401,8 @@ Two service accounts are involved. `infra/setup.sh` creates and configures both 
 | Role | Purpose |
 |------|---------|
 | `roles/storage.objectViewer` | Read `main.py`, wheel, and JDBC JAR from GCS |
-| `roles/bigquery.dataEditor` | Read from and write to BigQuery tables |
+| `roles/bigquery.dataEditor` | Write to BigQuery tables |
+| `roles/bigquery.dataViewer` | Read via BigQuery Storage Read API (`bigquery.readsessions.create`) |
 | `roles/bigquery.jobUser` | Run BigQuery jobs triggered by the stored procedure |
 | `roles/secretmanager.secretAccessor` | Resolve JDBC URL secrets at procedure runtime |
 

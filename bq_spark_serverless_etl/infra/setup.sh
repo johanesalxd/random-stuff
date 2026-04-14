@@ -102,6 +102,7 @@ for ROLE in \
   roles/dataproc.worker \
   roles/storage.objectAdmin \
   roles/bigquery.dataEditor \
+  roles/bigquery.dataViewer \
   roles/bigquery.jobUser \
   roles/secretmanager.secretAccessor \
   roles/logging.logWriter; do
@@ -162,6 +163,7 @@ for ROLE in \
   roles/storage.objectViewer \
   roles/secretmanager.secretAccessor \
   roles/bigquery.dataEditor \
+  roles/bigquery.dataViewer \
   roles/bigquery.jobUser; do
   gcloud projects add-iam-policy-binding "${GCP_PROJECT}" \
     --member="serviceAccount:${CONN_SA}" \

@@ -23,7 +23,7 @@ The notebook is the whole pipeline. Change one variable to read a different tabl
 Provision the demo infrastructure and seed the database:
 
 ```bash
-GCP_PROJECT=your-project GCP_REGION=us-central1 make infra-up
+GCP_PROJECT=my-project GCP_REGION=us-central1 make infra-up
 make seed
 ```
 
