@@ -7,14 +7,11 @@ To add a new source type:
 4. Add the source type value to pipeline/config.py SourceType enum.
 """
 
-import logging
 from abc import ABC, abstractmethod
 
 from pyspark.sql import DataFrame, SparkSession
 
 from pipeline.config import PipelineConfig
-
-logger = logging.getLogger(__name__)
 
 
 class BaseExtractor(ABC):

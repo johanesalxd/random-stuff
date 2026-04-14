@@ -16,8 +16,9 @@ Mode 1 -- Dataproc Serverless Batch (direct CLI submission):
         --gcs_bucket=my-config-bucket
 
 Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
-    Parameters are injected via SparkProcParamContext, which BigQuery
-    populates from the arguments passed in the CALL statement.
+    Parameters are read from BIGQUERY_PROC_PARAM.* environment variables,
+    which BigQuery injects at runtime from the arguments passed in the CALL
+    statement.
 
     The procedure is created once with:
         CREATE OR REPLACE PROCEDURE `project.dataset.run_pipeline`(

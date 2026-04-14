@@ -26,7 +26,7 @@ from pipeline.writers.bigquery import BigQueryWriter
 EXTRACTOR_REGISTRY: dict[SourceType, type[BaseExtractor]] = {
     SourceType.POSTGRES: PostgresExtractor,
     # SourceType.MYSQL: MySQLExtractor,            # future
-    # SourceType.COCKROACHDB: CockroachDBExtractor, # future (same as Postgres JDBC, different driver)
+    # SourceType.COCKROACHDB: CockroachDBExtractor,  # future
 }
 
 # ---------------------------------------------------------------------------
