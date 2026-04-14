@@ -30,7 +30,7 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
         WITH CONNECTION `project.region.connection`
         OPTIONS(
             engine="SPARK",
-            runtime_version="2.2",
+            runtime_version="2.3",
             main_file_uri="gs://<bucket>/pipeline/main.py",
             py_file_uris=["gs://<bucket>/wheels/pipeline-0.1.0-py3-none-any.whl"],
             jar_uris=["gs://<bucket>/jars/postgresql-42.7.3.jar"]

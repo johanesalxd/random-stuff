@@ -228,7 +228,7 @@ def _load_table(
         rows = [tuple(row) for row in df.itertuples(index=False, name=None)]
         cur.executemany(insert_sql, rows)
         conn.commit()
-        logger.info("Inserted %d rows into public.%s.", cur.rowcount, table_name)
+        logger.info("Inserted %d rows into public.%s.", len(rows), table_name)
 
 
 # ---------------------------------------------------------------------------

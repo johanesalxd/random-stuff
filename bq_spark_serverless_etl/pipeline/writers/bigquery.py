@@ -138,19 +138,24 @@ class BigQueryWriter(BaseWriter):
         columns = df.columns
 
         on_clause = " AND ".join(f"T.`{k}` = S.`{k}`" for k in merge_keys)
-        update_clause = ", ".join(
-            f"T.`{c}` = S.`{c}`" for c in columns if c not in merge_keys
-        )
+        non_key_columns = [c for c in columns if c not in merge_keys]
+        update_clause = ", ".join(f"T.`{c}` = S.`{c}`" for c in non_key_columns)
         insert_cols = ", ".join(f"`{c}`" for c in columns)
         insert_vals = ", ".join(f"S.`{c}`" for c in columns)
+
+        # If every column is a merge key there is nothing to update; omit
+        # WHEN MATCHED entirely to avoid an empty UPDATE SET clause (invalid SQL).
+        matched_clause = (
+            f"WHEN MATCHED THEN\n                UPDATE SET {update_clause}\n            "
+            if non_key_columns
+            else ""
+        )
 
         merge_sql = f"""
             MERGE `{tgt.full_table_id}` AS T
             USING `{staging_table}` AS S
             ON {on_clause}
-            WHEN MATCHED THEN
-                UPDATE SET {update_clause}
-            WHEN NOT MATCHED THEN
+            {matched_clause}WHEN NOT MATCHED THEN
                 INSERT ({insert_cols})
                 VALUES ({insert_vals})
         """

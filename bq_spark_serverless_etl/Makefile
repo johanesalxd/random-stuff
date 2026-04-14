@@ -121,7 +121,7 @@ upload-gcs: build download-jdbc-jar
 # ---------------------------------------------------------------------------
 # Dataproc Serverless: submit a batch job
 # ---------------------------------------------------------------------------
-# Usage: make submit-batch SOURCE=payments_db DB=public TBL=transactions RUN_ID=$(uuidgen)
+# Usage: make submit-batch SOURCE=thelook DB=public TBL=orders RUN_ID=$(uuidgen)
 
 SOURCE          ?= my_source
 DB              ?= public
@@ -245,8 +245,7 @@ run-demo-pipeline:
 	| bq query \
 		--project_id=$(GCP_PROJECT) \
 		--location=$(GCP_REGION) \
-		--nouse_legacy_sql \
-		--batch=true
+		--nouse_legacy_sql
 	@echo ""
 	@echo "Pipeline complete. Check BigQuery:"
 	@echo "  raw_thelook.orders       -- ingested from Cloud SQL (full load)"

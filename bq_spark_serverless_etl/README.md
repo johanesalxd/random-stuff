@@ -99,6 +99,8 @@ make infra-down   # deletes all GCP resources
 - `gcloud` CLI authenticated: `gcloud auth login && gcloud auth application-default login`
 - A GCP project with a billing account
 
+> **Authentication note:** Local scripts (`seed_data.py`, Makefile targets) use Application Default Credentials (ADC) — set up with `gcloud auth application-default login`. Spark jobs running on Dataproc Serverless use the dedicated service account created by `infra/setup.sh`, not your personal credentials.
+
 ### 1. Install dependencies
 
 ```bash
@@ -116,7 +118,7 @@ Creates and writes all resource names to `infra/.env`:
 | Resource | Details |
 |----------|---------|
 | GCS bucket | Pipeline artifacts: wheel, `main.py`, JDBC JAR, YAML configs |
-| Cloud SQL Postgres | `db-f1-micro`, public IP, 10 GB HDD (demo tier) |
+| Cloud SQL Postgres | `db-f1-micro`, public IP (`0.0.0.0/0` authorized — **demo only, not for production**), 10 GB HDD |
 | Secret Manager secret | JDBC URL (host + credentials, never in config files) |
 | BQ datasets | `raw_thelook` (ingestion), `analytics` (transforms), `pipelines` (procedure) |
 | BQ Spark connection | Links the stored procedure to Dataproc Serverless |
@@ -156,7 +158,7 @@ CALL `my-project.pipelines.run_pipeline`('thelook','public','order_items','my-bu
 
 Each `CALL` spins up a Dataproc Serverless Spark job, reads from Cloud SQL, and writes to `raw_thelook`.
 
-**Step 2 — Transform (BigQuery SQL):**
+**Step 2 — Transform (BigQuery SQL, simplified — see `sql/demo_pipeline.sql` for the full query):**
 
 ```sql
 CREATE OR REPLACE TABLE `my-project.analytics.daily_revenue`
@@ -330,7 +332,9 @@ EXTRACTOR_REGISTRY = {
 
 ## IAM roles
 
-The service account running the Spark job requires:
+Two service accounts are involved. `infra/setup.sh` creates and configures both automatically.
+
+**Dataproc Serverless batch job SA** (`spark-etl-sa`) — runs the Spark job:
 
 | Role | Purpose |
 |------|---------|
@@ -341,7 +345,14 @@ The service account running the Spark job requires:
 | `roles/secretmanager.secretAccessor` | Resolve JDBC URL secrets |
 | `roles/logging.logWriter` | Write Spark logs to Cloud Logging |
 
-`infra/setup.sh` creates and configures this service account automatically.
+**BigQuery Spark connection SA** (auto-created by `bq mk --connection`) — used when invoking the stored procedure via `CALL`:
+
+| Role | Purpose |
+|------|---------|
+| `roles/storage.objectViewer` | Read `main.py`, wheel, and JDBC JAR from GCS |
+| `roles/bigquery.dataEditor` | Read from and write to BigQuery tables |
+| `roles/bigquery.jobUser` | Run BigQuery jobs triggered by the stored procedure |
+| `roles/secretmanager.secretAccessor` | Resolve JDBC URL secrets at procedure runtime |
 
 ---
 

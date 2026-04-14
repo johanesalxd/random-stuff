@@ -1,7 +1,7 @@
 # Demo config: users (merge / upsert)
 #
 # Demonstrates: upsert from Cloud SQL Postgres -> BigQuery using MERGE DML.
-# Rows are matched on user_id; existing rows are updated, new rows are inserted.
+# Rows are matched on id; existing rows are updated, new rows are inserted.
 # Safe to run multiple times -- idempotent.
 #
 # GCS path (after make deploy): gs://<bucket>/configs/thelook/public/users.yaml

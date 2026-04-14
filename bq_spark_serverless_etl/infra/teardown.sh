@@ -64,14 +64,17 @@ bq rm --connection \
 # ---------------------------------------------------------------------------
 echo "[3/7] Deleting BigQuery datasets..."
 for DS in raw_thelook analytics "${BQ_DATASET}"; do
-  bq rm \
+  if bq rm \
     --project_id="${GCP_PROJECT}" \
     --dataset \
     --recursive \
     --force \
     "${DS}" \
-    2>/dev/null || echo "      Dataset ${DS} not found, skipping."
-  echo "      Deleted ${DS}."
+    2>/dev/null; then
+    echo "      Deleted ${DS}."
+  else
+    echo "      Dataset ${DS} not found, skipping."
+  fi
 done
 
 # ---------------------------------------------------------------------------
