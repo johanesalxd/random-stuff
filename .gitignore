@@ -48,3 +48,4 @@ WORKSPACE_REFERENCE.md
 .opencode/
 **/.ruff_cache/
 **/.pytest_cache/
+temp/*

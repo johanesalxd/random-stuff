@@ -1,0 +1,34 @@
+# Example: Incremental load from PostgreSQL -> BigQuery
+#
+# GCS path: gs://<bucket>/configs/thelook/public/order_items.yaml
+#
+# The pipeline reads the last watermark from a _watermarks table in BigQuery
+# and only extracts rows newer than that value. On the first run (no
+# watermark exists), it performs a full extraction.
+#
+# The watermark table is created automatically in the target dataset on the
+# first run and has the schema:
+#   source_name STRING, db_name STRING, tbl_name STRING,
+#   watermark_value STRING, updated_at TIMESTAMP
+
+source:
+  type: postgres
+  jdbc_url_secret: projects/my-gcp-project/secrets/thelook-db-jdbc-url/versions/latest
+  table: public.order_items
+  fetch_size: 10000
+
+target:
+  project: my-gcp-project
+  dataset: raw_thelook
+  table: order_items
+  write_mode: append
+  partition_field: created_at
+  clustering_fields:
+    - status
+    - product_id
+
+extraction:
+  mode: incremental
+  watermark_column: created_at
+  # Optional: override the default watermark table (project.dataset._watermarks)
+  # watermark_table: my-gcp-project.pipeline_meta._watermarks

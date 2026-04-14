@@ -1,0 +1,44 @@
+[project]
+name = "pipeline"
+version = "0.1.0"
+description = "GCP-native Spark batch ETL: Postgres -> BigQuery via Dataproc Serverless, callable as a BQ Spark Stored Procedure"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "google-cloud-storage>=2.10",
+    "google-cloud-secret-manager>=2.16",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    # pyspark is provided by the Dataproc Serverless runtime at job execution
+    # time and is not packaged into the wheel. It is listed here solely so that
+    # unit tests can import pipeline modules without a live Spark environment.
+    "pyspark>=3.3",
+    # Seed script dependencies (scripts/seed_data.py)
+    "google-cloud-bigquery>=3.0",
+    "pandas>=2.0",
+    "psycopg2-binary>=2.9",
+    "db-dtypes>=1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pipeline"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,46 @@
+# Example: Full load from PostgreSQL -> BigQuery
+#
+# GCS path: gs://<bucket>/configs/thelook/public/orders.yaml
+#
+# Secrets referenced here must exist in GCP Secret Manager before running.
+# Create with:
+#   echo -n "jdbc:postgresql://HOST:5432/DB?user=USER&password=PASS" | \
+#     gcloud secrets create thelook-db-jdbc-url --data-file=- --replication-policy=automatic
+
+source:
+  type: postgres
+
+  # Full resource name of the Secret Manager secret holding the JDBC URL.
+  # Format: projects/<project>/secrets/<name>/versions/latest
+  jdbc_url_secret: projects/my-gcp-project/secrets/thelook-db-jdbc-url/versions/latest
+
+  # Fully qualified table name in the source database
+  table: public.orders
+
+  # --- Parallel read (optional) ---
+  # Uncomment to enable parallel JDBC reads. Requires a numeric column
+  # that can be range-partitioned. Speeds up large table extractions.
+  #
+  # partition_column: order_id
+  # lower_bound: 1
+  # upper_bound: 100000
+  # num_partitions: 10
+
+  fetch_size: 50000
+
+target:
+  project: my-gcp-project
+  dataset: raw_thelook
+  table: orders
+  write_mode: overwrite          # overwrite | append | merge
+
+  # BigQuery time partitioning (optional)
+  partition_field: created_at
+
+  # BigQuery clustering columns (optional, max 4)
+  clustering_fields:
+    - status
+    - gender
+
+extraction:
+  mode: full                     # full | incremental
