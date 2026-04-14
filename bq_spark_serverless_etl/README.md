@@ -15,39 +15,86 @@ A self-contained demo showing how to run a Spark-based ETL pipeline entirely wit
 
 ## Architecture
 
+```mermaid
+graph TD
+    subgraph Sources
+        CSQL[(Cloud SQL Postgres\nthelook-demo)]
+    end
+
+    subgraph GCP["GCP Services"]
+        GCS[(GCS Bucket\nconfigs + wheel + JAR)]
+        SM[Secret Manager\nJDBC URL]
+    end
+
+    subgraph Spark["Dataproc Serverless Spark"]
+        Main[main.py]
+        Extract[PostgresExtractor\nJDBC parallel reads]
+        Write[BigQueryWriter\noverwrite / merge / append]
+    end
+
+    subgraph BigQuery
+        subgraph raw_thelook
+            Orders[orders\nfull load]
+            Users[users\nupsert / merge]
+            OrderItems[order_items\nincremental]
+            Watermarks[_watermarks\nauto-managed]
+        end
+        subgraph analytics
+            Revenue[daily_revenue\ndownstream aggregate]
+        end
+    end
+
+    CSQL -->|Spark JDBC| Extract
+    GCS -->|config and code| Main
+    SM -->|credentials| Extract
+    Main --> Extract --> Write
+    Write --> Orders
+    Write --> Users
+    Write --> OrderItems
+    Write -.->|watermark write-back| Watermarks
+    Orders & Users & OrderItems -->|Plain SQL| Revenue
 ```
-Cloud SQL Postgres (demo source)
-         │
-         │  Spark JDBC (parallel reads)
-         ▼
-┌──────────────────────────────────────────┐
-│      Dataproc Serverless Spark           │
-│                                          │
-│  main.py                                 │
-│    └── load config from GCS YAML         │
-│    └── PostgresExtractor (JDBC)          │
-│    └── BigQueryWriter                    │
-│          ├── overwrite  (orders)         │
-│          ├── merge DML  (users)          │
-│          └── append     (order_items)    │
-│               + watermark write-back     │
-└──────────────────────────────────────────┘
-         │
-         ▼
-  BigQuery: raw_thelook
-  ┌─────────────────────┐
-  │  orders             │  full load
-  │  users              │  upsert / merge
-  │  order_items        │  incremental
-  │  _watermarks        │  auto-managed
-  └─────────────────────┘
-         │
-         │  Plain BigQuery SQL
-         ▼
-  BigQuery: analytics
-  ┌─────────────────────┐
-  │  daily_revenue      │  downstream aggregate
-  └─────────────────────┘
+
+### End-to-end demo flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Make as Makefile
+    participant GCP as GCP APIs
+    participant CSQL as Cloud SQL
+    participant BQ as BigQuery
+    participant Spark as Dataproc Serverless
+
+    User->>Make: make demo
+
+    Make->>GCP: infra-up (setup.sh)
+    Note over GCP: GCS bucket, Cloud SQL, Secret Manager,<br/>BQ datasets, Spark connection, service account
+    GCP-->>Make: infra/.env written
+
+    Make->>CSQL: seed (seed_data.py)
+    Note over CSQL: 10k orders + 10k users + 50k order_items<br/>from bigquery-public-data.thelook_ecommerce
+
+    Make->>GCP: deploy — wheel + main.py + configs to GCS
+    Make->>BQ: CREATE PROCEDURE pipelines.run_pipeline
+
+    Make->>BQ: run-demo-pipeline (demo_pipeline.sql)
+
+    BQ->>Spark: CALL run_pipeline('orders')
+    Spark->>CSQL: JDBC full read
+    Spark->>BQ: overwrite raw_thelook.orders
+
+    BQ->>Spark: CALL run_pipeline('users')
+    Spark->>CSQL: JDBC full read
+    Spark->>BQ: MERGE raw_thelook.users on id
+
+    BQ->>Spark: CALL run_pipeline('order_items')
+    Spark->>CSQL: JDBC incremental read
+    Spark->>BQ: append raw_thelook.order_items
+    Spark->>BQ: update raw_thelook._watermarks
+
+    BQ->>BQ: CREATE TABLE analytics.daily_revenue
+    BQ-->>User: Pipeline complete
 ```
 
 ### How the pipeline is triggered
