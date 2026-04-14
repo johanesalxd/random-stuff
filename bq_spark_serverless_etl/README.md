@@ -73,7 +73,7 @@ sequenceDiagram
     GCP-->>Make: infra/.env written
 
     Make->>CSQL: seed (seed_data.py)
-    Note over CSQL: 10k orders + 10k users + 50k order_items<br/>from bigquery-public-data.thelook_ecommerce
+    Note over CSQL: ~1000 order_items + derived matching orders & users<br/>from bigquery-public-data.thelook_ecommerce
 
     Make->>GCP: deploy — wheel + main.py + configs to GCS
     Make->>BQ: CREATE PROCEDURE pipelines.run_pipeline
@@ -116,9 +116,9 @@ The same `pipeline/main.py` runs in two modes without code changes:
 | Mode | How | Parameters |
 |------|-----|------------|
 | **Dataproc Serverless Batch** | `gcloud dataproc batches submit pyspark` | `argparse` CLI args |
-| **BigQuery Spark Stored Procedure** | `CALL project.dataset.run_pipeline(...)` | `SparkProcParamContext` (injected by BQ runtime) |
+| **BigQuery Spark Stored Procedure** | `CALL project.dataset.run_pipeline(...)` | `BIGQUERY_PROC_PARAM.*` env vars (injected by BQ runtime) |
 
-Detection: `try/except` import of `bigquery.spark.procedure` — present only inside the BQ Spark runtime.
+Detection: checks for the `BIGQUERY_PROC_PARAM.*` environment variable prefix that BigQuery Spark injects at runtime. This is more reliable than importing `bigquery.spark.procedure`, which can fail with a protobuf version mismatch inside the BQ Spark runtime.
 
 ---
 
@@ -177,7 +177,7 @@ Creates and writes all resource names to `infra/.env`:
 make seed
 ```
 
-Pulls ~10k rows each from `bigquery-public-data.thelook_ecommerce.{orders, users, order_items}` and loads them into Cloud SQL Postgres. The seed script (`scripts/seed_data.py`) is standalone — it does not use any pipeline code.
+Seeds Cloud SQL Postgres with ~1000 `order_items` rows from `bigquery-public-data.thelook_ecommerce`, then derives the exact set of matching `orders` and `users` rows to maintain referential integrity. The seed script (`scripts/seed_data.py`) is standalone — it does not use any pipeline code.
 
 ### 4. Build and deploy
 

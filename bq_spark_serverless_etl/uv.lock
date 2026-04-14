@@ -671,6 +671,7 @@ name = "pipeline"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-secret-manager" },
     { name = "google-cloud-storage" },
     { name = "pydantic" },
@@ -680,7 +681,6 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "db-dtypes" },
-    { name = "google-cloud-bigquery" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
     { name = "pyopenssl" },
@@ -692,7 +692,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "db-dtypes", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "google-cloud-bigquery", marker = "extra == 'dev'", specifier = ">=3.0" },
+    { name = "google-cloud-bigquery", specifier = ">=3.0" },
     { name = "google-cloud-secret-manager", specifier = ">=2.16" },
     { name = "google-cloud-storage", specifier = ">=2.10" },
     { name = "pandas", marker = "extra == 'dev'", specifier = ">=2.0" },

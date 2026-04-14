@@ -22,16 +22,12 @@ from datetime import datetime, timezone
 
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery as _bq
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 
 from pipeline.config import ExtractionMode, PipelineConfig, WriteMode
 from pipeline.writers.base import BaseWriter
 
 logger = logging.getLogger(__name__)
-
-# Staging dataset used for merge temp tables. Reuse the target dataset by
-# default so no cross-dataset permissions are needed.
-_STAGING_TABLE_TTL_HOURS = 1
 
 
 class BigQueryWriter(BaseWriter):
@@ -46,7 +42,6 @@ class BigQueryWriter(BaseWriter):
                 destination table, write mode, partitioning, and clustering.
         """
         tgt = config.target
-        spark = df.sparkSession
 
         logger.info(
             "Writing to BigQuery: table=%s mode=%s",
@@ -61,14 +56,14 @@ class BigQueryWriter(BaseWriter):
             self._write_append(df, config)
 
         elif tgt.write_mode == WriteMode.MERGE:
-            self._write_merge(df, config, spark)
+            self._write_merge(df, config)
 
         logger.info("Successfully wrote to BigQuery table: %s", tgt.full_table_id)
 
         # Write-back watermark for incremental pipelines so the next run
         # only extracts rows newer than the current batch's maximum value.
         if config.extraction.mode == ExtractionMode.INCREMENTAL:
-            self._update_watermark(df, config, spark)
+            self._update_watermark(df, config)
 
     # ------------------------------------------------------------------
     # Write mode implementations
@@ -96,9 +91,7 @@ class BigQueryWriter(BaseWriter):
     def _write_append(self, df: DataFrame, config: PipelineConfig) -> None:
         self._base_writer(df, config).mode("append").save()
 
-    def _write_merge(
-        self, df: DataFrame, config: PipelineConfig, spark: SparkSession
-    ) -> None:
+    def _write_merge(self, df: DataFrame, config: PipelineConfig) -> None:
         """Upsert via BigQuery MERGE DML.
 
         On first run (target table absent) falls back to a direct overwrite so
@@ -114,7 +107,6 @@ class BigQueryWriter(BaseWriter):
         Args:
             df: Incoming DataFrame.
             config: Pipeline configuration.
-            spark: Active SparkSession (unused directly; kept for API consistency).
         """
         tgt = config.target
 
@@ -124,7 +116,8 @@ class BigQueryWriter(BaseWriter):
             bq_client.get_table(tgt.full_table_id)
         except NotFound:
             logger.info(
-                "Target table %s does not exist -- falling back to overwrite for initial load.",
+                "Target table %s does not exist -- falling back to overwrite"
+                " for initial load.",
                 tgt.full_table_id,
             )
             self._write_overwrite(df, config)
@@ -161,7 +154,8 @@ class BigQueryWriter(BaseWriter):
         # If every column is a merge key there is nothing to update; omit
         # WHEN MATCHED entirely to avoid an empty UPDATE SET clause (invalid SQL).
         matched_clause = (
-            f"WHEN MATCHED THEN\n                UPDATE SET {update_clause}\n            "
+            "WHEN MATCHED THEN\n"
+            f"                UPDATE SET {update_clause}\n            "
             if non_key_columns
             else ""
         )
@@ -189,9 +183,7 @@ class BigQueryWriter(BaseWriter):
     # Watermark management
     # ------------------------------------------------------------------
 
-    def _update_watermark(
-        self, df: DataFrame, config: PipelineConfig, spark: SparkSession
-    ) -> None:
+    def _update_watermark(self, df: DataFrame, config: PipelineConfig) -> None:
         """Persist the new high-watermark value to BigQuery after a successful write.
 
         The watermark table has schema:
@@ -207,7 +199,6 @@ class BigQueryWriter(BaseWriter):
         Args:
             df: The DataFrame that was just written (used to compute MAX watermark).
             config: Pipeline configuration.
-            spark: Active SparkSession.
         """
         ext = config.extraction
         tgt = config.target
@@ -228,7 +219,8 @@ class BigQueryWriter(BaseWriter):
 
         if max_row is None or max_row["max_wm"] is None:
             logger.warning(
-                "Could not compute max watermark from column '%s' -- skipping write-back.",
+                "Could not compute max watermark from column '%s'"
+                " -- skipping write-back.",
                 ext.watermark_column,
             )
             return
@@ -265,7 +257,8 @@ class BigQueryWriter(BaseWriter):
                     T.updated_at      = S.updated_at
             WHEN NOT MATCHED THEN
                 INSERT (source_name, db_name, tbl_name, watermark_value, updated_at)
-                VALUES (S.source_name, S.db_name, S.tbl_name, S.watermark_value, S.updated_at)
+                VALUES (S.source_name, S.db_name, S.tbl_name,
+                        S.watermark_value, S.updated_at)
         """
 
         create_sql = f"""
@@ -288,6 +281,7 @@ class BigQueryWriter(BaseWriter):
             # The worst case is the next run re-extracts some already-loaded rows
             # (duplicate delivery), which is acceptable in an at-least-once model.
             logger.error(
-                "Failed to update watermark -- next incremental run may re-extract rows.",
+                "Failed to update watermark -- next incremental run"
+                " may re-extract rows.",
                 exc_info=True,
             )

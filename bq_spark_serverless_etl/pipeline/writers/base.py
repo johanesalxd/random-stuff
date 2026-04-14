@@ -6,14 +6,11 @@ To add a new target type:
 3. Register the class in pipeline/registry.py under WRITER_REGISTRY.
 """
 
-import logging
 from abc import ABC, abstractmethod
 
 from pyspark.sql import DataFrame
 
 from pipeline.config import PipelineConfig
-
-logger = logging.getLogger(__name__)
 
 
 class BaseWriter(ABC):

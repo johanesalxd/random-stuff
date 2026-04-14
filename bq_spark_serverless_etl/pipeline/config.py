@@ -77,11 +77,15 @@ class SourceConfig(BaseModel):
     )
     lower_bound: int | None = Field(
         default=None,
-        description="Lower bound for JDBC partition column (required if partition_column set).",
+        description=(
+            "Lower bound for JDBC partition column (required if partition_column set)."
+        ),
     )
     upper_bound: int | None = Field(
         default=None,
-        description="Upper bound for JDBC partition column (required if partition_column set).",
+        description=(
+            "Upper bound for JDBC partition column (required if partition_column set)."
+        ),
     )
     num_partitions: int = Field(
         default=10,
