@@ -43,12 +43,12 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
         );
 
 Execution mode detection:
-    - When submitted as a Dataproc batch, Python executes this file as
-      __main__ and CLI args are available via sys.argv.
-    - When loaded by the BigQuery Spark runtime, the file is imported
-      (not __main__). The BQ runtime makes `bigquery.spark.procedure`
-      importable; we detect that with a try/except import rather than
-      relying on an undocumented environment variable.
+    - Both modes run this file as __main__ (BQ Spark runs main_file_uri
+      directly, not as an import).
+    - We detect the mode by checking for the BIGQUERY_PROC_PARAM env var
+      prefix that BQ Spark injects at runtime. This is more reliable than
+      attempting to import bigquery.spark.procedure, which can fail with
+      TypeError due to protobuf version mismatches in bigspark.zip.
 """
 
 import argparse
@@ -153,51 +153,65 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
 def _run_as_bq_stored_proc() -> None:
     """Entry point when called from a BigQuery Spark stored procedure.
 
-    The BQ Spark runtime makes `bigquery.spark.procedure` importable.
-    Parameters are read from SparkProcParamContext, which BigQuery
-    populates from the arguments passed in the CALL statement.
+    Reads parameters from BIGQUERY_PROC_PARAM.<name> environment variables
+    (Method 1 from the BQ Spark docs). Values are JSON-encoded strings.
 
-    A single SparkSession is obtained here and passed into run() so the
-    pipeline does not attempt to create a second session.
+    Using env vars directly instead of importing bigquery.spark.procedure
+    (SparkProcParamContext) avoids a protobuf version mismatch that occurs
+    between the Dataproc Serverless conda env and the bigspark.zip bundled
+    with the BQ Spark runtime.
+
+    Reference:
+      https://cloud.google.com/bigquery/docs/spark-procedures#pass-input-parameter
     """
-    from bigquery.spark.procedure import SparkProcParamContext  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+    import os as _os  # noqa: PLC0415
+
+    def _param(name: str, default: str | None = None) -> str | None:
+        raw = _os.environ.get(f"BIGQUERY_PROC_PARAM.{name}")
+        if raw is None:
+            return default
+        return _json.loads(raw)
 
     spark = SparkSession.builder.getOrCreate()
-    ctx = SparkProcParamContext.getOrCreate(spark)
 
     run(
-        source_name=ctx.source_name,
-        db_name=ctx.db_name,
-        tbl_name=ctx.tbl_name,
-        gcs_bucket=ctx.gcs_bucket,
-        run_id=getattr(ctx, "run_id", None),
-        configs_prefix=getattr(ctx, "configs_prefix", "configs"),
-        spark=spark,  # reuse -- do not create a second session
+        source_name=_param("source_name"),
+        db_name=_param("db_name"),
+        tbl_name=_param("tbl_name"),
+        gcs_bucket=_param("gcs_bucket"),
+        run_id=_param("run_id"),
+        configs_prefix=_param("configs_prefix", "configs"),
+        spark=spark,
     )
 
 
 # ---------------------------------------------------------------------------
 # Execution mode detection
 # ---------------------------------------------------------------------------
-# Dataproc batch: Python runs this file as __main__ with sys.argv populated.
-# BQ stored proc: the file is *imported*, not __main__. The BQ runtime makes
-#   `bigquery.spark.procedure` available; we detect that with a try/except
-#   import rather than an undocumented environment variable.
+# Both modes run this file as __main__ (BQ Spark executes main_file_uri
+# directly). Detect mode via BIGQUERY_PROC_PARAM.* env vars that BQ Spark
+# injects at runtime -- one per procedure IN parameter.
 
 if __name__ == "__main__":
-    _args = _parse_cli_args(sys.argv[1:])
-    run(
-        source_name=_args.source_name,
-        db_name=_args.db_name,
-        tbl_name=_args.tbl_name,
-        gcs_bucket=_args.gcs_bucket,
-        run_id=_args.run_id,
-        configs_prefix=_args.configs_prefix,
-    )
-else:
-    try:
+    # BQ Spark injects procedure parameters as env vars with the prefix
+    # BIGQUERY_PROC_PARAM. Use that as a reliable mode signal rather than
+    # relying on import side-effects which can fail for unrelated reasons
+    # (e.g. protobuf version mismatches in bigspark.zip).
+    import os as _os  # noqa: PLC0415
+
+    _in_bq_spark = any(k.startswith("BIGQUERY_PROC_PARAM") for k in _os.environ)
+
+    if _in_bq_spark:
         _run_as_bq_stored_proc()
-    except ImportError:
-        # Not running inside the BQ Spark runtime -- module was imported for
-        # testing or other tooling. Do nothing.
-        pass
+    else:
+        # Dataproc Serverless batch mode -- parameters come from CLI args.
+        _args = _parse_cli_args(sys.argv[1:])
+        run(
+            source_name=_args.source_name,
+            db_name=_args.db_name,
+            tbl_name=_args.tbl_name,
+            gcs_bucket=_args.gcs_bucket,
+            run_id=_args.run_id,
+            configs_prefix=_args.configs_prefix,
+        )
