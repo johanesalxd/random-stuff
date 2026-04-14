@@ -289,6 +289,9 @@ bq_spark_serverless_etl/
 ├── infra/
 │   ├── setup.sh             # Provision all GCP resources
 │   └── teardown.sh          # Delete all GCP resources
+├── examples/
+│   ├── quickstart.ipynb     # BQ Studio notebook: Spark Connect interactive walkthrough
+│   └── README.md            # Prerequisites and usage guide for the notebook
 ├── scripts/
 │   └── seed_data.py         # Load TheLook data from BQ public dataset -> Cloud SQL
 ├── tests/
