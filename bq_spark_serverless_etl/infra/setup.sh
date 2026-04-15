@@ -158,12 +158,10 @@ CONN_SA=$(bq show --connection \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['spark']['serviceAccountId'])")
 
 echo "      Connection SA: ${CONN_SA}"
-echo "      Granting roles to connection SA..."
+echo "      Granting project-level roles to connection SA..."
 for ROLE in \
-  roles/storage.objectViewer \
   roles/secretmanager.secretAccessor \
   roles/bigquery.dataEditor \
-  roles/bigquery.dataViewer \
   roles/bigquery.jobUser; do
   gcloud projects add-iam-policy-binding "${GCP_PROJECT}" \
     --member="serviceAccount:${CONN_SA}" \
@@ -171,6 +169,11 @@ for ROLE in \
     --condition=None \
     --quiet > /dev/null
 done
+echo "      Granting bucket-level objectAdmin to connection SA..."
+gcloud storage buckets add-iam-policy-binding "gs://${GCS_BUCKET}" \
+  --member="serviceAccount:${CONN_SA}" \
+  --role="roles/storage.objectAdmin" \
+  --quiet > /dev/null
 echo "      Roles granted to connection SA."
 
 # ---------------------------------------------------------------------------
@@ -185,7 +188,6 @@ else
   # Pin zone to avoid GCP zone-selection delay.
   gcloud sql instances create "${SQL_INSTANCE}" \
     --project="${GCP_PROJECT}" \
-    --region="${GCP_REGION}" \
     --zone="${GCP_REGION}-f" \
     --database-version=POSTGRES_15 \
     --tier=db-f1-micro \
