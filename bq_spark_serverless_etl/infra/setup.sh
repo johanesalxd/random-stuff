@@ -38,7 +38,7 @@ SQL_INSTANCE="${SQL_INSTANCE:-thelook-demo}"
 SQL_DB="${SQL_DB:-thelook}"
 SQL_USER="${SQL_USER:-spark}"
 SQL_PASSWORD="${SQL_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_hex(16))')}"
-SECRET_NAME="${SECRET_NAME:-thelook-db-jdbc-url}"
+SECRET_NAME="${SECRET_NAME:-demo_cluster-jdbc-url}"
 
 SA_EMAIL="${SA_NAME}@${GCP_PROJECT}.iam.gserviceaccount.com"
 ENV_FILE="$(dirname "$0")/.env"
@@ -291,9 +291,8 @@ echo "[8/9] Uploading demo configs to GCS..."
 REPO_ROOT="$(dirname "$0")/.."
 for YAML in "${REPO_ROOT}"/configs/demo/*.yaml; do
   TABLE=$(basename "${YAML}" .yaml)
-  sed "s|MY_PROJECT|${GCP_PROJECT}|g" "${YAML}" \
-  | gcloud storage cp - \
-    "gs://${GCS_BUCKET}/configs/thelook/public/${TABLE}.yaml" \
+  gcloud storage cp "${YAML}" \
+    "gs://${GCS_BUCKET}/configs/${TABLE}.yaml" \
     --quiet
 done
 echo "      Configs uploaded."

@@ -525,6 +525,6 @@ When invoking `main.py` directly via Dataproc Serverless batch, the following ar
 | `--tbl_name` | yes | Table name within the database config |
 | `--gcs_bucket` | yes | GCS bucket for YAML configs, artifacts, and BQ staging |
 | `--project` | yes | GCP project ID |
-| `--run_id` | yes | Unique run identifier for idempotency |
+| `--run_id` | no | Optional unique run identifier for tracing (defaults to unset) |
 | `--source_type` | no | Config path tier 1 — enables hierarchical GCS path when set together with `--source_group` |
 | `--source_group` | no | Config path tier 2 — enables hierarchical GCS path when set together with `--source_type` |

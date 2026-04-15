@@ -33,6 +33,17 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+#: Maximum safe number of JDBC partitions (numPartitions). Values above this
+#: cap are clamped by the TableConfig validator with a warning.
+_MAX_PARTITIONS = 200
+
+#: Default number of JDBC partitions when pagination is disabled.
+_DEFAULT_NUM_PARTITIONS = 10
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -118,12 +129,12 @@ class TableConfig(BaseModel):
         description="Column used for parallel JDBC partitioning.",
     )
     pagination_size: int = Field(
-        default=10,
+        default=_DEFAULT_NUM_PARTITIONS,
         description=(
             "Number of JDBC partitions (numPartitions) for parallel reads. "
             "This is a Spark JDBC partition count — NOT a row batch size. "
-            "Keep <= 200; values above that are capped with a warning to "
-            "prevent spawning excessive parallel JDBC connections."
+            f"Keep <= {_MAX_PARTITIONS}; values above that are capped with a "
+            "warning to prevent spawning excessive parallel JDBC connections."
         ),
     )
 
@@ -135,10 +146,9 @@ class TableConfig(BaseModel):
         Customer configs often set this field as a row-count (e.g. 1_000_000)
         rather than a partition count. Passing 1 million as numPartitions to
         Spark JDBC would spawn one million parallel connections, which is
-        catastrophic. Cap at 200 and warn so the pipeline stays safe even
-        when the caller misuses the field.
+        catastrophic. Cap at _MAX_PARTITIONS and warn so the pipeline stays
+        safe even when the caller misuses the field.
         """
-        _MAX_PARTITIONS = 200
         if v > _MAX_PARTITIONS:
             logger.warning(
                 "pagination_size=%d exceeds the maximum safe partition count (%d). "
@@ -227,8 +237,14 @@ class PipelineConfig(BaseModel):
         default=None,
         description="Column used to parallelise JDBC reads via numPartitions.",
     )
-    num_partitions: int = Field(default=10)
-    fetch_size: int = Field(default=10000)
+    num_partitions: int = Field(default=_DEFAULT_NUM_PARTITIONS)
+    fetch_size: int = Field(
+        default=10000,
+        description=(
+            "JDBC fetchSize — number of rows fetched per round-trip from the "
+            "database. Not currently YAML-configurable; change at source if needed."
+        ),
+    )
 
     # Target
     project: str = Field(description="GCP project ID for target BigQuery dataset.")
@@ -431,7 +447,9 @@ def _build_pipeline_config(
         tbl_cfg.partition_keys[0].col_name if tbl_cfg.partition_keys else None
     )
     partition_column = tbl_cfg.pagination_key if tbl_cfg.is_paginated else None
-    num_partitions = tbl_cfg.pagination_size if tbl_cfg.is_paginated else 10
+    num_partitions = (
+        tbl_cfg.pagination_size if tbl_cfg.is_paginated else _DEFAULT_NUM_PARTITIONS
+    )
 
     jdbc_url_secret = (
         f"projects/{project}/secrets/{cluster.source_name}-jdbc-url/versions/latest"

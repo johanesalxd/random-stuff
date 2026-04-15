@@ -122,8 +122,8 @@ def run(
         gcs_bucket=gcs_bucket,
         project=project,
         configs_prefix=configs_prefix,
-        source_type=source_type or None,
-        source_group=source_group or None,
+        source_type=source_type,
+        source_group=source_group,
     )
 
     extractor = get_extractor(config.source_type)
@@ -234,10 +234,10 @@ def _run_as_bq_stored_proc() -> None:
         gcs_bucket=_param("gcs_bucket"),
         project=_param("project"),
         run_id=_param("run_id"),
-        # configs_prefix is not a declared procedure parameter — it always
-        # falls back to the default "configs". To use a different prefix,
-        # submit via Dataproc Serverless batch with --configs_prefix instead.
-        configs_prefix=_param("configs_prefix", "configs"),
+        # configs_prefix is not a declared procedure parameter — always "configs"
+        # in stored proc mode. Use Dataproc Serverless batch + --configs_prefix
+        # to override.
+        configs_prefix="configs",
         source_type=_optional("source_type"),
         source_group=_optional("source_group"),
         spark=spark,
