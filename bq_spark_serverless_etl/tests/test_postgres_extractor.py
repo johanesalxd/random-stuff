@@ -37,6 +37,38 @@ def _make_config(
     )
 
 
+# ---------------------------------------------------------------------------
+# Shared fakes for Spark JDBC read path
+# ---------------------------------------------------------------------------
+
+
+class _FakeLoader:
+    def load(self):
+        return "dataframe"
+
+
+class _FakeFormat:
+    def __init__(self, captured: dict):
+        self._captured = captured
+
+    def options(self, **kwargs):
+        self._captured.update(kwargs)
+        return _FakeLoader()
+
+
+class _FakeRead:
+    def __init__(self, captured: dict):
+        self._captured = captured
+
+    def format(self, _):
+        return _FakeFormat(self._captured)
+
+
+class _FakeSpark:
+    def __init__(self, captured: dict):
+        self.read = _FakeRead(captured)
+
+
 class TestBuildQuery:
     """Tests for PostgresExtractor._build_query."""
 
@@ -60,7 +92,7 @@ class TestBuildQuery:
         config = _make_config("incremental", watermark_column="updated_at")
 
         # Simulate no existing watermark (first run)
-        monkeypatch.setattr(extractor, "_read_watermark", lambda spark, cfg: None)
+        monkeypatch.setattr(extractor, "_read_watermark", lambda cfg: None)
 
         query = extractor._build_query(spark=None, config=config)  # type: ignore[arg-type]
         assert query == "SELECT * FROM public.users"
@@ -70,7 +102,7 @@ class TestBuildQuery:
         config = _make_config("incremental", watermark_column="updated_at")
 
         monkeypatch.setattr(
-            extractor, "_read_watermark", lambda spark, cfg: "2024-01-15 00:00:00"
+            extractor, "_read_watermark", lambda cfg: "2024-01-15 00:00:00"
         )
 
         query = extractor._build_query(spark=None, config=config)  # type: ignore[arg-type]
@@ -88,34 +120,15 @@ class TestParallelRead:
 
         captured_options: dict = {}
 
-        def fake_resolve_secret(_):
-            return "jdbc:postgresql://localhost/test"
-
-        def fake_build_query(spark, cfg):
-            return "SELECT * FROM public.users"
-
         monkeypatch.setattr(
-            "pipeline.extractors.postgres.resolve_secret", fake_resolve_secret
+            "pipeline.extractors.postgres.resolve_secret",
+            lambda _: "jdbc:postgresql://localhost/test",
         )
-        monkeypatch.setattr(extractor, "_build_query", fake_build_query)
+        monkeypatch.setattr(
+            extractor, "_build_query", lambda spark, cfg: "SELECT * FROM public.users"
+        )
 
-        class FakeLoader:
-            def load(self):
-                return "dataframe"
-
-        class FakeFormat:
-            def options(self, **kwargs):
-                captured_options.update(kwargs)
-                return FakeLoader()
-
-        class FakeRead:
-            def format(self, _):
-                return FakeFormat()
-
-        class FakeSpark:
-            read = FakeRead()
-
-        extractor.extract(spark=FakeSpark(), config=config)  # type: ignore[arg-type]
+        extractor.extract(spark=_FakeSpark(captured_options), config=config)  # type: ignore[arg-type]
 
         assert captured_options.get("partitionColumn") == "id"
         assert captured_options.get("numPartitions") == "20"
@@ -135,23 +148,7 @@ class TestParallelRead:
             extractor, "_build_query", lambda spark, cfg: "SELECT * FROM public.users"
         )
 
-        class FakeLoader:
-            def load(self):
-                return "dataframe"
-
-        class FakeFormat:
-            def options(self, **kwargs):
-                captured_options.update(kwargs)
-                return FakeLoader()
-
-        class FakeRead:
-            def format(self, _):
-                return FakeFormat()
-
-        class FakeSpark:
-            read = FakeRead()
-
-        extractor.extract(spark=FakeSpark(), config=config)  # type: ignore[arg-type]
+        extractor.extract(spark=_FakeSpark(captured_options), config=config)  # type: ignore[arg-type]
 
         assert "partitionColumn" not in captured_options
         assert "numPartitions" not in captured_options

@@ -100,7 +100,8 @@ def run(
         tbl_name: Table name.
         gcs_bucket: GCS bucket for configs and BQ indirect write staging.
         project: GCP project ID (for secret resolution and BQ target).
-        run_id: Optional unique identifier for this pipeline run (for logging).
+        run_id: Optional run identifier for log tracing. Logged only; not
+            persisted to BigQuery or the watermark table.
         configs_prefix: Prefix inside gcs_bucket for config files.
         source_type: Optional. When set with source_group, uses hierarchical
             GCS path: <configs_prefix>/<source_type>/<source_group>/<source_name>.yaml

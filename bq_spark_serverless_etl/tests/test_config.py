@@ -1,5 +1,7 @@
 """Unit tests for pipeline.config -- Pydantic model validation and config mapping."""
 
+import logging
+
 import pytest
 from pydantic import ValidationError
 
@@ -7,6 +9,7 @@ from pipeline.config import (
     ClusterConfig,
     PipelineConfig,
     SourceType,
+    TableConfig,
     _build_blob_path,
     _build_pipeline_config,
     _derive_dataset,
@@ -256,8 +259,6 @@ def test_derive_dataset_replaces_hyphens():
 
 
 def test_resolve_table_names_plain_no_alias():
-    from pipeline.config import TableConfig
-
     tbl = TableConfig(etl_mode="FULL_RELOAD")
     source_table, bq_name = _resolve_table_names("users", tbl)
     assert source_table == "public.users"
@@ -265,8 +266,6 @@ def test_resolve_table_names_plain_no_alias():
 
 
 def test_resolve_table_names_plain_with_alias():
-    from pipeline.config import TableConfig
-
     tbl = TableConfig(etl_mode="FULL_RELOAD", tbl_name_alias="approval_workflows")
     source_table, bq_name = _resolve_table_names("ApprovalWorkflows", tbl)
     assert source_table == "public.ApprovalWorkflows"
@@ -274,8 +273,6 @@ def test_resolve_table_names_plain_with_alias():
 
 
 def test_resolve_table_names_dotted_no_alias():
-    from pipeline.config import TableConfig
-
     tbl = TableConfig(etl_mode="INCREMENTAL")
     source_table, bq_name = _resolve_table_names("saas.tenant_lookups", tbl)
     assert source_table == "saas.tenant_lookups"
@@ -283,8 +280,6 @@ def test_resolve_table_names_dotted_no_alias():
 
 
 def test_resolve_table_names_dotted_with_alias():
-    from pipeline.config import TableConfig
-
     tbl = TableConfig(etl_mode="INCREMENTAL", tbl_name_alias="tenant_lookups")
     source_table, bq_name = _resolve_table_names("saas.tenant_lookups", tbl)
     assert source_table == "saas.tenant_lookups"
@@ -484,6 +479,25 @@ def test_build_pipeline_config_missing_table_raises():
         )
 
 
+def test_build_pipeline_config_unknown_etl_mode_raises():
+    """Unknown etl_mode in the YAML raises ValueError at config build time."""
+    raw = {
+        **_FULL_CLUSTER_YAML,
+        "data_config": {
+            "thelook": {
+                "tables": {
+                    "bad_table": {"etl_mode": "UNKNOWN_MODE"},
+                }
+            }
+        },
+    }
+    cluster = _make_cluster(raw)
+    with pytest.raises(ValueError, match="Unknown etl_mode"):
+        _build_pipeline_config(
+            cluster, "thelook", "bad_table", "my-project", "my-bucket"
+        )
+
+
 # ---------------------------------------------------------------------------
 # PipelineConfig: merge_keys validation
 # ---------------------------------------------------------------------------
@@ -563,18 +577,12 @@ def test_build_pipeline_config_no_pagination():
 
 def test_pagination_size_within_limit_unchanged():
     """Values <= 200 pass through the validator unchanged."""
-    from pipeline.config import TableConfig
-
     tbl = TableConfig(is_paginated=True, pagination_key="id", pagination_size=200)
     assert tbl.pagination_size == 200
 
 
 def test_pagination_size_capped_at_200(caplog):
     """Values > 200 are capped to 200 and a warning is emitted."""
-    import logging
-
-    from pipeline.config import TableConfig
-
     with caplog.at_level(logging.WARNING, logger="pipeline.config"):
         tbl = TableConfig(
             is_paginated=True, pagination_key="id", pagination_size=1_000_000
@@ -613,7 +621,7 @@ def test_build_pipeline_config_pagination_size_capped_end_to_end():
 
 def test_customer_style_yaml_no_etl_mode_with_pagination():
     """Realistic customer table: no etl_mode, backfill_filters, is_paginated,
-    schema.table dotted name, extra fields (scheduling, alert) ignored gracefully."""
+    schema.table dotted name. Unknown YAML fields are silently ignored."""
     raw = {
         "source_name": "transaction_service_v4_priority",
         "source_type": "postgres",
@@ -660,6 +668,3 @@ def test_customer_style_yaml_no_etl_mode_with_pagination():
     assert cfg.partition_column == "id"
     assert cfg.dataset == "raw_transaction_service_v4"
     assert cfg.source_table == "public.transaction_event"
-    # Unknown fields land in extra without raising
-    assert "scheduling" in cfg.extra
-    assert "alert" in cfg.extra

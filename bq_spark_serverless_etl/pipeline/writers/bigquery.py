@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery as _bq
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, DataFrameWriter
 
 from pipeline.config import PipelineConfig
 from pipeline.writers.base import BaseWriter
@@ -78,7 +78,7 @@ class BigQueryWriter(BaseWriter):
     # Write mode implementations
     # ------------------------------------------------------------------
 
-    def _base_writer(self, df: DataFrame, config: PipelineConfig):
+    def _base_writer(self, df: DataFrame, config: PipelineConfig) -> DataFrameWriter:
         """Build a DataFrameWriter with shared indirect-write options applied.
 
         Uses writeMethod=indirect: Spark stages data to GCS as Avro/Parquet,
@@ -147,7 +147,9 @@ class BigQueryWriter(BaseWriter):
             config.full_table_id,
         )
 
-        # Step 1: write incoming data to staging table using indirect write
+        # Step 1: write incoming data to staging table using indirect write.
+        # Intentionally does not reuse _base_writer — the staging table
+        # must not inherit partitioning or clustering from the target.
         (
             df.write.format("bigquery")
             .option("writeMethod", "indirect")

@@ -98,7 +98,7 @@ class PostgresExtractor(BaseExtractor):
                 raise ValueError(
                     "incremental extraction_mode requires watermark_column to be set."
                 )
-            last_watermark = self._read_watermark(spark, config)
+            last_watermark = self._read_watermark(config)
             if last_watermark is not None:
                 logger.info(
                     "Incremental extraction: watermark_column=%s last_value=%s",
@@ -115,13 +115,10 @@ class PostgresExtractor(BaseExtractor):
 
         return base_query
 
-    def _read_watermark(
-        self, spark: SparkSession, config: PipelineConfig
-    ) -> str | None:
+    def _read_watermark(self, config: PipelineConfig) -> str | None:
         """Read the last watermark value from BigQuery.
 
         Args:
-            spark: Active SparkSession.
             config: Pipeline configuration.
 
         Returns:

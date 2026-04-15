@@ -25,7 +25,6 @@ Never store credentials inline in config files.
 
 import logging
 from enum import Enum
-from typing import Any
 
 import yaml
 from google.cloud import secretmanager, storage
@@ -282,9 +281,6 @@ class PipelineConfig(BaseModel):
         )
     )
 
-    # Pass-through fields from the YAML that the pipeline does not act on
-    extra: dict[str, Any] = Field(default_factory=dict)
-
     @model_validator(mode="after")
     def _validate_merge_keys(self) -> "PipelineConfig":
         if self.write_mode == "merge" and not self.merge_keys:
@@ -438,7 +434,13 @@ def _build_pipeline_config(
     etl_mode = _resolve_etl_mode(tbl_cfg)
     upsert_key = tbl_cfg.upsert_key
 
-    extraction_mode = _ETL_MODE_TO_EXTRACTION.get(etl_mode, "full")
+    if etl_mode not in _ETL_MODE_TO_EXTRACTION:
+        raise ValueError(
+            f"Unknown etl_mode '{etl_mode}' for table '{clean_tbl_name}' "
+            f"in source '{cluster.source_name}'. "
+            f"Expected one of: {sorted(_ETL_MODE_TO_EXTRACTION)}"
+        )
+    extraction_mode = _ETL_MODE_TO_EXTRACTION[etl_mode]
     write_mode = _derive_write_mode(etl_mode, upsert_key)
     watermark_column = (
         tbl_cfg.backfill_filters[0].backfill_id if tbl_cfg.backfill_filters else None
@@ -456,20 +458,6 @@ def _build_pipeline_config(
     )
 
     source_table, bq_table_name = _resolve_table_names(clean_tbl_name, tbl_cfg)
-
-    # Fields that are explicitly modelled and mapped -- exclude from extra
-    known_fields = {
-        "etl_mode",
-        "backfill_filters",
-        "upsert_key",
-        "partition_keys",
-        "z_order_by",
-        "is_paginated",
-        "pagination_key",
-        "pagination_size",
-        "tbl_name_alias",
-    }
-    extra = {k: v for k, v in tbl_cfg.model_extra.items() if k not in known_fields}
 
     return PipelineConfig(
         source_name=cluster.source_name,
@@ -491,7 +479,6 @@ def _build_pipeline_config(
         extraction_mode=extraction_mode,
         watermark_column=watermark_column,
         gcs_bucket=gcs_bucket,
-        extra=extra,
     )
 
 
