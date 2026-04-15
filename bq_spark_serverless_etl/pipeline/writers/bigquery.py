@@ -10,6 +10,12 @@ Supports three write modes:
              statement executed after staging the incoming data to a
              temporary table.
 
+Write method: indirect (GCS staging + BQ load job)
+  All writes use writeMethod=indirect, which stages data as Avro/Parquet in
+  a temporary GCS location (config.gcs_bucket) before issuing a BQ load job.
+  This is significantly cheaper than writeMethod=direct (Storage Write API)
+  for batch workloads because BQ load jobs are free -- only GCS storage cost.
+
 Partitioning and clustering are applied on first write (table creation).
 On subsequent writes BigQuery preserves the existing configuration.
 
@@ -41,7 +47,7 @@ class BigQueryWriter(BaseWriter):
             config: Pipeline configuration.
         """
         logger.info(
-            "Writing to BigQuery: table=%s mode=%s",
+            "Writing to BigQuery: table=%s mode=%s method=indirect",
             config.full_table_id,
             config.write_mode,
         )
@@ -67,10 +73,16 @@ class BigQueryWriter(BaseWriter):
     # ------------------------------------------------------------------
 
     def _base_writer(self, df: DataFrame, config: PipelineConfig):
-        """Build a DataFrameWriter with shared options applied."""
+        """Build a DataFrameWriter with shared indirect-write options applied.
+
+        Uses writeMethod=indirect: Spark stages data to GCS as Avro/Parquet,
+        then BigQuery issues a load job to ingest it. Load jobs are free,
+        making this the preferred method for batch ETL.
+        """
         writer = (
             df.write.format("bigquery")
-            .option("writeMethod", "direct")
+            .option("writeMethod", "indirect")
+            .option("temporaryGcsBucket", config.gcs_bucket)
             .option("table", config.full_table_id)
         )
         if config.partition_field:
@@ -97,7 +109,7 @@ class BigQueryWriter(BaseWriter):
 
         On subsequent runs:
         1. Write the incoming DataFrame to a short-lived staging table
-           (overwrite, same dataset as target).
+           (overwrite, same dataset as target) using indirect write.
         2. Execute a MERGE statement that updates matching rows and
            inserts new ones based on merge_keys.
         3. Drop the staging table.
@@ -106,7 +118,6 @@ class BigQueryWriter(BaseWriter):
             df: Incoming DataFrame.
             config: Pipeline configuration.
         """
-        # Check whether target table exists before staging anything.
         bq_client = _bq.Client(project=config.project)
         try:
             bq_client.get_table(config.full_table_id)
@@ -130,10 +141,11 @@ class BigQueryWriter(BaseWriter):
             config.full_table_id,
         )
 
-        # Step 1: write incoming data to staging table (overwrite ensures idempotency)
+        # Step 1: write incoming data to staging table using indirect write
         (
             df.write.format("bigquery")
-            .option("writeMethod", "direct")
+            .option("writeMethod", "indirect")
+            .option("temporaryGcsBucket", config.gcs_bucket)
             .option("table", staging_table)
             .mode("overwrite")
             .save()
@@ -168,8 +180,6 @@ class BigQueryWriter(BaseWriter):
         """
         logger.info("Executing MERGE DML for table: %s", config.full_table_id)
 
-        # Run DML via the BigQuery Python client (the Spark BQ connector's
-        # "query" option is for SELECT reads only, not DML).
         bq_client.query(merge_sql).result()
 
         # Step 3: clean up staging table
@@ -203,9 +213,6 @@ class BigQueryWriter(BaseWriter):
 
         watermark_table = f"{config.project}.{config.dataset}._watermarks"
 
-        # Compute the maximum value of the watermark column in this batch.
-        # Cast to string for uniform storage regardless of column type
-        # (timestamp, date, integer).
         max_row = df.selectExpr(
             f"CAST(MAX(`{config.watermark_column}`) AS STRING) AS max_wm"
         ).first()

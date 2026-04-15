@@ -103,9 +103,14 @@ The Spark job is registered as a **BigQuery Spark Stored Procedure**. Any tool t
 
 ```sql
 CALL `my-project.pipelines.run_pipeline`(
-    'demo_cluster', 'thelook', 'orders', 'my-bucket', 'my-project', GENERATE_UUID()
+    'demo_cluster', 'thelook', 'orders', 'my-bucket', 'my-project', GENERATE_UUID(),
+    '',             -- source_type  ('' = flat GCS path)
+    ''              -- source_group ('' = flat GCS path)
 );
 ```
+
+Pass non-empty `source_type` and `source_group` to use the hierarchical path convention:
+`gs://BUCKET/configs/<source_type>/<source_group>/<source_name>.yaml`
 
 The full 2-step demo (`sql/demo_pipeline.sql`) ingests 3 tables and builds a downstream aggregate — all in SQL, no orchestration tooling required.
 
@@ -198,9 +203,9 @@ Executes `sql/demo_pipeline.sql` via `bq query`:
 **Step 1 — Ingest (Spark):**
 
 ```sql
-CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','orders','my-bucket','my-project',GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','users','my-bucket','my-project',GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','order_items','my-bucket','my-project',GENERATE_UUID());
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','orders','my-bucket','my-project',GENERATE_UUID(),'','');
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','users','my-bucket','my-project',GENERATE_UUID(),'','');
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','order_items','my-bucket','my-project',GENERATE_UUID(),'','');
 ```
 
 Each `CALL` spins up a Dataproc Serverless Spark job, reads from Cloud SQL, and writes to `raw_thelook`.
@@ -303,11 +308,23 @@ bq_spark_serverless_etl/
 
 ## Config file reference
 
-Config files use a **cluster-level** format. One YAML file covers all databases and tables for a given source cluster. Files live at:
+Config files use a **cluster-level** format. One YAML file covers all databases and tables for a given source cluster.
 
+### GCS path conventions
+
+**Flat path** (default):
 ```
 gs://BUCKET/configs/SOURCE_NAME.yaml
 ```
+
+**Hierarchical path** (pass `--source_type` and `--source_group`):
+```
+gs://BUCKET/configs/<source_type>/<source_group>/SOURCE_NAME.yaml
+```
+
+Both `--source_type` and `--source_group` must be set to use the hierarchical path; if either is missing, the pipeline falls back to the flat path.
+
+### YAML structure
 
 The pipeline is invoked once per table; `source_name`, `db_name`, and `tbl_name` are passed as arguments and used to select the correct entry from the YAML.
 
@@ -322,7 +339,7 @@ data_config:
   thelook:                        # db_name
     tables:
       users:                      # tbl_name
-        etl_mode: INCREMENTAL
+        etl_mode: INCREMENTAL     # optional — see ETL mode defaults below
         backfill_filters:
           - backfill_id: updated_at   # watermark column
         upsert_key: [id]              # merge keys (enables MERGE write mode)
@@ -335,10 +352,27 @@ data_config:
         etl_mode: FULL_RELOAD         # truncate and replace on every run
 
       order_items:
-        etl_mode: INCREMENTAL
+        # etl_mode omitted — defaults to INCREMENTAL because backfill_filters present
         backfill_filters:
           - backfill_id: created_at   # append only, no upsert_key
+
+      # tbl_name_alias: override the BQ target table name
+      ApprovalWorkflows:
+        tbl_name_alias: approval_workflows   # BQ table = approval_workflows; JDBC source = ApprovalWorkflows
+
+      # Dotted schema.table names: used as-is for JDBC; schema_table for BQ
+      saas.tenant_lookups:
+        etl_mode: FULL_RELOAD              # BQ table = saas_tenant_lookups; JDBC = saas.tenant_lookups
 ```
+
+### ETL mode defaults
+
+`etl_mode` is **optional**. When omitted:
+
+| Condition | Default |
+|-----------|---------|
+| `backfill_filters` present | `INCREMENTAL` |
+| `backfill_filters` absent | `FULL_RELOAD` |
 
 ### ETL mode mapping
 
@@ -354,9 +388,15 @@ data_config:
 |-------|-------------|-----------|
 | JDBC URL secret | `source_name`, `--project` | `projects/<project>/secrets/<source_name>-jdbc-url/versions/latest` |
 | BQ dataset | `db_name` | `raw__<db_name>` (hyphens → underscores) |
-| BQ table | `tbl_name` | same |
-| Source table | `tbl_name` | `public.<tbl_name>` |
+| BQ table | `tbl_name` | `tbl_name_alias` if set; dotted name → `schema_table`; otherwise `tbl_name` |
+| Source table (JDBC) | `tbl_name` | dotted names used as-is; plain names get `public.` prefix |
 | Watermark table | `project`, `dataset` | `<project>.<dataset>._watermarks` |
+
+### BigQuery write method
+
+All writes use `writeMethod=indirect`: Spark stages data to GCS as Parquet, then BigQuery issues a load job to ingest it. This is the recommended approach for batch workloads — the Storage Write API (`direct`) charges per byte streamed, while GCS-staged load jobs are free.
+
+The `--gcs_bucket` argument (or `gcs_bucket` stored procedure parameter) is reused as the temporary staging bucket.
 
 ### Parallel JDBC reads
 
@@ -468,3 +508,18 @@ Two service accounts are involved. `infra/setup.sh` creates and configures both 
 | `SERVICE_ACCOUNT` | *(from `infra/.env`)* | Spark job service account |
 | `SUBNET` | *(Dataproc default)* | VPC subnet for private networking |
 | `HISTORY_SERVER` | *(none)* | Persistent History Server for post-job Spark UI access |
+
+### Pipeline CLI args
+
+When invoking `main.py` directly via Dataproc Serverless batch, the following args are available:
+
+| Arg | Required | Description |
+|-----|----------|-------------|
+| `--source_name` | yes | Source cluster identifier; also the YAML file stem |
+| `--db_name` | yes | Database name within the cluster config |
+| `--tbl_name` | yes | Table name within the database config |
+| `--gcs_bucket` | yes | GCS bucket for YAML configs, artifacts, and BQ staging |
+| `--project` | yes | GCP project ID |
+| `--run_id` | yes | Unique run identifier for idempotency |
+| `--source_type` | no | Config path tier 1 — enables hierarchical GCS path when set together with `--source_group` |
+| `--source_group` | no | Config path tier 2 — enables hierarchical GCS path when set together with `--source_type` |

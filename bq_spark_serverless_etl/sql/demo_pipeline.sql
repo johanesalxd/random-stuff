@@ -33,7 +33,9 @@ CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
     'orders',        -- tbl_name   (table within the database)
     'MY_GCS_BUCKET',
     'MY_PROJECT',
-    GENERATE_UUID()
+    GENERATE_UUID(),
+    '',              -- source_type: '' = flat path
+    ''               -- source_group: '' = flat path
 );
 
 -- Upsert: merge users on primary key (id), safe to run multiple times
@@ -43,7 +45,9 @@ CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
     'users',
     'MY_GCS_BUCKET',
     'MY_PROJECT',
-    GENERATE_UUID()
+    GENERATE_UUID(),
+    '',
+    ''
 );
 
 -- Incremental: append only new order_items since last watermark
@@ -53,7 +57,9 @@ CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
     'order_items',
     'MY_GCS_BUCKET',
     'MY_PROJECT',
-    GENERATE_UUID()
+    GENERATE_UUID(),
+    '',
+    ''
 );
 
 -- ============================================================================

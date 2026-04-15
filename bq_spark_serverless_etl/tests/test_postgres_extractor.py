@@ -33,6 +33,7 @@ def _make_config(
         write_mode="append",
         extraction_mode=extraction_mode,
         watermark_column=watermark_column,
+        gcs_bucket="my-bucket",
     )
 
 
