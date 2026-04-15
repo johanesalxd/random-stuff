@@ -231,12 +231,12 @@ GROUP BY 1, 2, 3, 4;
 
 ```sql
 -- Ingested tables
-SELECT COUNT(*) FROM `my-project.raw__thelook.orders`;
-SELECT COUNT(*) FROM `my-project.raw__thelook.users`;
-SELECT COUNT(*) FROM `my-project.raw__thelook.order_items`;
+SELECT COUNT(*) FROM `my-project.raw_thelook.orders`;
+SELECT COUNT(*) FROM `my-project.raw_thelook.users`;
+SELECT COUNT(*) FROM `my-project.raw_thelook.order_items`;
 
 -- Watermark (proves incremental tracking state)
-SELECT * FROM `my-project.raw__thelook._watermarks`;
+SELECT * FROM `my-project.raw_thelook._watermarks`;
 
 -- Downstream aggregate
 SELECT * FROM `my-project.analytics.daily_revenue`
@@ -262,7 +262,7 @@ Deletes the Cloud SQL instance, GCS bucket, Secret Manager secret, BQ datasets, 
 | `users` | `merge` | BQ MERGE DML — upsert on `id`, idempotent |
 | `order_items` | `append` + watermark | Only rows newer than last run are extracted |
 
-The watermark for `order_items` is stored in `raw__thelook._watermarks` and updated after each successful write. On first run, all rows are extracted.
+The watermark for `order_items` is stored in `raw_thelook._watermarks` and updated after each successful write. On first run, all rows are extracted.
 
 ---
 
@@ -387,7 +387,7 @@ data_config:
 | Field | Derived from | Convention |
 |-------|-------------|-----------|
 | JDBC URL secret | `source_name`, `--project` | `projects/<project>/secrets/<source_name>-jdbc-url/versions/latest` |
-| BQ dataset | `db_name` | `raw__<db_name>` (hyphens → underscores) |
+| BQ dataset | `db_name` | `raw_<db_name>` (hyphens → underscores) |
 | BQ table | `tbl_name` | `tbl_name_alias` if set; dotted name → `schema_table`; otherwise `tbl_name` |
 | Source table (JDBC) | `tbl_name` | dotted names used as-is; plain names get `public.` prefix |
 | Watermark table | `project`, `dataset` | `<project>.<dataset>._watermarks` |

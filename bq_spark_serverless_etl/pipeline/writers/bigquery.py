@@ -61,6 +61,12 @@ class BigQueryWriter(BaseWriter):
         elif config.write_mode == "merge":
             self._write_merge(df, config)
 
+        else:
+            raise ValueError(
+                f"Unknown write_mode '{config.write_mode}'. "
+                "Expected one of: overwrite, append, merge."
+            )
+
         logger.info("Successfully wrote to BigQuery table: %s", config.full_table_id)
 
         # Write-back watermark for incremental pipelines so the next run

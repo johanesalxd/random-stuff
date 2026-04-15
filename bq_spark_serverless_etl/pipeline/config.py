@@ -204,7 +204,7 @@ class PipelineConfig(BaseModel):
     project: str = Field(description="GCP project ID for target BigQuery dataset.")
     dataset: str = Field(
         description=(
-            "BigQuery dataset name. Derived by convention: raw__{db_name} "
+            "BigQuery dataset name. Derived by convention: raw_{db_name} "
             "with hyphens replaced by underscores."
         )
     )
@@ -302,7 +302,7 @@ def _derive_write_mode(etl_mode: str, upsert_key: list[str]) -> str:
 def _derive_dataset(db_name: str) -> str:
     """Derive the BigQuery dataset name from the database name.
 
-    Convention: raw__{db_name} with hyphens replaced by underscores.
+    Convention: raw_{db_name} with hyphens replaced by underscores.
 
     Args:
         db_name: Source database or schema name.
@@ -310,7 +310,7 @@ def _derive_dataset(db_name: str) -> str:
     Returns:
         BigQuery dataset name.
     """
-    return f"raw__{db_name.replace('-', '_')}"
+    return f"raw_{db_name.replace('-', '_')}"
 
 
 def _resolve_table_names(tbl_name: str, tbl_cfg: TableConfig) -> tuple[str, str]:

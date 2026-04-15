@@ -28,7 +28,7 @@ def _make_config(
         partition_column=partition_column,
         num_partitions=num_partitions,
         project="my-project",
-        dataset="raw__thelook",
+        dataset="raw_thelook",
         table="users",
         write_mode="append",
         extraction_mode=extraction_mode,

@@ -243,11 +243,11 @@ def test_derive_write_mode_unknown_defaults_to_overwrite():
 
 
 def test_derive_dataset_simple():
-    assert _derive_dataset("thelook") == "raw__thelook"
+    assert _derive_dataset("thelook") == "raw_thelook"
 
 
 def test_derive_dataset_replaces_hyphens():
-    assert _derive_dataset("my-db") == "raw__my_db"
+    assert _derive_dataset("my-db") == "raw_my_db"
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ def test_build_pipeline_config_dotted_source_table():
     )
     assert cfg.source_table == "saas.tenant_lookups"
     assert cfg.table == "saas_tenant_lookups"
-    assert cfg.dataset == "raw__bank_live"
+    assert cfg.dataset == "raw_bank_live"
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +453,7 @@ def test_build_pipeline_config_jdbc_secret_convention():
 
 def test_build_pipeline_config_dataset_derived():
     cfg = _make_pipeline_config(db_name="thelook")
-    assert cfg.dataset == "raw__thelook"
+    assert cfg.dataset == "raw_thelook"
 
 
 def test_build_pipeline_config_source_table_default_public_schema():
@@ -465,7 +465,7 @@ def test_build_pipeline_config_full_table_id():
     cfg = _make_pipeline_config(
         db_name="thelook", tbl_name="orders", project="my-project"
     )
-    assert cfg.full_table_id == "my-project.raw__thelook.orders"
+    assert cfg.full_table_id == "my-project.raw_thelook.orders"
 
 
 def test_build_pipeline_config_missing_db_raises():
@@ -500,7 +500,7 @@ def test_pipeline_config_merge_without_keys_raises():
             jdbc_url_secret="projects/p/secrets/s/versions/latest",
             source_table="public.t",
             project="my-project",
-            dataset="raw__db",
+            dataset="raw_db",
             table="t",
             write_mode="merge",
             merge_keys=[],
@@ -519,7 +519,7 @@ def test_pipeline_config_merge_with_keys_valid():
         jdbc_url_secret="projects/p/secrets/s/versions/latest",
         source_table="public.t",
         project="my-project",
-        dataset="raw__db",
+        dataset="raw_db",
         table="t",
         write_mode="merge",
         merge_keys=["id"],
@@ -613,7 +613,7 @@ def test_customer_style_yaml_no_etl_mode_with_pagination():
     assert cfg.partition_field == "created"
     assert cfg.clustering_fields == ["transaction_id"]
     assert cfg.partition_column == "id"
-    assert cfg.dataset == "raw__transaction_service_v4"
+    assert cfg.dataset == "raw_transaction_service_v4"
     assert cfg.source_table == "public.transaction_event"
     # Unknown fields land in extra without raising
     assert "scheduling" in cfg.extra
