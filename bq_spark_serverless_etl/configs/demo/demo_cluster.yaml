@@ -10,7 +10,7 @@ data_config:
       users:
         etl_mode: INCREMENTAL
         backfill_filters:
-          - backfill_id: updated_at
+          - backfill_id: created_at
         upsert_key: [id]
         partition_keys:
           - col_name: created_at

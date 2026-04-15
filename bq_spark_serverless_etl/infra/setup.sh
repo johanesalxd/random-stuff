@@ -169,11 +169,15 @@ for ROLE in \
     --condition=None \
     --quiet > /dev/null
 done
-echo "      Granting bucket-level objectAdmin to connection SA..."
-gcloud storage buckets add-iam-policy-binding "gs://${GCS_BUCKET}" \
-  --member="serviceAccount:${CONN_SA}" \
-  --role="roles/storage.objectAdmin" \
-  --quiet > /dev/null
+echo "      Granting bucket-level roles to connection SA..."
+for BUCKET_ROLE in \
+  roles/storage.objectAdmin \
+  roles/storage.legacyBucketReader; do
+  gcloud storage buckets add-iam-policy-binding "gs://${GCS_BUCKET}" \
+    --member="serviceAccount:${CONN_SA}" \
+    --role="${BUCKET_ROLE}" \
+    --quiet > /dev/null
+done
 echo "      Roles granted to connection SA."
 
 # ---------------------------------------------------------------------------
