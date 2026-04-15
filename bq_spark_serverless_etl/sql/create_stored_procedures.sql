@@ -30,10 +30,11 @@
 -- extractor via the registry in pipeline/registry.py.
 --
 -- Parameters:
---   source_name     Logical source group (maps to a configs/ top-level folder)
+--   source_name     Source cluster name (maps to configs/<source_name>.yaml in GCS)
 --   db_name         Database or schema name
 --   tbl_name        Table name
 --   gcs_bucket      GCS bucket where pipeline configs and wheels are stored
+--   project         GCP project ID (used for secret resolution and BQ target dataset)
 --   run_id          Unique run identifier (pass GENERATE_UUID() from callers)
 
 CREATE OR REPLACE PROCEDURE `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
@@ -41,6 +42,7 @@ CREATE OR REPLACE PROCEDURE `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
     IN db_name      STRING,
     IN tbl_name     STRING,
     IN gcs_bucket   STRING,
+    IN project      STRING,
     IN run_id       STRING
 )
 WITH CONNECTION `<MY_PROJECT>.<MY_REGION>.<MY_CONNECTION_NAME>`
@@ -83,10 +85,11 @@ LANGUAGE PYTHON;
 -- Direct invocation from BigQuery console or bq CLI:
 --
 --   CALL `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
+--       'demo_cluster',
 --       'thelook',
---       'public',
 --       'orders',
 --       'my-config-bucket',
+--       'my-gcp-project',
 --       GENERATE_UUID()
 --   );
 
@@ -107,10 +110,11 @@ LANGUAGE PYTHON;
 --   }
 --
 --   CALL `${dataform.projectConfig.defaultDatabase}.<MY_DATASET>.run_pipeline`(
+--       'demo_cluster',
 --       'thelook',
---       'public',
 --       'orders',
 --       'my-config-bucket',
+--       '${dataform.projectConfig.defaultDatabase}',
 --       GENERATE_UUID()
 --   );
 --
@@ -128,8 +132,8 @@ LANGUAGE PYTHON;
 --           "query": {
 --               "query": """
 --                   CALL `my-project.my_dataset.run_pipeline`(
---                       'thelook', 'public', 'orders',
---                       'my-config-bucket', '{{ run_id }}'
+--                       'demo_cluster', 'thelook', 'orders',
+--                       'my-config-bucket', 'my-gcp-project', '{{ run_id }}'
 --                   )
 --               """,
 --               "useLegacySql": False,

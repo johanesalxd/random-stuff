@@ -1,0 +1,54 @@
+registra_type: REPLICATION
+source_name: my_cluster
+source_type: postgres
+source_group: my_group
+cron_schedule: "0 6 * * *"
+
+# data_config structure:
+#   <db_name>:
+#     tables:
+#       <table_name>:
+#         etl_mode: FULL_RELOAD | INCREMENTAL
+#         ...
+#
+# The JDBC URL is resolved automatically from Secret Manager:
+#   projects/<project>/secrets/<source_name>-jdbc-url/versions/latest
+#
+# The BigQuery target dataset is derived by convention:
+#   raw__<db_name>  (hyphens replaced by underscores)
+
+data_config:
+  my_database:
+    tables:
+
+      # Full reload: replace the target table on every run.
+      products:
+        etl_mode: FULL_RELOAD
+
+      # Incremental + upsert: merge on primary key.
+      # watermark_column (backfill_id) is used to filter rows since
+      # the last run; upsert_key ensures idempotent reruns.
+      customers:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: updated_at
+        upsert_key: [id]
+        partition_keys:
+          - col_name: created_at
+            col_type: timestamp
+        z_order_by: [country, status]
+
+      # Incremental + append: no upsert key, rows are only appended.
+      # Suitable for immutable event/log tables.
+      events:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: event_time
+
+      # Parallel JDBC reads: useful for large tables.
+      # pagination_key must be a numeric or date column.
+      large_table:
+        etl_mode: FULL_RELOAD
+        is_paginated: true
+        pagination_key: id
+        pagination_size: 20

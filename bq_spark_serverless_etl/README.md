@@ -103,7 +103,7 @@ The Spark job is registered as a **BigQuery Spark Stored Procedure**. Any tool t
 
 ```sql
 CALL `my-project.pipelines.run_pipeline`(
-    'thelook', 'public', 'orders', 'my-bucket', GENERATE_UUID()
+    'demo_cluster', 'thelook', 'orders', 'my-bucket', 'my-project', GENERATE_UUID()
 );
 ```
 
@@ -198,9 +198,9 @@ Executes `sql/demo_pipeline.sql` via `bq query`:
 **Step 1 — Ingest (Spark):**
 
 ```sql
-CALL `my-project.pipelines.run_pipeline`('thelook','public','orders','my-bucket', GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('thelook','public','users','my-bucket', GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('thelook','public','order_items','my-bucket', GENERATE_UUID());
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','orders','my-bucket','my-project',GENERATE_UUID());
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','users','my-bucket','my-project',GENERATE_UUID());
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','order_items','my-bucket','my-project',GENERATE_UUID());
 ```
 
 Each `CALL` spins up a Dataproc Serverless Spark job, reads from Cloud SQL, and writes to `raw_thelook`.
@@ -226,12 +226,12 @@ GROUP BY 1, 2, 3, 4;
 
 ```sql
 -- Ingested tables
-SELECT COUNT(*) FROM `my-project.raw_thelook.orders`;
-SELECT COUNT(*) FROM `my-project.raw_thelook.users`;
-SELECT COUNT(*) FROM `my-project.raw_thelook.order_items`;
+SELECT COUNT(*) FROM `my-project.raw__thelook.orders`;
+SELECT COUNT(*) FROM `my-project.raw__thelook.users`;
+SELECT COUNT(*) FROM `my-project.raw__thelook.order_items`;
 
 -- Watermark (proves incremental tracking state)
-SELECT * FROM `my-project.raw_thelook._watermarks`;
+SELECT * FROM `my-project.raw__thelook._watermarks`;
 
 -- Downstream aggregate
 SELECT * FROM `my-project.analytics.daily_revenue`
@@ -257,7 +257,7 @@ Deletes the Cloud SQL instance, GCS bucket, Secret Manager secret, BQ datasets, 
 | `users` | `merge` | BQ MERGE DML — upsert on `id`, idempotent |
 | `order_items` | `append` + watermark | Only rows newer than last run are extracted |
 
-The watermark for `order_items` is stored in `raw_thelook._watermarks` and updated after each successful write. On first run, all rows are extracted.
+The watermark for `order_items` is stored in `raw__thelook._watermarks` and updated after each successful write. On first run, all rows are extracted.
 
 ---
 
@@ -277,12 +277,9 @@ bq_spark_serverless_etl/
 │       └── bigquery.py      # BQ writer (overwrite/append/merge, watermark write-back)
 ├── configs/
 │   ├── demo/
-│   │   ├── orders.yaml      # Full load
-│   │   ├── users.yaml       # Merge / upsert
-│   │   └── order_items.yaml # Incremental
+│   │   └── demo_cluster.yaml    # All demo tables (orders, users, order_items)
 │   └── examples/
-│       ├── postgres_to_bq.yaml
-│       └── postgres_to_bq_incremental.yaml
+│       └── sample_cluster.yaml  # Annotated reference for all supported options
 ├── sql/
 │   ├── demo_pipeline.sql         # 2-step demo: 3x CALL + downstream SQL transform
 │   └── create_stored_procedures.sql  # CREATE PROCEDURE definition
@@ -306,32 +303,71 @@ bq_spark_serverless_etl/
 
 ## Config file reference
 
-Config files live at `gs://BUCKET/configs/SOURCE_NAME/DB_NAME/TBL_NAME.yaml`.
+Config files use a **cluster-level** format. One YAML file covers all databases and tables for a given source cluster. Files live at:
+
+```
+gs://BUCKET/configs/SOURCE_NAME.yaml
+```
+
+The pipeline is invoked once per table; `source_name`, `db_name`, and `tbl_name` are passed as arguments and used to select the correct entry from the YAML.
 
 ```yaml
-source:
-  type: postgres
-  jdbc_url_secret: projects/MY_PROJECT/secrets/MY_SECRET/versions/latest
-  table: public.orders
-  # Optional: parallel JDBC reads (speeds up large tables)
-  # partition_column: order_id
-  # lower_bound: 1
-  # upper_bound: 100000
-  # num_partitions: 10
-  fetch_size: 10000
+registra_type: REPLICATION
+source_name: demo_cluster         # also the GCS file stem and secret key prefix
+source_type: postgres
+source_group: demo
+cron_schedule: "0 18 * * *"      # informational only, not enforced by the pipeline
 
-target:
-  project: my-gcp-project
-  dataset: raw_thelook
-  table: orders
-  write_mode: overwrite       # overwrite | append | merge
-  merge_keys: [id]            # required when write_mode=merge
-  partition_field: created_at # optional: BQ time partitioning
-  clustering_fields: [status] # optional: BQ clustering (max 4)
+data_config:
+  thelook:                        # db_name
+    tables:
+      users:                      # tbl_name
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: updated_at   # watermark column
+        upsert_key: [id]              # merge keys (enables MERGE write mode)
+        partition_keys:
+          - col_name: created_at
+            col_type: timestamp
+        z_order_by: [status, gender]  # BigQuery clustering columns
 
-extraction:
-  mode: full                  # full | incremental
-  watermark_column: created_at  # required when mode=incremental
+      orders:
+        etl_mode: FULL_RELOAD         # truncate and replace on every run
+
+      order_items:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: created_at   # append only, no upsert_key
+```
+
+### ETL mode mapping
+
+| `etl_mode` | `upsert_key` | Extraction | Write mode |
+|------------|-------------|------------|------------|
+| `FULL_RELOAD` | — | full | overwrite |
+| `INCREMENTAL` | set | incremental | merge |
+| `INCREMENTAL` | empty | incremental | append |
+
+### Convention-based derivation
+
+| Field | Derived from | Convention |
+|-------|-------------|-----------|
+| JDBC URL secret | `source_name`, `--project` | `projects/<project>/secrets/<source_name>-jdbc-url/versions/latest` |
+| BQ dataset | `db_name` | `raw__<db_name>` (hyphens → underscores) |
+| BQ table | `tbl_name` | same |
+| Source table | `tbl_name` | `public.<tbl_name>` |
+| Watermark table | `project`, `dataset` | `<project>.<dataset>._watermarks` |
+
+### Parallel JDBC reads
+
+For large tables, add `is_paginated: true` with a numeric or date `pagination_key`:
+
+```yaml
+large_table:
+  etl_mode: FULL_RELOAD
+  is_paginated: true
+  pagination_key: id
+  pagination_size: 20       # approximate number of JDBC partitions
 ```
 
 ---
@@ -349,12 +385,12 @@ from pyspark.sql import DataFrame, SparkSession
 
 class MySQLExtractor(BaseExtractor):
     def extract(self, spark: SparkSession, config: PipelineConfig) -> DataFrame:
-        jdbc_url = resolve_secret(config.source.jdbc_url_secret)
+        jdbc_url = resolve_secret(config.jdbc_url_secret)
         return (
             spark.read.format("jdbc")
             .option("url", jdbc_url)
             .option("driver", "com.mysql.cj.jdbc.Driver")
-            .option("dbtable", config.source.table)
+            .option("dbtable", config.source_table)
             .load()
         )
 ```

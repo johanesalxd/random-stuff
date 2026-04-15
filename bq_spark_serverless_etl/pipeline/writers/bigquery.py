@@ -24,7 +24,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import bigquery as _bq
 from pyspark.sql import DataFrame
 
-from pipeline.config import ExtractionMode, PipelineConfig, WriteMode
+from pipeline.config import PipelineConfig
 from pipeline.writers.base import BaseWriter
 
 logger = logging.getLogger(__name__)
@@ -38,31 +38,28 @@ class BigQueryWriter(BaseWriter):
 
         Args:
             df: DataFrame to write.
-            config: Pipeline configuration. config.target defines the
-                destination table, write mode, partitioning, and clustering.
+            config: Pipeline configuration.
         """
-        tgt = config.target
-
         logger.info(
             "Writing to BigQuery: table=%s mode=%s",
-            tgt.full_table_id,
-            tgt.write_mode,
+            config.full_table_id,
+            config.write_mode,
         )
 
-        if tgt.write_mode == WriteMode.OVERWRITE:
+        if config.write_mode == "overwrite":
             self._write_overwrite(df, config)
 
-        elif tgt.write_mode == WriteMode.APPEND:
+        elif config.write_mode == "append":
             self._write_append(df, config)
 
-        elif tgt.write_mode == WriteMode.MERGE:
+        elif config.write_mode == "merge":
             self._write_merge(df, config)
 
-        logger.info("Successfully wrote to BigQuery table: %s", tgt.full_table_id)
+        logger.info("Successfully wrote to BigQuery table: %s", config.full_table_id)
 
         # Write-back watermark for incremental pipelines so the next run
         # only extracts rows newer than the current batch's maximum value.
-        if config.extraction.mode == ExtractionMode.INCREMENTAL:
+        if config.extraction_mode == "incremental":
             self._update_watermark(df, config)
 
     # ------------------------------------------------------------------
@@ -71,18 +68,19 @@ class BigQueryWriter(BaseWriter):
 
     def _base_writer(self, df: DataFrame, config: PipelineConfig):
         """Build a DataFrameWriter with shared options applied."""
-        tgt = config.target
         writer = (
             df.write.format("bigquery")
             .option("writeMethod", "direct")
-            .option("table", tgt.full_table_id)
+            .option("table", config.full_table_id)
         )
-        if tgt.partition_field:
-            writer = writer.option("partitionField", tgt.partition_field)
-            logger.info("BQ partitioning on: %s", tgt.partition_field)
-        if tgt.clustering_fields:
-            writer = writer.option("clusteredFields", ",".join(tgt.clustering_fields))
-            logger.info("BQ clustering on: %s", tgt.clustering_fields)
+        if config.partition_field:
+            writer = writer.option("partitionField", config.partition_field)
+            logger.info("BQ partitioning on: %s", config.partition_field)
+        if config.clustering_fields:
+            writer = writer.option(
+                "clusteredFields", ",".join(config.clustering_fields)
+            )
+            logger.info("BQ clustering on: %s", config.clustering_fields)
         return writer
 
     def _write_overwrite(self, df: DataFrame, config: PipelineConfig) -> None:
@@ -108,28 +106,28 @@ class BigQueryWriter(BaseWriter):
             df: Incoming DataFrame.
             config: Pipeline configuration.
         """
-        tgt = config.target
-
         # Check whether target table exists before staging anything.
-        bq_client = _bq.Client(project=tgt.project)
+        bq_client = _bq.Client(project=config.project)
         try:
-            bq_client.get_table(tgt.full_table_id)
+            bq_client.get_table(config.full_table_id)
         except NotFound:
             logger.info(
                 "Target table %s does not exist -- falling back to overwrite"
                 " for initial load.",
-                tgt.full_table_id,
+                config.full_table_id,
             )
             self._write_overwrite(df, config)
             return
 
         run_ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        staging_table = f"{tgt.project}.{tgt.dataset}._staging_{tgt.table}_{run_ts}"
+        staging_table = (
+            f"{config.project}.{config.dataset}._staging_{config.table}_{run_ts}"
+        )
 
         logger.info(
             "Merge: staging to temp table %s before MERGE into %s",
             staging_table,
-            tgt.full_table_id,
+            config.full_table_id,
         )
 
         # Step 1: write incoming data to staging table (overwrite ensures idempotency)
@@ -142,7 +140,7 @@ class BigQueryWriter(BaseWriter):
         )
 
         # Step 2: build and execute MERGE DML
-        merge_keys = config.target.merge_keys
+        merge_keys = config.merge_keys
         columns = df.columns
 
         on_clause = " AND ".join(f"T.`{k}` = S.`{k}`" for k in merge_keys)
@@ -161,14 +159,14 @@ class BigQueryWriter(BaseWriter):
         )
 
         merge_sql = f"""
-            MERGE `{tgt.full_table_id}` AS T
+            MERGE `{config.full_table_id}` AS T
             USING `{staging_table}` AS S
             ON {on_clause}
             {matched_clause}WHEN NOT MATCHED THEN
                 INSERT ({insert_cols})
                 VALUES ({insert_vals})
         """
-        logger.info("Executing MERGE DML for table: %s", tgt.full_table_id)
+        logger.info("Executing MERGE DML for table: %s", config.full_table_id)
 
         # Run DML via the BigQuery Python client (the Spark BQ connector's
         # "query" option is for SELECT reads only, not DML).
@@ -193,35 +191,30 @@ class BigQueryWriter(BaseWriter):
             watermark_value STRING NOT NULL,
             updated_at      TIMESTAMP NOT NULL
 
-        On each incremental run, we upsert the row for this pipeline's
+        On each incremental run, upserts the row for this pipeline's
         identity tuple so the next run starts from the correct position.
 
         Args:
             df: The DataFrame that was just written (used to compute MAX watermark).
             config: Pipeline configuration.
         """
-        ext = config.extraction
-        tgt = config.target
-
-        if not ext.watermark_column:
+        if not config.watermark_column:
             return
 
-        watermark_table = ext.watermark_table or (
-            f"{tgt.project}.{tgt.dataset}._watermarks"
-        )
+        watermark_table = f"{config.project}.{config.dataset}._watermarks"
 
         # Compute the maximum value of the watermark column in this batch.
         # Cast to string for uniform storage regardless of column type
         # (timestamp, date, integer).
         max_row = df.selectExpr(
-            f"CAST(MAX(`{ext.watermark_column}`) AS STRING) AS max_wm"
+            f"CAST(MAX(`{config.watermark_column}`) AS STRING) AS max_wm"
         ).first()
 
         if max_row is None or max_row["max_wm"] is None:
             logger.warning(
                 "Could not compute max watermark from column '%s'"
                 " -- skipping write-back.",
-                ext.watermark_column,
+                config.watermark_column,
             )
             return
 
@@ -234,7 +227,7 @@ class BigQueryWriter(BaseWriter):
             config.source_name,
             config.db_name,
             config.tbl_name,
-            ext.watermark_column,
+            config.watermark_column,
             new_watermark,
         )
 
@@ -272,7 +265,7 @@ class BigQueryWriter(BaseWriter):
         """
 
         try:
-            bq_client = _bq.Client(project=tgt.project)
+            bq_client = _bq.Client(project=config.project)
             bq_client.query(create_sql).result()
             bq_client.query(merge_sql).result()
             logger.info("Watermark updated to: %s", new_watermark)

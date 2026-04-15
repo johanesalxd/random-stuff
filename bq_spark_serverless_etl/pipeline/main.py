@@ -10,10 +10,11 @@ Mode 1 -- Dataproc Serverless Batch (direct CLI submission):
         --py-files=gs://<bucket>/wheels/pipeline-0.1.0-py3-none-any.whl \\
         --jars=gs://<bucket>/jars/postgresql-42.7.3.jar \\
         -- \\
-        --source_name=mydb \\
-        --db_name=public \\
+        --source_name=demo_cluster \\
+        --db_name=thelook \\
         --tbl_name=users \\
-        --gcs_bucket=my-config-bucket
+        --gcs_bucket=my-config-bucket \\
+        --project=my-gcp-project
 
 Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
     Parameters are read from BIGQUERY_PROC_PARAM.* environment variables,
@@ -26,6 +27,7 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
             IN db_name     STRING,
             IN tbl_name    STRING,
             IN gcs_bucket  STRING,
+            IN project     STRING,
             IN run_id      STRING
         )
         WITH CONNECTION `project.region.connection`
@@ -40,7 +42,8 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
 
     Called from Dataform or any SQL client:
         CALL `project.dataset.run_pipeline`(
-            'mydb', 'public', 'users', 'my-config-bucket', GENERATE_UUID()
+            'demo_cluster', 'thelook', 'users', 'my-config-bucket',
+            'my-gcp-project', GENERATE_UUID()
         );
 
 Execution mode detection:
@@ -73,6 +76,7 @@ def run(
     db_name: str,
     tbl_name: str,
     gcs_bucket: str,
+    project: str,
     run_id: str | None = None,
     configs_prefix: str = "configs",
     spark: SparkSession | None = None,
@@ -80,10 +84,11 @@ def run(
     """Core pipeline logic -- framework-agnostic.
 
     Args:
-        source_name: Logical source group name (top-level config folder).
+        source_name: Source cluster name (maps to <configs_prefix>/<source_name>.yaml).
         db_name: Database or schema name.
         tbl_name: Table name.
         gcs_bucket: GCS bucket name where configs are stored.
+        project: GCP project ID (used for secret resolution and BQ target).
         run_id: Optional unique identifier for this pipeline run (for logging).
         configs_prefix: Prefix inside gcs_bucket for config files.
         spark: Optional SparkSession. Created via getOrCreate() if not provided.
@@ -101,10 +106,11 @@ def run(
         db_name=db_name,
         tbl_name=tbl_name,
         gcs_bucket=gcs_bucket,
+        project=project,
         configs_prefix=configs_prefix,
     )
 
-    extractor = get_extractor(config.source.type)
+    extractor = get_extractor(config.source_type)
     writer = get_writer()  # always BigQuery for now
 
     df = extractor.extract(spark, config)
@@ -121,12 +127,12 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--source_name",
         required=True,
-        help="Logical source group name (e.g. mydb).",
+        help="Source cluster name (maps to configs/<source_name>.yaml in GCS).",
     )
     parser.add_argument(
         "--db_name",
         required=True,
-        help="Database or schema name (e.g. public).",
+        help="Database or schema name (e.g. thelook).",
     )
     parser.add_argument(
         "--tbl_name",
@@ -137,6 +143,14 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
         "--gcs_bucket",
         required=True,
         help="GCS bucket name where pipeline configs are stored.",
+    )
+    parser.add_argument(
+        "--project",
+        required=True,
+        help=(
+            "GCP project ID. Used for Secret Manager JDBC URL lookup "
+            "and BigQuery target dataset."
+        ),
     )
     parser.add_argument(
         "--run_id",
@@ -181,6 +195,7 @@ def _run_as_bq_stored_proc() -> None:
         db_name=_param("db_name"),
         tbl_name=_param("tbl_name"),
         gcs_bucket=_param("gcs_bucket"),
+        project=_param("project"),
         run_id=_param("run_id"),
         configs_prefix=_param("configs_prefix", "configs"),
         spark=spark,
@@ -213,6 +228,7 @@ if __name__ == "__main__":
             db_name=_args.db_name,
             tbl_name=_args.tbl_name,
             gcs_bucket=_args.gcs_bucket,
+            project=_args.project,
             run_id=_args.run_id,
             configs_prefix=_args.configs_prefix,
         )
