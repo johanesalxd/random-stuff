@@ -561,6 +561,51 @@ def test_build_pipeline_config_no_pagination():
     assert cfg.num_partitions == 10
 
 
+def test_pagination_size_within_limit_unchanged():
+    """Values <= 200 pass through the validator unchanged."""
+    from pipeline.config import TableConfig
+
+    tbl = TableConfig(is_paginated=True, pagination_key="id", pagination_size=200)
+    assert tbl.pagination_size == 200
+
+
+def test_pagination_size_capped_at_200(caplog):
+    """Values > 200 are capped to 200 and a warning is emitted."""
+    import logging
+
+    from pipeline.config import TableConfig
+
+    with caplog.at_level(logging.WARNING, logger="pipeline.config"):
+        tbl = TableConfig(
+            is_paginated=True, pagination_key="id", pagination_size=1_000_000
+        )
+
+    assert tbl.pagination_size == 200
+    assert "pagination_size=1000000" in caplog.text
+    assert "Capping to 200" in caplog.text
+
+
+def test_build_pipeline_config_pagination_size_capped_end_to_end():
+    """Customer-style million-row pagination_size is capped before numPartitions."""
+    raw = {
+        **_FULL_CLUSTER_YAML,
+        "data_config": {
+            "thelook": {
+                "tables": {
+                    "huge_table": {
+                        "etl_mode": "FULL_RELOAD",
+                        "is_paginated": True,
+                        "pagination_key": "id",
+                        "pagination_size": 1_000_000,
+                    }
+                }
+            }
+        },
+    }
+    cfg = _make_pipeline_config(tbl_name="huge_table", cluster_raw=raw)
+    assert cfg.num_partitions == 200
+
+
 # ---------------------------------------------------------------------------
 # Customer-style YAML: smoke test with realistic config
 # ---------------------------------------------------------------------------

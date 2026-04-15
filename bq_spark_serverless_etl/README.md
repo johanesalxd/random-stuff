@@ -125,6 +125,8 @@ The same `pipeline/main.py` runs in two modes without code changes:
 
 Detection: checks for the `BIGQUERY_PROC_PARAM.*` environment variable prefix that BigQuery Spark injects at runtime. This is more reliable than importing `bigquery.spark.procedure`, which can fail with a protobuf version mismatch inside the BQ Spark runtime.
 
+> **`configs_prefix` constraint:** When using the BigQuery Spark Stored Procedure path (`CALL`), `configs_prefix` is fixed at `"configs"` — it cannot be overridden via the procedure signature. If your YAML files live under a different GCS prefix (e.g. `batch_pipeline/`), use the Dataproc Serverless Batch mode and pass `--configs_prefix=batch_pipeline` as a CLI argument.
+
 ---
 
 ## Quick start (one command)
@@ -150,6 +152,7 @@ make infra-down   # deletes all GCP resources
 - Python 3.11+, [`uv`](https://docs.astral.sh/uv/)
 - `gcloud` CLI authenticated: `gcloud auth login && gcloud auth application-default login`
 - A GCP project with a billing account
+- **BigQuery datasets must exist before the pipeline runs.** The pipeline never creates datasets — only tables within them. `infra/setup.sh` creates the demo datasets (`raw_thelook`, `analytics`, `pipelines`) automatically. When plugging in a new source cluster, pre-create the target dataset (`raw_<db_name>`) before the first run.
 
 > **Authentication note:** Local scripts (`seed_data.py`, Makefile targets) use Application Default Credentials (ADC) — set up with `gcloud auth application-default login`. Spark jobs running on Dataproc Serverless use the dedicated service account created by `infra/setup.sh`, not your personal credentials.
 
@@ -407,8 +410,10 @@ large_table:
   etl_mode: FULL_RELOAD
   is_paginated: true
   pagination_key: id
-  pagination_size: 20       # approximate number of JDBC partitions
+  pagination_size: 20       # JDBC numPartitions — NOT a row count; capped at 200
 ```
+
+> **`pagination_size` is a partition count, not a row count.** It maps directly to Spark's `numPartitions` JDBC option (number of parallel database connections). Keep it between 1 and 200. Values above 200 are capped automatically with a warning. Do not set it to a row count like `1,000,000` — that would attempt to open one million parallel connections.
 
 ---
 

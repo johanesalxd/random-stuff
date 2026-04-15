@@ -78,9 +78,17 @@ data_config:
       # ── Parallel JDBC reads (pagination) ────────────────────────────────────
       # For large tables, is_paginated splits the JDBC read across multiple
       # Spark partitions. pagination_key must be a numeric or date column.
-      # pagination_size is the approximate number of JDBC partitions.
+      #
+      # IMPORTANT — pagination_size is the JDBC numPartitions value (number
+      # of parallel database connections), NOT a row batch size. Keep it
+      # between 1 and 200. Values above 200 are capped automatically with a
+      # warning. Do not set this to a row count like 1,000,000 — that would
+      # attempt to open one million parallel connections.
+      #
+      # Typical values: 4–20 for most tables; up to ~100 for very large
+      # tables with a well-distributed partition key.
       large_table:
         etl_mode: FULL_RELOAD
         is_paginated: true
         pagination_key: id
-        pagination_size: 20
+        pagination_size: 20   # number of parallel JDBC partitions (not row count)

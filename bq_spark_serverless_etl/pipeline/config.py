@@ -29,7 +29,7 @@ from typing import Any
 
 import yaml
 from google.cloud import secretmanager, storage
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +119,38 @@ class TableConfig(BaseModel):
     )
     pagination_size: int = Field(
         default=10,
-        description="Approximate number of JDBC partitions.",
+        description=(
+            "Number of JDBC partitions (numPartitions) for parallel reads. "
+            "This is a Spark JDBC partition count — NOT a row batch size. "
+            "Keep <= 200; values above that are capped with a warning to "
+            "prevent spawning excessive parallel JDBC connections."
+        ),
     )
+
+    @field_validator("pagination_size", mode="after")
+    @classmethod
+    def _cap_pagination_size(cls, v: int) -> int:
+        """Cap pagination_size to prevent excessive JDBC connections.
+
+        Customer configs often set this field as a row-count (e.g. 1_000_000)
+        rather than a partition count. Passing 1 million as numPartitions to
+        Spark JDBC would spawn one million parallel connections, which is
+        catastrophic. Cap at 200 and warn so the pipeline stays safe even
+        when the caller misuses the field.
+        """
+        _MAX_PARTITIONS = 200
+        if v > _MAX_PARTITIONS:
+            logger.warning(
+                "pagination_size=%d exceeds the maximum safe partition count (%d). "
+                "This field is the JDBC numPartitions value, not a row count. "
+                "Capping to %d to prevent excessive parallel connections.",
+                v,
+                _MAX_PARTITIONS,
+                _MAX_PARTITIONS,
+            )
+            return _MAX_PARTITIONS
+        return v
+
     tbl_name_alias: str | None = Field(
         default=None,
         description=(
