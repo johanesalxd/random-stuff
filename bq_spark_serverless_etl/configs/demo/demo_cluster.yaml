@@ -15,7 +15,7 @@ data_config:
         partition_keys:
           - col_name: created_at
             col_type: timestamp
-        z_order_by: [status, gender]
+        z_order_by: [gender]
 
       orders:
         etl_mode: FULL_RELOAD
