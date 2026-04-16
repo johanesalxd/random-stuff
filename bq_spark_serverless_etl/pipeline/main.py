@@ -10,10 +10,18 @@ Mode 1 -- Dataproc Serverless Batch (direct CLI submission):
         --py-files=gs://<bucket>/wheels/pipeline-0.1.0-py3-none-any.whl \\
         --jars=gs://<bucket>/jars/postgresql-42.7.3.jar \\
         -- \\
-        --source_name=mydb \\
-        --db_name=public \\
+        --source_name=demo_cluster \\
+        --db_name=thelook \\
         --tbl_name=users \\
-        --gcs_bucket=my-config-bucket
+        --gcs_bucket=my-config-bucket \\
+        --project=my-gcp-project
+
+    Optional hierarchical GCS path (mirrors customer repo layout):
+        --source_type=postgres \\
+        --source_group=prod_postgres_priority
+
+    When both are provided the config is loaded from:
+        gs://my-config-bucket/configs/postgres/prod_postgres_priority/demo_cluster.yaml
 
 Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
     Parameters are read from BIGQUERY_PROC_PARAM.* environment variables,
@@ -22,11 +30,14 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
 
     The procedure is created once with:
         CREATE OR REPLACE PROCEDURE `project.dataset.run_pipeline`(
-            IN source_name STRING,
-            IN db_name     STRING,
-            IN tbl_name    STRING,
-            IN gcs_bucket  STRING,
-            IN run_id      STRING
+            IN source_name  STRING,
+            IN db_name      STRING,
+            IN tbl_name     STRING,
+            IN gcs_bucket   STRING,
+            IN project      STRING,
+            IN run_id       STRING,
+            IN source_type  STRING,   -- optional; pass '' to use flat path
+            IN source_group STRING    -- optional; pass '' to use flat path
         )
         WITH CONNECTION `project.region.connection`
         OPTIONS(
@@ -40,7 +51,8 @@ Mode 2 -- BigQuery Spark Stored Procedure (callable from Dataform or SQL):
 
     Called from Dataform or any SQL client:
         CALL `project.dataset.run_pipeline`(
-            'mydb', 'public', 'users', 'my-config-bucket', GENERATE_UUID()
+            'demo_cluster', 'thelook', 'users', 'my-config-bucket',
+            'my-gcp-project', GENERATE_UUID(), '', ''
         );
 
 Execution mode detection:
@@ -73,19 +85,27 @@ def run(
     db_name: str,
     tbl_name: str,
     gcs_bucket: str,
+    project: str,
     run_id: str | None = None,
     configs_prefix: str = "configs",
+    source_type: str | None = None,
+    source_group: str | None = None,
     spark: SparkSession | None = None,
 ) -> None:
     """Core pipeline logic -- framework-agnostic.
 
     Args:
-        source_name: Logical source group name (top-level config folder).
+        source_name: Source cluster name (YAML file stem).
         db_name: Database or schema name.
         tbl_name: Table name.
-        gcs_bucket: GCS bucket name where configs are stored.
-        run_id: Optional unique identifier for this pipeline run (for logging).
+        gcs_bucket: GCS bucket for configs and BQ indirect write staging.
+        project: GCP project ID (for secret resolution and BQ target).
+        run_id: Optional run identifier for log tracing. Logged only; not
+            persisted to BigQuery or the watermark table.
         configs_prefix: Prefix inside gcs_bucket for config files.
+        source_type: Optional. When set with source_group, uses hierarchical
+            GCS path: <configs_prefix>/<source_type>/<source_group>/<source_name>.yaml
+        source_group: Optional. See source_type.
         spark: Optional SparkSession. Created via getOrCreate() if not provided.
             Pass an existing session when the caller (e.g. BQ stored proc path)
             already holds a reference to avoid creating a second session.
@@ -101,10 +121,13 @@ def run(
         db_name=db_name,
         tbl_name=tbl_name,
         gcs_bucket=gcs_bucket,
+        project=project,
         configs_prefix=configs_prefix,
+        source_type=source_type,
+        source_group=source_group,
     )
 
-    extractor = get_extractor(config.source.type)
+    extractor = get_extractor(config.source_type)
     writer = get_writer()  # always BigQuery for now
 
     df = extractor.extract(spark, config)
@@ -121,12 +144,12 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--source_name",
         required=True,
-        help="Logical source group name (e.g. mydb).",
+        help="Source cluster name (YAML file stem in GCS configs).",
     )
     parser.add_argument(
         "--db_name",
         required=True,
-        help="Database or schema name (e.g. public).",
+        help="Database or schema name (e.g. thelook).",
     )
     parser.add_argument(
         "--tbl_name",
@@ -136,7 +159,15 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--gcs_bucket",
         required=True,
-        help="GCS bucket name where pipeline configs are stored.",
+        help=("GCS bucket for pipeline configs and BigQuery indirect write staging."),
+    )
+    parser.add_argument(
+        "--project",
+        required=True,
+        help=(
+            "GCP project ID. Used for Secret Manager JDBC URL lookup "
+            "and BigQuery target dataset."
+        ),
     )
     parser.add_argument(
         "--run_id",
@@ -147,6 +178,22 @@ def _parse_cli_args(argv: list[str]) -> argparse.Namespace:
         "--configs_prefix",
         default="configs",
         help="Prefix inside --gcs_bucket where YAML configs live.",
+    )
+    parser.add_argument(
+        "--source_type",
+        default=None,
+        help=(
+            "Optional. Source type (e.g. postgres). When set together with "
+            "--source_group, uses hierarchical GCS path: "
+            "<configs_prefix>/<source_type>/<source_group>/<source_name>.yaml"
+        ),
+    )
+    parser.add_argument(
+        "--source_group",
+        default=None,
+        help=(
+            "Optional. Source group (e.g. prod_postgres_priority). See --source_type."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -176,13 +223,24 @@ def _run_as_bq_stored_proc() -> None:
 
     spark = SparkSession.builder.getOrCreate()
 
+    # Empty string from CALL statement means "not provided" -- normalise to None
+    def _optional(name: str) -> str | None:
+        val = _param(name)
+        return val if val else None
+
     run(
         source_name=_param("source_name"),
         db_name=_param("db_name"),
         tbl_name=_param("tbl_name"),
         gcs_bucket=_param("gcs_bucket"),
+        project=_param("project"),
         run_id=_param("run_id"),
-        configs_prefix=_param("configs_prefix", "configs"),
+        # configs_prefix is not a declared procedure parameter — always "configs"
+        # in stored proc mode. Use Dataproc Serverless batch + --configs_prefix
+        # to override.
+        configs_prefix="configs",
+        source_type=_optional("source_type"),
+        source_group=_optional("source_group"),
         spark=spark,
     )
 
@@ -213,6 +271,9 @@ if __name__ == "__main__":
             db_name=_args.db_name,
             tbl_name=_args.tbl_name,
             gcs_bucket=_args.gcs_bucket,
+            project=_args.project,
             run_id=_args.run_id,
             configs_prefix=_args.configs_prefix,
+            source_type=_args.source_type,
+            source_group=_args.source_group,
         )

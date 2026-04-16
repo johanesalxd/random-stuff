@@ -11,12 +11,14 @@ Cloud SQL Postgres
       ▼
 Dataproc Serverless Spark  ←── spun up from BQ Studio notebook
       │
-      │  BigQuery Storage Write API (direct)
+      │  BigQuery connector (writeMethod=direct, notebook default)
       ▼
 BigQuery  raw_thelook.orders_quickstart
 ```
 
 The notebook is the whole pipeline. Change one variable to read a different table.
+
+> **Write method note:** This notebook uses `writeMethod=direct` (Storage Write API) because it is the BQ Studio default and requires no configuration. The production pipeline (`pipeline/main.py`) uses `writeMethod=indirect` (GCS staging → BQ load job), which is free for batch workloads and the recommended approach at scale. See Cell 6 in the notebook for details.
 
 ## Prerequisites
 

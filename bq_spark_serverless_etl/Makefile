@@ -107,12 +107,11 @@ upload-gcs: build download-jdbc-jar
 	gcloud storage cp $(JDBC_JAR_LOCAL) \
 		gs://$(GCS_BUCKET)/jars/postgresql-42.7.3.jar
 
-	# Upload demo configs (substitute MY_PROJECT placeholder)
+	# Upload demo configs (flat path: configs/<name>.yaml)
 	@for YAML in configs/demo/*.yaml; do \
 		TABLE=$$(basename $${YAML} .yaml); \
-		sed "s|MY_PROJECT|$(GCP_PROJECT)|g" $${YAML} \
-		| gcloud storage cp - \
-			"gs://$(GCS_BUCKET)/configs/thelook/public/$${TABLE}.yaml"; \
+		gcloud storage cp $${YAML} \
+			"gs://$(GCS_BUCKET)/configs/$${TABLE}.yaml"; \
 		echo "Uploaded config: $${TABLE}.yaml"; \
 	done
 
@@ -166,6 +165,7 @@ spark.dataproc.scaling.version=2 \
 		--db_name=$(DB) \
 		--tbl_name=$(TBL) \
 		--gcs_bucket=$(GCS_BUCKET) \
+		--project=$(GCP_PROJECT) \
 		--run_id=$(RUN_ID)
 
 # ---------------------------------------------------------------------------
