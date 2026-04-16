@@ -103,9 +103,14 @@ The Spark job is registered as a **BigQuery Spark Stored Procedure**. Any tool t
 
 ```sql
 CALL `my-project.pipelines.run_pipeline`(
-    'thelook', 'public', 'orders', 'my-bucket', GENERATE_UUID()
+    'demo_cluster', 'thelook', 'orders', 'my-bucket', 'my-project', GENERATE_UUID(),
+    '',             -- source_type  ('' = flat GCS path)
+    ''              -- source_group ('' = flat GCS path)
 );
 ```
+
+Pass non-empty `source_type` and `source_group` to use the hierarchical path convention:
+`gs://BUCKET/configs/<source_type>/<source_group>/<source_name>.yaml`
 
 The full 2-step demo (`sql/demo_pipeline.sql`) ingests 3 tables and builds a downstream aggregate — all in SQL, no orchestration tooling required.
 
@@ -119,6 +124,8 @@ The same `pipeline/main.py` runs in two modes without code changes:
 | **BigQuery Spark Stored Procedure** | `CALL project.dataset.run_pipeline(...)` | `BIGQUERY_PROC_PARAM.*` env vars (injected by BQ runtime) |
 
 Detection: checks for the `BIGQUERY_PROC_PARAM.*` environment variable prefix that BigQuery Spark injects at runtime. This is more reliable than importing `bigquery.spark.procedure`, which can fail with a protobuf version mismatch inside the BQ Spark runtime.
+
+> **`configs_prefix` constraint:** When using the BigQuery Spark Stored Procedure path (`CALL`), `configs_prefix` is fixed at `"configs"` — it cannot be overridden via the procedure signature. If your YAML files live under a different GCS prefix (e.g. `batch_pipeline/`), use the Dataproc Serverless Batch mode and pass `--configs_prefix=batch_pipeline` as a CLI argument.
 
 ---
 
@@ -145,6 +152,7 @@ make infra-down   # deletes all GCP resources
 - Python 3.11+, [`uv`](https://docs.astral.sh/uv/)
 - `gcloud` CLI authenticated: `gcloud auth login && gcloud auth application-default login`
 - A GCP project with a billing account
+- **BigQuery datasets must exist before the pipeline runs.** The pipeline never creates datasets — only tables within them. `infra/setup.sh` creates the demo datasets (`raw_thelook`, `analytics`, `pipelines`) automatically. When plugging in a new source cluster, pre-create the target dataset (`raw_<db_name>`) before the first run.
 
 > **Authentication note:** Local scripts (`seed_data.py`, Makefile targets) use Application Default Credentials (ADC) — set up with `gcloud auth application-default login`. Spark jobs running on Dataproc Serverless use the dedicated service account created by `infra/setup.sh`, not your personal credentials.
 
@@ -198,9 +206,9 @@ Executes `sql/demo_pipeline.sql` via `bq query`:
 **Step 1 — Ingest (Spark):**
 
 ```sql
-CALL `my-project.pipelines.run_pipeline`('thelook','public','orders','my-bucket', GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('thelook','public','users','my-bucket', GENERATE_UUID());
-CALL `my-project.pipelines.run_pipeline`('thelook','public','order_items','my-bucket', GENERATE_UUID());
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','orders','my-bucket','my-project',GENERATE_UUID(),'','');
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','users','my-bucket','my-project',GENERATE_UUID(),'','');
+CALL `my-project.pipelines.run_pipeline`('demo_cluster','thelook','order_items','my-bucket','my-project',GENERATE_UUID(),'','');
 ```
 
 Each `CALL` spins up a Dataproc Serverless Spark job, reads from Cloud SQL, and writes to `raw_thelook`.
@@ -277,12 +285,9 @@ bq_spark_serverless_etl/
 │       └── bigquery.py      # BQ writer (overwrite/append/merge, watermark write-back)
 ├── configs/
 │   ├── demo/
-│   │   ├── orders.yaml      # Full load
-│   │   ├── users.yaml       # Merge / upsert
-│   │   └── order_items.yaml # Incremental
+│   │   └── demo_cluster.yaml    # All demo tables (orders, users, order_items)
 │   └── examples/
-│       ├── postgres_to_bq.yaml
-│       └── postgres_to_bq_incremental.yaml
+│       └── sample_cluster.yaml  # Annotated reference for all supported options
 ├── sql/
 │   ├── demo_pipeline.sql         # 2-step demo: 3x CALL + downstream SQL transform
 │   └── create_stored_procedures.sql  # CREATE PROCEDURE definition
@@ -306,33 +311,109 @@ bq_spark_serverless_etl/
 
 ## Config file reference
 
-Config files live at `gs://BUCKET/configs/SOURCE_NAME/DB_NAME/TBL_NAME.yaml`.
+Config files use a **cluster-level** format. One YAML file covers all databases and tables for a given source cluster.
+
+### GCS path conventions
+
+**Flat path** (default):
+```
+gs://BUCKET/configs/SOURCE_NAME.yaml
+```
+
+**Hierarchical path** (pass `--source_type` and `--source_group`):
+```
+gs://BUCKET/configs/<source_type>/<source_group>/SOURCE_NAME.yaml
+```
+
+Both `--source_type` and `--source_group` must be set to use the hierarchical path; if either is missing, the pipeline falls back to the flat path.
+
+### YAML structure
+
+The pipeline is invoked once per table; `source_name`, `db_name`, and `tbl_name` are passed as arguments and used to select the correct entry from the YAML.
 
 ```yaml
-source:
-  type: postgres
-  jdbc_url_secret: projects/MY_PROJECT/secrets/MY_SECRET/versions/latest
-  table: public.orders
-  # Optional: parallel JDBC reads (speeds up large tables)
-  # partition_column: order_id
-  # lower_bound: 1
-  # upper_bound: 100000
-  # num_partitions: 10
-  fetch_size: 10000
+registra_type: REPLICATION
+source_name: demo_cluster         # also the GCS file stem and secret key prefix
+source_type: postgres
+source_group: demo
+cron_schedule: "0 18 * * *"      # informational only, not enforced by the pipeline
 
-target:
-  project: my-gcp-project
-  dataset: raw_thelook
-  table: orders
-  write_mode: overwrite       # overwrite | append | merge
-  merge_keys: [id]            # required when write_mode=merge
-  partition_field: created_at # optional: BQ time partitioning
-  clustering_fields: [status] # optional: BQ clustering (max 4)
+data_config:
+  thelook:                        # db_name
+    tables:
+      users:                      # tbl_name
+        etl_mode: INCREMENTAL     # optional — see ETL mode defaults below
+        backfill_filters:
+          - backfill_id: updated_at   # watermark column
+        upsert_key: [id]              # merge keys (enables MERGE write mode)
+        partition_keys:
+          - col_name: created_at
+            col_type: timestamp
+        z_order_by: [status, gender]  # BigQuery clustering columns
 
-extraction:
-  mode: full                  # full | incremental
-  watermark_column: created_at  # required when mode=incremental
+      orders:
+        etl_mode: FULL_RELOAD         # truncate and replace on every run
+
+      order_items:
+        # etl_mode omitted — defaults to INCREMENTAL because backfill_filters present
+        backfill_filters:
+          - backfill_id: created_at   # append only, no upsert_key
+
+      # tbl_name_alias: override the BQ target table name
+      ApprovalWorkflows:
+        tbl_name_alias: approval_workflows   # BQ table = approval_workflows; JDBC source = ApprovalWorkflows
+
+      # Dotted schema.table names: used as-is for JDBC; schema_table for BQ
+      saas.tenant_lookups:
+        etl_mode: FULL_RELOAD              # BQ table = saas_tenant_lookups; JDBC = saas.tenant_lookups
 ```
+
+### ETL mode defaults
+
+`etl_mode` is **optional**. When omitted:
+
+| Condition | Default |
+|-----------|---------|
+| `backfill_filters` present | `INCREMENTAL` |
+| `backfill_filters` absent | `FULL_RELOAD` |
+
+### ETL mode mapping
+
+| `etl_mode` | `upsert_key` | Extraction | Write mode |
+|------------|-------------|------------|------------|
+| `FULL_RELOAD` | — | full | overwrite |
+| `INCREMENTAL` | set | incremental | merge |
+| `INCREMENTAL` | empty | incremental | append |
+
+### Convention-based derivation
+
+| Field | Derived from | Convention |
+|-------|-------------|-----------|
+| JDBC URL secret | `source_name`, `--project` | `projects/<project>/secrets/<source_name>-jdbc-url/versions/latest` |
+| BQ dataset | `db_name` | `raw_<db_name>` (hyphens → underscores) |
+| BQ table | `tbl_name` | `tbl_name_alias` if set; dotted name → `schema_table`; otherwise `tbl_name` |
+| Source table (JDBC) | `tbl_name` | dotted names used as-is; plain names get `public.` prefix |
+| Watermark table | `project`, `dataset` | `<project>.<dataset>._watermarks` |
+
+### BigQuery write method
+
+All writes use `writeMethod=indirect`: Spark stages data to GCS as Parquet, then BigQuery issues a load job to ingest it. This is the recommended approach for batch workloads — the Storage Write API (`direct`) charges per byte streamed, while GCS-staged load jobs are free.
+
+The `--gcs_bucket` argument (or `gcs_bucket` stored procedure parameter) is reused as the temporary staging bucket.
+
+### Parallel JDBC reads
+
+For large tables, add `is_paginated: true` with a numeric or date `pagination_key`:
+
+```yaml
+large_table:
+  etl_mode: FULL_RELOAD
+  is_paginated: true
+  pagination_key: id
+  pagination_size: 20       # JDBC numPartitions — NOT a row count; capped at 200
+```
+
+> **`pagination_size` is a partition count, not a row count.** It maps directly to Spark's `numPartitions` JDBC option (number of parallel database connections). Keep it between 1 and 200. Values above 200 are capped automatically with a warning. Do not set it to a row count like `1,000,000` — that would attempt to open one million parallel connections.
 
 ---
 
@@ -349,12 +430,12 @@ from pyspark.sql import DataFrame, SparkSession
 
 class MySQLExtractor(BaseExtractor):
     def extract(self, spark: SparkSession, config: PipelineConfig) -> DataFrame:
-        jdbc_url = resolve_secret(config.source.jdbc_url_secret)
+        jdbc_url = resolve_secret(config.jdbc_url_secret)
         return (
             spark.read.format("jdbc")
             .option("url", jdbc_url)
             .option("driver", "com.mysql.cj.jdbc.Driver")
-            .option("dbtable", config.source.table)
+            .option("dbtable", config.source_table)
             .load()
         )
 ```
@@ -432,3 +513,18 @@ Two service accounts are involved. `infra/setup.sh` creates and configures both 
 | `SERVICE_ACCOUNT` | *(from `infra/.env`)* | Spark job service account |
 | `SUBNET` | *(Dataproc default)* | VPC subnet for private networking |
 | `HISTORY_SERVER` | *(none)* | Persistent History Server for post-job Spark UI access |
+
+### Pipeline CLI args
+
+When invoking `main.py` directly via Dataproc Serverless batch, the following args are available:
+
+| Arg | Required | Description |
+|-----|----------|-------------|
+| `--source_name` | yes | Source cluster identifier; also the YAML file stem |
+| `--db_name` | yes | Database name within the cluster config |
+| `--tbl_name` | yes | Table name within the database config |
+| `--gcs_bucket` | yes | GCS bucket for YAML configs, artifacts, and BQ staging |
+| `--project` | yes | GCP project ID |
+| `--run_id` | no | Optional unique run identifier for tracing (defaults to unset) |
+| `--source_type` | no | Config path tier 1 — enables hierarchical GCS path when set together with `--source_group` |
+| `--source_group` | no | Config path tier 2 — enables hierarchical GCS path when set together with `--source_type` |

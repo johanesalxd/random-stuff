@@ -1,0 +1,26 @@
+registra_type: REPLICATION
+source_name: demo_cluster
+source_type: postgres
+source_group: demo
+cron_schedule: "0 18 * * *"
+
+data_config:
+  thelook:
+    tables:
+      users:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: created_at
+        upsert_key: [id]
+        partition_keys:
+          - col_name: created_at
+            col_type: timestamp
+        z_order_by: [gender]
+
+      orders:
+        etl_mode: FULL_RELOAD
+
+      order_items:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: created_at

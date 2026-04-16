@@ -1,0 +1,94 @@
+registra_type: REPLICATION
+source_name: my_cluster
+source_type: postgres
+source_group: my_group        # used when deploying with --source_type / --source_group
+cron_schedule: "0 6 * * *"   # informational only — not enforced by the pipeline
+
+# data_config structure:
+#
+#   <db_name>:          -> BigQuery dataset: raw_<db_name> (hyphens -> underscores)
+#     tables:
+#       <tbl_name>:     -> BigQuery table: <tbl_name> (or tbl_name_alias if set)
+#         ...
+#
+# JDBC URL is resolved from Secret Manager by convention:
+#   projects/<project>/secrets/<source_name>-jdbc-url/versions/latest
+#
+# BigQuery writes use writeMethod=indirect (GCS staging + BQ load job).
+# The gcs_bucket argument is reused as the temporary staging bucket.
+
+data_config:
+  my_database:
+    tables:
+
+      # ── Full reload ──────────────────────────────────────────────────────────
+      # Truncates and replaces the BQ target table on every run.
+      products:
+        etl_mode: FULL_RELOAD
+
+      # ── Incremental + upsert (MERGE) ─────────────────────────────────────────
+      # backfill_id is the watermark column — only rows newer than the last run
+      # are extracted. upsert_key enables BQ MERGE DML for idempotent upserts.
+      customers:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: updated_at
+        upsert_key: [id]
+        partition_keys:
+          - col_name: created_at
+            col_type: timestamp
+        z_order_by: [country, status]
+
+      # ── Incremental + append (no upsert_key) ────────────────────────────────
+      # Suitable for immutable event / log tables. Rows are only appended;
+      # the watermark prevents re-reading already-loaded rows.
+      events:
+        etl_mode: INCREMENTAL
+        backfill_filters:
+          - backfill_id: event_time
+
+      # ── Omitting etl_mode (customer convention) ──────────────────────────────
+      # etl_mode is optional. When omitted, the pipeline infers it:
+      #   - INCREMENTAL when backfill_filters are present (this table)
+      #   - FULL_RELOAD  when backfill_filters are absent
+      # This is identical in behaviour to setting etl_mode: INCREMENTAL explicitly.
+      audit_log:
+        backfill_filters:
+          - backfill_id: created_at
+
+      # ── tbl_name_alias: override BQ target table name ────────────────────────
+      # Use when the source table name differs from the desired BQ table name.
+      # Common with quoted PascalCase Postgres table names that need a
+      # snake_case alias in BigQuery.
+      # JDBC reads from '"ApprovalWorkflows"' -> BQ table = approval_workflows.
+      '"ApprovalWorkflows"':
+        tbl_name_alias: approval_workflows
+        etl_mode: FULL_RELOAD
+
+      # ── Dotted schema.table name ─────────────────────────────────────────────
+      # When tbl_name contains a dot, it is used as-is for JDBC (no public.
+      # prefix added). The BQ table name is schema_table (dot -> underscore),
+      # unless tbl_name_alias overrides it.
+      # JDBC source: saas.tenant_lookups  ->  BQ table: saas_tenant_lookups
+      saas.tenant_lookups:
+        backfill_filters:
+          - backfill_id: updated_at
+        upsert_key: [id]
+
+      # ── Parallel JDBC reads (pagination) ────────────────────────────────────
+      # For large tables, is_paginated splits the JDBC read across multiple
+      # Spark partitions. pagination_key must be a numeric or date column.
+      #
+      # IMPORTANT — pagination_size is the JDBC numPartitions value (number
+      # of parallel database connections), NOT a row batch size. Keep it
+      # between 1 and 200. Values above 200 are capped automatically with a
+      # warning. Do not set this to a row count like 1,000,000 — that would
+      # attempt to open one million parallel connections.
+      #
+      # Typical values: 4–20 for most tables; up to ~100 for very large
+      # tables with a well-distributed partition key.
+      large_table:
+        etl_mode: FULL_RELOAD
+        is_paginated: true
+        pagination_key: id
+        pagination_size: 20   # number of parallel JDBC partitions (not row count)

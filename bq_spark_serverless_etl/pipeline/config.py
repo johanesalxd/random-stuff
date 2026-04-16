@@ -1,21 +1,47 @@
 """Pipeline configuration: YAML schema (Pydantic) and GCS loader.
 
-Config files are stored at:
-  gs://<bucket>/configs/<source_name>/<db_name>/<tbl_name>.yaml
+Config files use a hierarchical, cluster-level format. One YAML file covers
+an entire source cluster (all databases and tables). Two GCS path conventions
+are supported:
 
-Secrets (JDBC URLs, passwords) are stored in GCP Secret Manager and
-referenced by their resource name in the YAML, never inline.
+  Flat (simple):
+    gs://<bucket>/<configs_prefix>/<source_name>.yaml
+
+  Hierarchical (mirrors customer layout):
+    gs://<bucket>/<configs_prefix>/<source_type>/<source_group>/<source_name>.yaml
+
+The hierarchical path is used when --source_type and --source_group are
+provided; otherwise the flat path is used.
+
+The pipeline is invoked once per table; source_name, db_name, and tbl_name
+are passed as CLI/procedure arguments and used to select the correct table
+entry from the YAML.
+
+Secrets (JDBC URLs) are resolved by convention from Secret Manager:
+  projects/<project>/secrets/<source_name>-jdbc-url/versions/latest
+
+Never store credentials inline in config files.
 """
 
 import logging
 from enum import Enum
-from typing import Any
 
 import yaml
 from google.cloud import secretmanager, storage
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+#: Maximum safe number of JDBC partitions (numPartitions). Values above this
+#: cap are clamped by the TableConfig validator with a warning.
+_MAX_PARTITIONS = 200
+
+#: Default number of JDBC partitions when pagination is disabled.
+_DEFAULT_NUM_PARTITIONS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -34,109 +60,231 @@ class SourceType(str, Enum):
     # COCKROACHDB = "cockroachdb"  # future
 
 
-class WriteMode(str, Enum):
-    """BigQuery write modes."""
-
-    OVERWRITE = "overwrite"
-    APPEND = "append"
-    MERGE = "merge"
-
-
-class ExtractionMode(str, Enum):
-    """Extraction strategy."""
-
-    FULL = "full"
-    INCREMENTAL = "incremental"
-
-
 # ---------------------------------------------------------------------------
-# Sub-models
+# Cluster YAML models  (hierarchical, customer-style)
 # ---------------------------------------------------------------------------
 
 
-class SourceConfig(BaseModel):
-    """Source connection configuration."""
+class BackfillFilter(BaseModel):
+    """Describes the watermark column used for incremental extraction."""
 
-    type: SourceType
+    backfill_id: str = Field(description="Column name used as the high-watermark.")
 
-    # Postgres-specific (ignored for other source types)
-    jdbc_url_secret: str | None = Field(
+    model_config = {"extra": "allow"}
+
+
+class PartitionKey(BaseModel):
+    """Describes a BigQuery partition column."""
+
+    col_name: str = Field(description="Column to partition by.")
+    col_type: str = Field(description="Column data type (e.g. timestamp, date).")
+
+    model_config = {"extra": "allow"}
+
+
+class TableConfig(BaseModel):
+    """Per-table configuration entry inside data_config.
+
+    etl_mode is optional. When omitted:
+      - INCREMENTAL is assumed when backfill_filters are present.
+      - FULL_RELOAD is assumed when backfill_filters are absent.
+
+    This matches the customer convention where most tables are implicitly
+    incremental and only specify FULL_RELOAD explicitly.
+    """
+
+    etl_mode: str | None = Field(
         default=None,
         description=(
-            "GCP Secret Manager resource name for the JDBC URL. "
-            "Format: projects/<project>/secrets/<name>/versions/latest"
+            "ETL strategy: FULL_RELOAD or INCREMENTAL. "
+            "Inferred from backfill_filters when omitted."
         ),
     )
-    table: str | None = Field(
+    backfill_filters: list[BackfillFilter] = Field(
+        default_factory=list,
+        description=(
+            "Watermark columns for incremental extraction. "
+            "Only the first entry is used."
+        ),
+    )
+    upsert_key: list[str] = Field(
+        default_factory=list,
+        description="Columns that uniquely identify a row for upsert.",
+    )
+    partition_keys: list[PartitionKey] = Field(
+        default_factory=list,
+        description="BigQuery partition columns. Only the first entry is used.",
+    )
+    z_order_by: list[str] = Field(
+        default_factory=list,
+        description="Columns for BigQuery clustering (analogous to Z-order).",
+    )
+    is_paginated: bool = Field(
+        default=False,
+        description="Enable parallel JDBC reads via a pagination key.",
+    )
+    pagination_key: str | None = Field(
         default=None,
-        description="Fully qualified source table, e.g. public.users",
+        description="Column used for parallel JDBC partitioning.",
+    )
+    pagination_size: int = Field(
+        default=_DEFAULT_NUM_PARTITIONS,
+        description=(
+            "Number of JDBC partitions (numPartitions) for parallel reads. "
+            "This is a Spark JDBC partition count — NOT a row batch size. "
+            f"Keep <= {_MAX_PARTITIONS}; values above that are capped with a "
+            "warning to prevent spawning excessive parallel JDBC connections."
+        ),
+    )
+
+    @field_validator("pagination_size", mode="after")
+    @classmethod
+    def _cap_pagination_size(cls, v: int) -> int:
+        """Cap pagination_size to prevent excessive JDBC connections.
+
+        Customer configs often set this field as a row-count (e.g. 1_000_000)
+        rather than a partition count. Passing 1 million as numPartitions to
+        Spark JDBC would spawn one million parallel connections, which is
+        catastrophic. Cap at _MAX_PARTITIONS and warn so the pipeline stays
+        safe even when the caller misuses the field.
+        """
+        if v > _MAX_PARTITIONS:
+            logger.warning(
+                "pagination_size=%d exceeds the maximum safe partition count (%d). "
+                "This field is the JDBC numPartitions value, not a row count. "
+                "Capping to %d to prevent excessive parallel connections.",
+                v,
+                _MAX_PARTITIONS,
+                _MAX_PARTITIONS,
+            )
+            return _MAX_PARTITIONS
+        return v
+
+    tbl_name_alias: str | None = Field(
+        default=None,
+        description=(
+            "Override for the BigQuery target table name. "
+            "When set, the BQ table will be named by this value instead of tbl_name."
+        ),
+    )
+
+    model_config = {"extra": "allow"}
+
+
+class DatabaseConfig(BaseModel):
+    """Per-database section inside data_config."""
+
+    tables: dict[str, TableConfig] = Field(default_factory=dict)
+
+    model_config = {"extra": "allow"}
+
+
+class ClusterConfig(BaseModel):
+    """Root cluster-level YAML schema.
+
+    One file per source cluster, containing configuration for all
+    databases and tables served by that cluster.
+    """
+
+    source_name: str = Field(description="Logical identifier for the source cluster.")
+    source_type: SourceType = Field(description="Source database technology.")
+    source_group: str = Field(description="Organisational grouping for the source.")
+    data_config: dict[str, DatabaseConfig] = Field(
+        default_factory=dict,
+        description="Nested mapping of database_name -> DatabaseConfig.",
+    )
+
+    model_config = {"extra": "allow"}
+
+
+# ---------------------------------------------------------------------------
+# Flat runtime model
+# ---------------------------------------------------------------------------
+
+
+class PipelineConfig(BaseModel):
+    """Flat runtime configuration for a single pipeline invocation.
+
+    Derived from ClusterConfig by resolving the specific db_name / tbl_name
+    requested for this run. All consumers (extractors, writers) use this model
+    directly -- no nested sub-models.
+    """
+
+    # Identity
+    source_name: str
+    source_type: SourceType
+    source_group: str
+    db_name: str
+    tbl_name: str
+
+    # Source
+    jdbc_url_secret: str = Field(
+        description=(
+            "GCP Secret Manager resource name for the JDBC URL. "
+            "Derived by convention: "
+            "projects/<project>/secrets/<source_name>-jdbc-url/versions/latest"
+        )
+    )
+    source_table: str = Field(
+        description=(
+            "Fully qualified source table for JDBC reads. "
+            "If tbl_name contains a dot (schema.table), used as-is. "
+            "Otherwise defaults to public.<tbl_name>."
+        )
     )
     partition_column: str | None = Field(
         default=None,
         description="Column used to parallelise JDBC reads via numPartitions.",
     )
-    lower_bound: int | None = Field(
-        default=None,
-        description=(
-            "Lower bound for JDBC partition column (required if partition_column set)."
-        ),
-    )
-    upper_bound: int | None = Field(
-        default=None,
-        description=(
-            "Upper bound for JDBC partition column (required if partition_column set)."
-        ),
-    )
-    num_partitions: int = Field(
-        default=10,
-        description="Number of JDBC read partitions.",
-    )
+    num_partitions: int = Field(default=_DEFAULT_NUM_PARTITIONS)
     fetch_size: int = Field(
         default=10000,
-        description="JDBC fetchSize (rows per round trip).",
-    )
-
-    @model_validator(mode="after")
-    def validate_source_fields(self) -> "SourceConfig":
-        if self.type == SourceType.POSTGRES:
-            missing = [f for f in ("jdbc_url_secret", "table") if not getattr(self, f)]
-            if missing:
-                raise ValueError(f"Postgres source requires: {', '.join(missing)}")
-        return self
-
-
-class TargetConfig(BaseModel):
-    """BigQuery target configuration."""
-
-    project: str = Field(description="GCP project ID for the target dataset.")
-    dataset: str = Field(description="BigQuery dataset name.")
-    table: str = Field(description="BigQuery table name.")
-    write_mode: WriteMode = Field(
-        default=WriteMode.OVERWRITE,
-        description="How to write data into the target table.",
-    )
-    merge_keys: list[str] = Field(
-        default_factory=list,
         description=(
-            "Columns that uniquely identify a row for upsert (write_mode=merge). "
-            "Required when write_mode is merge. Example: [id] or [user_id, event_time]."
+            "JDBC fetchSize — number of rows fetched per round-trip from the "
+            "database. Not currently YAML-configurable; change at source if needed."
         ),
     )
-    partition_field: str | None = Field(
-        default=None,
-        description="Column used for BigQuery time partitioning.",
+
+    # Target
+    project: str = Field(description="GCP project ID for target BigQuery dataset.")
+    dataset: str = Field(
+        description=(
+            "BigQuery dataset name. Derived by convention: raw_{db_name} "
+            "with hyphens replaced by underscores."
+        )
     )
-    clustering_fields: list[str] = Field(
-        default_factory=list,
-        description="Columns used for BigQuery clustering (max 4).",
+    table: str = Field(
+        description=(
+            "BigQuery table name. Equals tbl_name_alias if set, otherwise "
+            "tbl_name (with dots replaced by underscores for dotted names)."
+        )
+    )
+    write_mode: str = Field(
+        description="Write strategy: overwrite | append | merge.",
+    )
+    merge_keys: list[str] = Field(default_factory=list)
+    partition_field: str | None = Field(default=None)
+    clustering_fields: list[str] = Field(default_factory=list)
+
+    # Extraction
+    extraction_mode: str = Field(
+        description="Extraction strategy: full | incremental.",
+    )
+    watermark_column: str | None = Field(default=None)
+
+    # Infrastructure
+    gcs_bucket: str = Field(
+        description=(
+            "GCS bucket used for pipeline configs and BigQuery indirect write "
+            "staging (temporaryGcsBucket). Reuses the config bucket so no "
+            "additional infrastructure is needed."
+        )
     )
 
     @model_validator(mode="after")
-    def validate_merge_keys(self) -> "TargetConfig":
-        if self.write_mode == WriteMode.MERGE and not self.merge_keys:
-            raise ValueError(
-                "write_mode=merge requires merge_keys to be set in the target config."
-            )
+    def _validate_merge_keys(self) -> "PipelineConfig":
+        if self.write_mode == "merge" and not self.merge_keys:
+            raise ValueError("write_mode=merge requires merge_keys to be non-empty.")
         return self
 
     @property
@@ -145,48 +293,197 @@ class TargetConfig(BaseModel):
         return f"{self.project}.{self.dataset}.{self.table}"
 
 
-class ExtractionConfig(BaseModel):
-    """Extraction strategy configuration."""
+# ---------------------------------------------------------------------------
+# Config mapping helpers
+# ---------------------------------------------------------------------------
 
-    mode: ExtractionMode = Field(default=ExtractionMode.FULL)
-    watermark_column: str | None = Field(
-        default=None,
-        description="Column used as high-watermark for incremental extraction.",
+_ETL_MODE_TO_EXTRACTION = {
+    "FULL_RELOAD": "full",
+    "INCREMENTAL": "incremental",
+}
+
+
+def _resolve_etl_mode(tbl_cfg: TableConfig) -> str:
+    """Resolve the effective ETL mode for a table.
+
+    When etl_mode is explicitly set, that value is used directly.
+    When omitted, the mode is inferred:
+      - INCREMENTAL if backfill_filters are present (customer convention)
+      - FULL_RELOAD otherwise
+
+    Args:
+        tbl_cfg: Parsed table configuration entry.
+
+    Returns:
+        Resolved ETL mode string: "FULL_RELOAD" or "INCREMENTAL".
+    """
+    if tbl_cfg.etl_mode is not None:
+        return tbl_cfg.etl_mode
+    return "INCREMENTAL" if tbl_cfg.backfill_filters else "FULL_RELOAD"
+
+
+def _derive_write_mode(etl_mode: str, upsert_key: list[str]) -> str:
+    """Derive the write mode from the etl_mode and presence of upsert_key.
+
+    Args:
+        etl_mode: Resolved ETL mode string.
+        upsert_key: List of merge key columns.
+
+    Returns:
+        One of "overwrite", "append", or "merge".
+    """
+    if etl_mode == "FULL_RELOAD":
+        return "overwrite"
+    if etl_mode == "INCREMENTAL":
+        return "merge" if upsert_key else "append"
+    # Unknown etl_mode -- fall back to overwrite (safe default)
+    logger.warning("Unknown etl_mode '%s' -- defaulting to overwrite.", etl_mode)
+    return "overwrite"
+
+
+def _derive_dataset(db_name: str) -> str:
+    """Derive the BigQuery dataset name from the database name.
+
+    Convention: raw_{db_name} with hyphens replaced by underscores.
+
+    Args:
+        db_name: Source database or schema name.
+
+    Returns:
+        BigQuery dataset name.
+    """
+    return f"raw_{db_name.replace('-', '_')}"
+
+
+def _resolve_table_names(tbl_name: str, tbl_cfg: TableConfig) -> tuple[str, str]:
+    """Resolve source_table (JDBC) and BQ target table name.
+
+    Handles three cases:
+      1. Dotted name (schema.table): JDBC uses it as-is; BQ name is
+         schema_table (underscored), unless tbl_name_alias overrides.
+      2. Plain name: JDBC prepends 'public.'; BQ name equals tbl_name,
+         unless tbl_name_alias overrides.
+      3. tbl_name_alias always wins for the BQ side.
+
+    Args:
+        tbl_name: The (already quote-stripped) table key from the YAML.
+        tbl_cfg: Parsed table configuration entry.
+
+    Returns:
+        Tuple of (source_table, bq_table_name).
+    """
+    if "." in tbl_name:
+        source_table = tbl_name
+        schema_part, table_part = tbl_name.split(".", 1)
+        default_bq_name = f"{schema_part}_{table_part}"
+    else:
+        source_table = f"public.{tbl_name}"
+        default_bq_name = tbl_name
+
+    bq_table_name = tbl_cfg.tbl_name_alias or default_bq_name
+    return source_table, bq_table_name
+
+
+def _build_pipeline_config(
+    cluster: ClusterConfig,
+    db_name: str,
+    tbl_name: str,
+    project: str,
+    gcs_bucket: str,
+) -> "PipelineConfig":
+    """Build a flat PipelineConfig from a ClusterConfig for one table.
+
+    Table name lookup normalises surrounding quotes from the YAML key
+    (e.g. '"ApprovalWorkflows"' -> 'ApprovalWorkflows') so the caller
+    never needs to quote the tbl_name argument.
+
+    Args:
+        cluster: Parsed cluster-level YAML config.
+        db_name: Database or schema name to look up.
+        tbl_name: Table name to look up (quotes are stripped automatically).
+        project: GCP project ID (used for secret name and BQ target).
+        gcs_bucket: GCS bucket for configs and BQ indirect write staging.
+
+    Returns:
+        Flat PipelineConfig ready for use by extractors and writers.
+
+    Raises:
+        KeyError: If db_name or tbl_name is not found in the cluster config.
+    """
+    if db_name not in cluster.data_config:
+        raise KeyError(
+            f"Database '{db_name}' not found in cluster config for "
+            f"source '{cluster.source_name}'. "
+            f"Available: {sorted(cluster.data_config)}"
+        )
+    db_cfg = cluster.data_config[db_name]
+
+    # Normalise table keys: strip surrounding quotes that YAML preserves
+    # (e.g. '"ApprovalWorkflows"' -> 'ApprovalWorkflows')
+    normalized_tables = {k.strip("\"'"): v for k, v in db_cfg.tables.items()}
+    clean_tbl_name = tbl_name.strip("\"'")
+
+    if clean_tbl_name not in normalized_tables:
+        raise KeyError(
+            f"Table '{clean_tbl_name}' not found under db '{db_name}' in cluster "
+            f"config for source '{cluster.source_name}'. "
+            f"Available: {sorted(normalized_tables)}"
+        )
+    tbl_cfg = normalized_tables[clean_tbl_name]
+
+    etl_mode = _resolve_etl_mode(tbl_cfg)
+    upsert_key = tbl_cfg.upsert_key
+
+    if etl_mode not in _ETL_MODE_TO_EXTRACTION:
+        raise ValueError(
+            f"Unknown etl_mode '{etl_mode}' for table '{clean_tbl_name}' "
+            f"in source '{cluster.source_name}'. "
+            f"Expected one of: {sorted(_ETL_MODE_TO_EXTRACTION)}"
+        )
+    extraction_mode = _ETL_MODE_TO_EXTRACTION[etl_mode]
+    write_mode = _derive_write_mode(etl_mode, upsert_key)
+    watermark_column = (
+        tbl_cfg.backfill_filters[0].backfill_id if tbl_cfg.backfill_filters else None
     )
-    watermark_table: str | None = Field(
-        default=None,
-        description=(
-            "BigQuery table (project.dataset.table) that stores the last "
-            "watermark value. Defaults to <target.dataset>._watermarks."
-        ),
+    partition_field = (
+        tbl_cfg.partition_keys[0].col_name if tbl_cfg.partition_keys else None
+    )
+    partition_column = tbl_cfg.pagination_key if tbl_cfg.is_paginated else None
+    num_partitions = (
+        tbl_cfg.pagination_size if tbl_cfg.is_paginated else _DEFAULT_NUM_PARTITIONS
+    )
+
+    jdbc_url_secret = (
+        f"projects/{project}/secrets/{cluster.source_name}-jdbc-url/versions/latest"
+    )
+
+    source_table, bq_table_name = _resolve_table_names(clean_tbl_name, tbl_cfg)
+
+    return PipelineConfig(
+        source_name=cluster.source_name,
+        source_type=cluster.source_type,
+        source_group=cluster.source_group,
+        db_name=db_name,
+        tbl_name=clean_tbl_name,
+        jdbc_url_secret=jdbc_url_secret,
+        source_table=source_table,
+        partition_column=partition_column,
+        num_partitions=num_partitions,
+        project=project,
+        dataset=_derive_dataset(db_name),
+        table=bq_table_name,
+        write_mode=write_mode,
+        merge_keys=upsert_key,
+        partition_field=partition_field,
+        clustering_fields=tbl_cfg.z_order_by,
+        extraction_mode=extraction_mode,
+        watermark_column=watermark_column,
+        gcs_bucket=gcs_bucket,
     )
 
 
 # ---------------------------------------------------------------------------
-# Root config model
-# ---------------------------------------------------------------------------
-
-
-class PipelineConfig(BaseModel):
-    """Root pipeline configuration loaded from a GCS YAML file."""
-
-    source_name: str = Field(description="Logical source group name.")
-    db_name: str = Field(description="Database or schema name.")
-    tbl_name: str = Field(description="Table name.")
-
-    source: SourceConfig
-    target: TargetConfig
-    extraction: ExtractionConfig = Field(default_factory=ExtractionConfig)
-
-    # Carry-through metadata
-    extra: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arbitrary extra metadata (not used by the pipeline).",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Loaders
+# GCS loader
 # ---------------------------------------------------------------------------
 
 
@@ -199,21 +496,62 @@ def _read_gcs_yaml(bucket_name: str, blob_path: str) -> dict:
     return yaml.safe_load(content)
 
 
+def _build_blob_path(
+    source_name: str,
+    configs_prefix: str,
+    source_type: str | None,
+    source_group: str | None,
+) -> str:
+    """Construct the GCS blob path for a cluster config file.
+
+    When source_type and source_group are both provided, uses the
+    hierarchical layout that mirrors the customer's repo structure:
+      <configs_prefix>/<source_type>/<source_group>/<source_name>.yaml
+
+    Otherwise falls back to the flat layout:
+      <configs_prefix>/<source_name>.yaml
+
+    Args:
+        source_name: Source cluster name.
+        configs_prefix: Top-level prefix inside the bucket.
+        source_type: Optional source type (e.g. "postgres").
+        source_group: Optional source group (e.g. "prod_postgres_priority").
+
+    Returns:
+        GCS blob path string (without bucket name or gs:// prefix).
+    """
+    if source_type and source_group:
+        return f"{configs_prefix}/{source_type}/{source_group}/{source_name}.yaml"
+    return f"{configs_prefix}/{source_name}.yaml"
+
+
 def load_config(
     source_name: str,
     db_name: str,
     tbl_name: str,
     gcs_bucket: str,
+    project: str,
     configs_prefix: str = "configs",
+    source_type: str | None = None,
+    source_group: str | None = None,
 ) -> PipelineConfig:
-    """Load and validate a PipelineConfig from GCS.
+    """Load and validate a PipelineConfig from a GCS cluster YAML file.
+
+    Downloads the cluster-level config file, parses it as a ClusterConfig,
+    then extracts and maps the specific db_name/tbl_name entry to a flat
+    PipelineConfig.
 
     Args:
-        source_name: Logical source group (maps to a top-level configs folder).
-        db_name: Database or schema name.
-        tbl_name: Table name.
+        source_name: Source cluster name (YAML file stem, secret key prefix).
+        db_name: Database or schema name to extract.
+        tbl_name: Table name to extract (surrounding quotes are stripped).
         gcs_bucket: GCS bucket name (without gs:// prefix).
+        project: GCP project ID (used for secret name and BQ target).
         configs_prefix: Prefix inside the bucket where configs live.
+        source_type: Optional. When set alongside source_group, enables the
+            hierarchical GCS path layout:
+            <configs_prefix>/<source_type>/<source_group>/<source_name>.yaml
+        source_group: Optional. See source_type.
 
     Returns:
         Validated PipelineConfig instance.
@@ -221,17 +559,19 @@ def load_config(
     Raises:
         google.cloud.exceptions.NotFound: If the config file does not exist.
         pydantic.ValidationError: If the YAML does not match the schema.
+        KeyError: If db_name or tbl_name is not present in the cluster YAML.
     """
-    blob_path = f"{configs_prefix}/{source_name}/{db_name}/{tbl_name}.yaml"
+    blob_path = _build_blob_path(source_name, configs_prefix, source_type, source_group)
     logger.info("Loading config from gs://%s/%s", gcs_bucket, blob_path)
     raw = _read_gcs_yaml(gcs_bucket, blob_path)
 
-    # Inject identity fields so the config is self-describing
-    raw.setdefault("source_name", source_name)
-    raw.setdefault("db_name", db_name)
-    raw.setdefault("tbl_name", tbl_name)
+    cluster = ClusterConfig.model_validate(raw)
+    return _build_pipeline_config(cluster, db_name, tbl_name, project, gcs_bucket)
 
-    return PipelineConfig.model_validate(raw)
+
+# ---------------------------------------------------------------------------
+# Secret resolution
+# ---------------------------------------------------------------------------
 
 
 def resolve_secret(secret_resource_name: str) -> str:

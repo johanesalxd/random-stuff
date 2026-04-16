@@ -14,8 +14,9 @@
 --          MY_CONNECTION_NAME
 --
 --   2. The connection's service account must have:
---        - roles/storage.objectViewer   on the GCS bucket (to read main.py + wheel)
---        - roles/secretmanager.secretAccessor  (to resolve JDBC URL secrets)
+--        - roles/storage.objectAdmin    on the GCS bucket
+--          (read configs, write indirect write staging files)
+--        - roles/secretmanager.secretAccessor  (resolve JDBC URL secrets)
 --        - roles/bigquery.dataEditor    on target datasets
 --
 --   3. Replace all <...> placeholders before running.
@@ -30,18 +31,28 @@
 -- extractor via the registry in pipeline/registry.py.
 --
 -- Parameters:
---   source_name     Logical source group (maps to a configs/ top-level folder)
---   db_name         Database or schema name
---   tbl_name        Table name
---   gcs_bucket      GCS bucket where pipeline configs and wheels are stored
---   run_id          Unique run identifier (pass GENERATE_UUID() from callers)
+--   source_name    Source cluster name (YAML file stem in GCS)
+--   db_name        Database or schema name
+--   tbl_name       Table name
+--   gcs_bucket     GCS bucket for configs and BQ indirect write staging
+--   project        GCP project ID (secret resolution + BQ target dataset)
+--   run_id         Unique run identifier (pass GENERATE_UUID() from callers)
+--   source_type    Optional. Source type (e.g. 'postgres'). When set together
+--                  with source_group, enables the hierarchical GCS path:
+--                  <configs_prefix>/<source_type>/<source_group>/<source_name>.yaml
+--                  Pass '' to use the flat path configs/<source_name>.yaml.
+--   source_group   Optional. Source group (e.g. 'prod_postgres_priority').
+--                  Pass '' to use the flat path.
 
 CREATE OR REPLACE PROCEDURE `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
     IN source_name  STRING,
     IN db_name      STRING,
     IN tbl_name     STRING,
     IN gcs_bucket   STRING,
-    IN run_id       STRING
+    IN project      STRING,
+    IN run_id       STRING,
+    IN source_type  STRING,
+    IN source_group STRING
 )
 WITH CONNECTION `<MY_PROJECT>.<MY_REGION>.<MY_CONNECTION_NAME>`
 OPTIONS (
@@ -80,14 +91,31 @@ LANGUAGE PYTHON;
 -- Usage examples
 -- ---------------------------------------------------------------------------
 
--- Direct invocation from BigQuery console or bq CLI:
+-- Flat path (simple): config at gs://my-bucket/configs/demo_cluster.yaml
 --
 --   CALL `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
---       'thelook',
---       'public',
---       'orders',
+--       'demo_cluster',    -- source_name
+--       'thelook',         -- db_name
+--       'orders',          -- tbl_name
 --       'my-config-bucket',
---       GENERATE_UUID()
+--       'my-gcp-project',
+--       GENERATE_UUID(),
+--       '',                -- source_type: '' = use flat path
+--       ''                 -- source_group: '' = use flat path
+--   );
+
+-- Hierarchical path (mirrors customer repo layout):
+--   config at gs://my-bucket/configs/postgres/prod_postgres_priority/my_cluster.yaml
+--
+--   CALL `<MY_PROJECT>.<MY_DATASET>.run_pipeline`(
+--       'my_cluster',
+--       'my-database',
+--       'my_table',
+--       'my-config-bucket',
+--       'my-gcp-project',
+--       GENERATE_UUID(),
+--       'postgres',                  -- source_type
+--       'prod_postgres_priority'     -- source_group
 --   );
 
 -- ---------------------------------------------------------------------------
@@ -107,15 +135,15 @@ LANGUAGE PYTHON;
 --   }
 --
 --   CALL `${dataform.projectConfig.defaultDatabase}.<MY_DATASET>.run_pipeline`(
+--       'demo_cluster',
 --       'thelook',
---       'public',
 --       'orders',
 --       'my-config-bucket',
---       GENERATE_UUID()
+--       '${dataform.projectConfig.defaultDatabase}',
+--       GENERATE_UUID(),
+--       '',
+--       ''
 --   );
---
--- Dataform will execute this as a BigQuery job within the workflow DAG,
--- and downstream SQL models can declare it as a dependency via `dependencies`.
 
 -- ---------------------------------------------------------------------------
 -- Cloud Composer / Airflow integration
@@ -128,8 +156,9 @@ LANGUAGE PYTHON;
 --           "query": {
 --               "query": """
 --                   CALL `my-project.my_dataset.run_pipeline`(
---                       'thelook', 'public', 'orders',
---                       'my-config-bucket', '{{ run_id }}'
+--                       'demo_cluster', 'thelook', 'orders',
+--                       'my-config-bucket', 'my-gcp-project',
+--                       '{{ run_id }}', '', ''
 --                   )
 --               """,
 --               "useLegacySql": False,

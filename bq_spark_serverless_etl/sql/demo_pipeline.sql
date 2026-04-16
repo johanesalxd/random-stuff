@@ -28,29 +28,38 @@
 
 -- Full load: replace orders table on every run
 CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
-    'thelook',      -- source_name (maps to configs/thelook/ in GCS)
-    'public',       -- db_name    (Postgres schema)
-    'orders',       -- tbl_name   (table within the schema)
+    'demo_cluster',  -- source_name (maps to configs/demo_cluster.yaml in GCS)
+    'thelook',       -- db_name    (database in data_config)
+    'orders',        -- tbl_name   (table within the database)
     'MY_GCS_BUCKET',
-    GENERATE_UUID()
+    'MY_PROJECT',
+    GENERATE_UUID(),
+    '',              -- source_type: '' = flat path
+    ''               -- source_group: '' = flat path
 );
 
 -- Upsert: merge users on primary key (id), safe to run multiple times
 CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
+    'demo_cluster',
     'thelook',
-    'public',
     'users',
     'MY_GCS_BUCKET',
-    GENERATE_UUID()
+    'MY_PROJECT',
+    GENERATE_UUID(),
+    '',
+    ''
 );
 
 -- Incremental: append only new order_items since last watermark
 CALL `MY_PROJECT.MY_DATASET.run_pipeline`(
+    'demo_cluster',
     'thelook',
-    'public',
     'order_items',
     'MY_GCS_BUCKET',
-    GENERATE_UUID()
+    'MY_PROJECT',
+    GENERATE_UUID(),
+    '',
+    ''
 );
 
 -- ============================================================================

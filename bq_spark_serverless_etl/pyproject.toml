@@ -24,8 +24,6 @@ dev = [
     # Seed script dependencies (scripts/seed_data.py)
     "pandas>=2.0",
     "psycopg2-binary>=2.9",
-    "db-dtypes>=1.0",
-    "pyopenssl>=26.0.0",
 ]
 
 [build-system]
