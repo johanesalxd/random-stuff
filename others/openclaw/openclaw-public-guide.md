@@ -7,7 +7,7 @@
 > belong in `WORKSPACE_REFERENCE.md` and local workspace files, not here.
 >
 > **OpenClaw docs:** https://docs.openclaw.ai/
-> **Last updated:** 2026-04-06 (v15)
+> **Last updated:** 2026-04-17 (v17)
 
 ---
 
@@ -42,6 +42,7 @@ is triggered by name. It contains the authoritative step-by-step procedures for:
 - Spa Day (Context Optimization) Protocol
 - Research Modes & llm-wiki Invocation Policy
 - Coding Task Protocol (Orchestrator Loop)
+- Skill Execution in Subagents
 
 Deep Analysis itself now lives in the dedicated `deep-analysis` skill, not inside
 `PROTOCOLS.md`.
@@ -67,11 +68,11 @@ These files serve specific lifecycle events — not injected on every session tu
 |------|---------|-------|
 | `skills/` | Workspace-specific skills | Load order (highest to lowest): (1) `<workspace>/skills/<name>/SKILL.md` — workspace-specific (this directory, highest precedence); (2) `<workspace>/.agents/skills/<name>/SKILL.md` — workspace-agent; (3) `~/.agents/skills/<name>/SKILL.md` — agent-shared; (4) `~/.openclaw/skills/<name>/SKILL.md` — managed/global; (5) OpenClaw bundled skills; (6) `skills.load.extraDirs` / other low-precedence injected skill dirs. When names collide, higher-tier entry wins. |
 | `canvas/` | Canvas UI files for node displays | e.g. `canvas/index.html`. Optional. |
-| `memory/` | All dated logs, project context, archives | Indexed by QMD. Not injected automatically — read via boot sequence or `memory_search`. |
+| `memory/` | All dated logs, project context, archives | Indexed by the active memory backend. Not injected automatically — read via boot sequence or `memory_search`. |
 
 ### Skills Registry: ClawHub
 
-Browse and install community skills at https://clawhub.com — the public skills
+Browse and install community skills at https://clawhub.ai — the public skills
 registry for OpenClaw.
 
 ```bash
@@ -176,6 +177,17 @@ graph LR
 
 ### Memory Tier Architecture
 
+The lean public rule is:
+
+- **L1** is active transactional state only.
+- **L2** is the rich searchable layer, including project files and dated logs.
+- **L3** is a very small durable canon because it is always injected.
+
+Two clarifications prevent a lot of confusion:
+
+- retrieval tools such as `memory_search` are **not** a tier
+- runtime context/cache is **not** memory
+
 ```mermaid
 graph TD
     Boot["Session Boot"] --> L1["L1 — STM\nshort-term-memory.md\nActive tasks · read at boot"]
@@ -195,80 +207,24 @@ graph TD
 
 > **memory_search** is the retrieval mechanism that searches L2 + L3 on demand — not a tier itself.
 
-### Memory Backend: QMD (Optional, Experimental)
+### Memory Backend (Current Default + Optional QMD)
 
-OpenClaw's default memory backend uses a built-in SQLite vector indexer.
-You can upgrade to **QMD** — a local-first search sidecar built by
-[Tobi Lütke](https://github.com/tobi/qmd) that combines BM25 keyword search
-+ vector embeddings + reranking, running entirely on-device via
-Bun + `node-llama-cpp`.
+Current OpenClaw setups commonly use the built-in memory stack as the normal default:
+SQLite storage plus Gemini-powered hybrid retrieval.
 
-**When to use QMD:** Memory files that contain dense exact-token data
-(config keys, IDs, numbers, precise strings) alongside semantic content
-benefit the most. Pure vector search misses exact tokens; QMD's BM25 layer
-catches them while vectors handle meaning.
+QMD is best treated as an optional local-first alternative or rollback path, not the
+default recommendation. It is most useful when your corpus contains many exact-token
+lookups such as config keys, IDs, numbers, and precise strings where BM25-style retrieval
+helps.
 
-**Prerequisites:**
+If you document QMD publicly, keep it to three ideas:
 
-- `bun` runtime (install via [mise](https://mise.jdx.dev/) or `brew install bun`)
-- `brew install sqlite` — extension-capable SQLite build required on macOS
-- Build QMD from source (bun blocks postinstall scripts by default):
+- use absolute paths for the binary
+- treat `openclaw memory status` as the health check, not the raw `qmd` CLI
+- prefer short keyword queries because BM25-style retrieval works better than verbose prose
 
-```bash
-# Install latest published package
-bun install -g @tobilu/qmd
-
-# Verify
-~/.bun/bin/qmd --version
-
-# If native bindings fail after install (common on bun because postinstall is blocked)
-cd ~/.bun/install/global/node_modules/better-sqlite3
-npm run build-release
-```
-
-**Config (`~/.openclaw/openclaw.json`):**
-
-```json5
-memory: {
-  backend: "qmd",
-  citations: "auto",
-  qmd: {
-    // Use absolute path — ~/.bun/bin is not on the gateway's PATH
-    command: "/absolute/path/to/.bun/bin/qmd",
-    includeDefaultMemory: false,
-    update: {
-      interval: "10m",       // reduce to 5m on machines with more RAM
-      debounceMs: 15000,
-      waitForBootSync: false  // non-blocking boot
-    },
-    limits: {
-      maxResults: 6,
-      timeoutMs: 4000
-    },
-    scope: {
-      default: "deny",
-      rules: [
-        { "action": "allow", "match": { "chatType": "direct" } },
-        { "action": "allow", "match": { "rawKeyPrefix": "agent:main:subagent:" } },
-        { "action": "allow", "match": { "rawKeyPrefix": "agent:vader-yolo:subagent:" } }
-      ]
-    }
-  }
-}
-```
-
-**Key notes:**
-
-- `includeDefaultMemory: false` prevents the default memory context from bleeding across
-  unrelated sessions. Set to `true` if you want the model's default memory available in
-  all sessions, but `false` is the recommended default for scoped multi-session workspaces.
-- `command` must be an absolute path — `~/.bun/bin` is typically not on the gateway's `PATH`.
-- `waitForBootSync: false` keeps session startup non-blocking. QMD indexes in the background.
-- **First search is slow:** QMD auto-downloads GGUF models (embedding + reranker) from HuggingFace on cold start. Subsequent searches are fast and fully local. On fast internet connections this is a one-time cost.
-- **Graceful fallback:** If QMD fails or the binary is missing, OpenClaw automatically falls back to the built-in SQLite indexer. No hard dependency.
-- **Verify the active backend:** After restart, run a `memory_search` — results will show `"provider": "qmd"` when QMD is active.
-- **Health check:** Use `openclaw memory status` — not `qmd status`. The `qmd` CLI maintains a separate database (`~/.cache/qmd/`) unrelated to the OpenClaw-managed instance (`~/.openclaw/agents/main/qmd/`). Only `openclaw memory status` reflects what actually powers `memory_search`. Key fields to check: `provider: "qmd"`, `dirty: false`, `files > 0`.
-- **Memory pressure (constrained hardware):** On 8 GB unified memory systems, QMD GGUF models add ~1–1.5 GB when loaded. Set `interval: "10m"` (vs default 5 m) to reduce background refresh pressure. macOS compresses inactive pages before touching SSD swap.
+Detailed install and rollback notes belong in instance-specific docs or a dedicated
+memory-backend appendix, not in the main public pattern guide.
 
 #### QMD Query Strategy
 
@@ -321,83 +277,21 @@ for retrieval (read this specific file).
 
 ### Context Optimization & Memory Compaction
 
-As workspace memory grows over weeks of use, boot context bloats —
-eventually causing **silent truncation** of injected files. OpenClaw enforces
-a per-file injection limit (`bootstrapMaxChars`, default 20,000 chars). Content
-beyond that limit is silently dropped, meaning the agent loses access to lessons
-and decisions without any error.
+As workspace memory grows, the real risk is silent truncation of injected files.
+The public rule is simple:
 
-**Targets:**
-- Boot context (all auto-injected files): **< 60KB**
-- MEMORY.md: **< 15KB** (well under the per-file injection limit)
-- Zero truncation of any injected file
+- keep boot context comfortably below injection limits
+- keep `MEMORY.md` intentionally small
+- archive detailed history into dated L2 files instead of bloating L3
 
-**Injection limits (official):**
-- Per-file cap: `agents.defaults.bootstrapMaxChars` = **20,000 chars** (default). Content beyond this is silently dropped.
-- Aggregate cap: `agents.defaults.bootstrapTotalMaxChars` = **150,000 chars** (default). Total across all injected files.
-- Both are configurable in `~/.openclaw/openclaw.json` if you need higher limits.
+Useful defaults to document publicly:
 
-**The Archive Convention:**
+- per-file injection cap is controlled by `bootstrapMaxChars`
+- aggregate injected-file cap is controlled by `bootstrapTotalMaxChars`
+- tool-heavy work benefits from a wider pre-compaction write window such as
+  `memoryFlush.softThresholdTokens: 25000`
 
-When MEMORY.md or other injected files grow too large, move detailed
-content to dated archive files:
-
-```
-memory/YYYY-MM-DD-memory-archive.md
-```
-
-These archives are NOT injected on every turn, but remain fully searchable
-via `memory_search` (QMD indexes all files in `memory/`). This preserves
-access while reducing boot context.
-
-**memoryFlush configuration:**
-
-OpenClaw's compaction pipeline includes a `memoryFlush` step that writes
-durable notes to disk before compaction summarizes the conversation history.
-The key config is `softThresholdTokens` — the token count at which
-memoryFlush fires *before* compaction begins.
-
-```json5
-// ~/.openclaw/openclaw.json
-"agents": {
-  "defaults": {
-    "compaction": {
-      "memoryFlush": {
-        "softThresholdTokens": 15000
-      }
-    }
-  }
-}
-```
-
-**Why 15,000?** A single large tool response (web fetch, financial data, long
-exec output) can jump 3–8k tokens in one turn. If `softThresholdTokens` is
-set too low (e.g., 4,000), a single large response can push the context past
-the threshold and straight into compaction — skipping the memoryFlush step
-entirely. The result: durable notes that should have been written to disk are
-instead compacted into the session summary and eventually lost.
-
-Setting `softThresholdTokens: 15000` gives a reliable pre-compaction write
-window. Tune upward if your sessions routinely use tools that return very
-large payloads.
-
-**Compaction Workflow (Distill & Flush):**
-
-When transactional state (STM) becomes bloated or a session involves
-many decisions, execute this compaction sequence:
-1. Write any active discussion or decision-in-flight → STM as a new
-   `## Active Context: <Topic>` section
-2. Move settled lessons, behavioral rules, tool quirks →
-   `MEMORY.md` (Lessons Learned). Only durable, timeless content.
-3. Move time-bound intelligence, research outputs, event records →
-   `memory/YYYY-MM-DD.md` (today's date). Dated snapshots, not permanent.
-4. Move project-specific outcomes, status changes →
-   `memory/projects.md`
-5. Trim STM: remove `[DONE]` tasks older than 2–3 entries, stale notes
-6. Confirm to user. Fresh session boot reconstructs from distilled files.
-
-**Measurement:** Use `wc -c` on all workspace files to measure actual
-boot context size. Run periodically (weekly or when sessions feel sluggish).
+The detailed Distill & Flush procedure belongs in workspace protocols, not the public guide.
 
 ### Session Reset Configuration
 
@@ -470,23 +364,23 @@ Aliases let you treat models as roles instead of hardcoded provider IDs.
 "agents": {
   "defaults": {
     "models": {
-      "github-copilot/gpt-5.4-mini": { "alias": "gpt54min" },
-      "github-copilot/gpt-5.4": { "alias": "gpt54" },
-      "github-copilot/gpt-5-mini": { "alias": "gpt5min" },
-      "github-copilot/grok-code-fast-1": { "alias": "grok" },
+      "openai-codex/gpt-5.4": { "alias": "gpt54" },
+      "openai-codex/gpt-5.4-mini": { "alias": "gpt54min" },
+      "github-copilot/gpt-5.4": { "alias": "gpt54-gh" },
+      "github-copilot/gpt-5.4-mini": { "alias": "gpt54min-gh" },
+      "github-copilot/grok-code-fast-1": { "alias": "grok-gh" },
       "github-copilot/claude-haiku-4-5": { "alias": "haiku-gh" },
       "github-copilot/claude-sonnet-4-6": { "alias": "sonnet-gh" },
-      "anthropic/claude-sonnet-4-6": { "alias": "sonnet" },
-      "anthropic/claude-haiku-4-5": { "alias": "haiku" },
-      "anthropic/claude-opus-4-6": { "alias": "opus" },
       "anthropic-vertex/claude-sonnet-4-6": { "alias": "sonnet-av" },
       "anthropic-vertex/claude-opus-4-6": { "alias": "opus-av" },
       "google/gemini-3-flash-preview": { "alias": "gemini-flash" },
+      "google/gemini-3.1-flash-lite-preview": { "alias": "gemini-flash-lite" },
       "google/gemini-3.1-pro-preview": { "alias": "gemini-pro" },
       "openrouter/deepseek/deepseek-v3.2": { "alias": "deepseek" },
       "openrouter/moonshotai/kimi-k2.5": { "alias": "kimi" },
       "openrouter/minimax/minimax-m2.5": { "alias": "minimax" },
-      "lmstudio/qwen3.5-35b-a3b": { "alias": "qwen-local" }
+      "lmstudio/qwen3.5-35b-a3b": { "alias": "qwen-local" },
+      "lmstudio/gemma-4-26b-a4b-it": { "alias": "gemma-local" }
     }
   }
 }
@@ -507,10 +401,10 @@ available fallbacks.
 
 | Role | Typical aliases | Best for |
 |---|---|---|
-| Daily driver | `gpt54min`, `sonnet` | Main conversation, routine orchestration, most research and planning |
-| Escalation / harder judgment | `gpt54`, `sonnet`, `opus`, `opus-av` | Contested decisions, deeper synthesis, tougher orchestration calls |
-| Cheap atomic / throwaway | `gpt5min`, `haiku` | Short disposable tasks, simple cron work, low-stakes structured execution |
-| Local fallback | `qwen-local` | Offline-ish recovery path, local experimentation, resilience |
+| Daily driver | `gpt54`, `sonnet-gh` | Main conversation, routine orchestration, most research and planning |
+| Escalation / harder judgment | `gpt54`, `sonnet-gh`, `opus-av`, `gemini-pro` | Contested decisions, deeper synthesis, tougher orchestration calls |
+| Cheap atomic / throwaway | `gpt54min`, `haiku-gh`, `gemini-flash-lite` | Short disposable tasks, simple cron work, low-stakes structured execution |
+| Local fallback | `qwen-local`, `gemma-local` | Offline-ish recovery path, local experimentation, resilience |
 
 **Recommended policy:** choose one reliable low-cost daily-driver alias as the workspace default,
 keep one or two stronger escalation aliases for harder judgment, and reserve the cheapest models
@@ -518,16 +412,15 @@ for throwaway or tightly spoon-fed tasks.
 
 ### Thinking Budget Levels
 
-Claude models support configurable thinking budgets. **Adaptive thinking
-is the default** for Claude 4.6 models when no explicit thinking level is
-configured. If you have no explicit `thinking` setting in your config, your
-agent is running adaptive (variable token usage per turn).
+OpenClaw supports configurable thinking budgets. In practice, `thinking: low`
+is usually the explicit default because it gives predictable cost and latency
+for tool-heavy orchestration.
 
 | Level | When to Use | Trade-off |
 |-------|-------------|-----------|
-| Low | Cron jobs, atomic tool calls, spoon-fed prompts, most conversation | Fastest. Sufficient when the prompt does the thinking for the model. Explicit `thinking: low` in config overrides the adaptive default. |
+| Low | Cron jobs, atomic tool calls, spoon-fed prompts, most conversation | Fastest and the most predictable default for operational work. |
 | Medium | Genuine ambiguity, multi-source conflict resolution, orchestration decisions with real stakes | Good balance for reasoning through unclear tasks. |
-| Adaptive (default) | No explicit config set | Model decides per-turn. Can consume more tokens than `low` on simple tasks. Set `thinking: low` explicitly if you want predictable token usage. |
+| Adaptive | Only when you intentionally want the model to self-regulate thinking depth | More variable token usage and less predictable runtime. |
 
 **Rule of thumb:** Low thinking covers the vast majority of tasks. Set
 `thinking: low` explicitly in your config unless you specifically want
@@ -541,11 +434,11 @@ Recommended assignments across OpenClaw contexts:
 
 | Context | Model | Thinking | Rationale |
 |---|---|---:|---|
-| Conversation (main) | Daily-driver alias (`gpt54min` or `sonnet`) | Low | Best default tradeoff for normal orchestration |
-| Higher-stakes decisions | Stronger alias (`gpt54`, `sonnet`, `opus`) | Low / as needed | Use when judgment quality matters more than cheap throughput |
+| Conversation (main) | Daily-driver alias (`gpt54` or equivalent) | Low | Best default tradeoff for normal orchestration when stronger judgment is worth the cost |
+| Higher-stakes decisions | Stronger alias (`gpt54`, `sonnet-gh`, `opus-av`) | Low / as needed | Use when judgment quality matters more than cheap throughput |
 | Research / Deep analysis | Daily driver by default, escalate selectively | Low | Only jump upward when the task actually demands it |
-| Cron / Automation | Cheap but reliable alias (`gpt54min`, `haiku`, or equivalent) | Low | Spoon-fed prompts, tool discipline, predictable cost |
-| Coding (opencode / ACP) | Repo-appropriate coding alias | Low | Via ACP session spawn; pick the strongest model justified by scope |
+| Cron / Automation | Cheap but reliable alias (`gpt54min`, `haiku-gh`, or equivalent) | Low | Spoon-fed prompts, tool discipline, predictable cost |
+| Coding (OpenCode PTY or ACP) | Repo-appropriate coding alias | Low | Pick the strongest model justified by scope |
 
 **Cron timeout constraint:** OpenClaw cron jobs have an execution timeout
 (observed ~120s in practice). For complex multi-step payloads with slow tools
@@ -739,13 +632,14 @@ temporary approvals and pre-seed binary allowlists manually for permanent approv
 
 ### 2.6.1 Agent Roster
 
-The workspace runs three distinct agents, each with its own execution policy and model:
+The workspace commonly runs four distinct agents, each with its own execution policy and model:
 
 | Agent | Role | Exec Policy | Model |
 |-------|------|-------------|-------|
-| `main` | Primary interactive assistant | `allowlist/on-miss` | `gpt54min` |
-| `cron` | Scheduled automation | `allowlist/off` | `gpt54min` |
-| `vader-yolo` | Privileged exec worker (yolo mode) | `full/off` | `gpt54min` |
+| `main` | Primary interactive assistant | `allowlist/on-miss` | `gpt54` |
+| `cron` | Scheduled automation | `allowlist/off` | cheap reliable alias (`gpt54min`, `haiku-gh`, or equivalent) |
+| `vader-yolo` | Privileged exec worker (yolo mode) | `full/off` | `gpt54min-gh` |
+| `opencode` | Dedicated coding agent / transport lane | separate ACP / coding lane policy | repo-appropriate coding alias |
 
 > **Naming convention:** The agent names above (`main`, `cron`, `vader-yolo`) are
 > illustrative. Replace `vader-yolo` with any agent ID that fits your naming convention
@@ -781,9 +675,9 @@ The correct three-agent exec-approvals structure:
 - `cron` (`allowlist/off`): Only pre-approved binaries execute; unknown binaries are silently denied. Crons are unattended — no prompt can be answered.
 - `vader-yolo` (`full/off`): All exec is unrestricted, no approval prompts. This is intentional — vader-yolo is the designated privileged exec worker for yolo mode tasks.
 
-> **Note:** The exec-approvals example in Section 2.5 (Security Architecture) shows both
-> `main` and `cron` as `full` — that reflects a simpler single-tier setup. The three-agent
-> structure above is the correct target config when vader-yolo is active.
+> **Note:** The exec-approvals example in Section 2.5 (Security Architecture) shows a
+> simpler `main` + `cron` setup using `allowlist` policies only. The three-agent structure
+> above is the richer pattern when a dedicated privileged worker such as `vader-yolo` is active.
 
 ### 2.6.3 subagents.allowAgents Config Key
 
@@ -850,7 +744,7 @@ All five execution modes, ranked by decision priority:
 | 1. Direct orchestration | Orchestrator executes directly | N/A | Tasks requiring live judgment, workspace writes, user back-and-forth |
 | 2. Scheduled cron | `openclaw cron` | Per-schedule | Unattended recurring jobs (reports, monitors, health checks) |
 | 3. Ad-hoc sub-agent | `sessions_spawn` (runtime: subagent) | `runTimeoutSeconds: 300` | Parallel independent research/data tasks — READ/COMPUTE ONLY |
-| 4. ACP coding session | `sessions_spawn` (runtime: acp, agentId: opencode) | `runTimeoutSeconds: 300` | Delegated coding tasks via opencode-acp skill |
+| 4. OpenCode coding lane | `exec` + PTY/background `process` inspection (or ACP fallback when intentionally chosen) | PTY/background run dependent | Delegated coding tasks, with `opencode-pty` as the primary lane and ACP as a secondary transport |
 | 5. Yolo Agent | `sessions_spawn` (agentId: "vader-yolo", runtime: subagent) | `runTimeoutSeconds: 300` | No-approval exec — coding builds, free-form tasks when user says "yolo mode" |
 
 **Mode 2 anti-pattern:** never combine `yieldMs` with `timeout` on long-running jobs.
@@ -1004,77 +898,24 @@ Combine all collected data into a structured report.
 Deliver a briefing using ONLY verified data from the steps above.
 ```
 
-### Common Gotchas (Anthropic-specific)
+### Common Gotchas
 
-**The Spoon-Feeding directive structure is intentional, not boilerplate.**
-Haiku and Sonnet are reliable executors of structured prompts — the heavy
-`[SYSTEM_DIRECTIVE]` blocks, numbered steps, and explicit failure handling
-exist because isolated cron agents have no boot context, no memory, and no
-fallback. The structure does the reasoning so the model doesn't have to.
-Removing guardrails from working cron prompts increases fragility; add them
-only where needed, but don't strip them in the name of simplification.
+A few patterns generalize well across workspaces:
 
-**Delivery-suppressing tokens.** Isolated cron agents can hallucinate `NO_REPLY`
-at the end of their output. In OpenClaw, `NO_REPLY` suppresses delivery to
-the configured channel. Always include the prohibition in `[CRITICAL]`.
+- **Structured prompts help isolated crons.** When a cron has little or no inherited
+  context, explicit phases, numbered steps, and clear failure handling improve reliability.
+- **Guard delivery explicitly.** If your environment supports delivery-suppressing tokens
+  or multiple delivery paths, make the final-send contract unambiguous.
+- **Warnings are not always failures.** Some CLIs print startup noise before valid output.
+  Distinguish cosmetic warnings from real step failure.
+- **Scheduling collisions are real.** Two jobs delivering to the same place at the same
+  time can still interfere with each other. Stagger schedules when reliability matters.
+- **Direct delivery is often safer for long reports.** If announce-style delivery is brittle
+  in your environment, prefer an explicit final send path.
+- **Tool time dominates model time.** In multi-step crons, runtime is usually constrained
+  more by slow tools and too many steps than by model latency.
 
-**CLI startup warnings are not failures.** Some CLIs print warnings to stdout
-before returning results (e.g., permission errors for cookie stores, missing
-optional dependencies). An isolated agent that sees a warning at the top of
-output may incorrectly mark the step as `[DATA UNAVAILABLE]` and skip valid
-results. For any CLI with known startup noise, add a `[CRITICAL - <TOOL>]`
-block explaining the warning is cosmetic and results should be used if present.
-
-**Same-minute scheduling race condition.** Two crons scheduled at the exact
-same time can cause announce delivery collisions — one delivers, the other
-silently drops with "cron announce delivery failed". Even with parallel run
-support (v2026.2.22+), stagger schedules by at least 15 minutes when two crons
-deliver to the same channel. Data still routes through session as a system
-message fallback, but the user-facing announce may be lost.
-
-**`agentId: "main"` causes announce fragility.** When a cron has
-`agentId: "main"` set, its subagent completion announce routes through the
-main session's WebSocket device. If that device has a scope gap or is inactive,
-announces fail silently. Fix: `openclaw cron edit <id> --clear-agent`.
-Spoon-fed isolated crons don't need main session context — the default agent
-is always the right choice. Telegram/channel delivery uses channel adapters
-directly, regardless of `agentId`.
-
-**Session staleness after major changes.** After significant structural changes
-to cron payloads or workspace files, start a new agent session before evaluating
-results. Long sessions accumulate stale context.
-
-**Announce delivery silently fails for large outputs (v2026.2.25 regression).**
-The `delivery.mode: announce` path silently fails when cron output exceeds
-Telegram's ~4096 character per-message limit. The delivery falls back to the
-main session as a system message (shown as `deliveryStatus: "delivered"` in
-`cron runs` output — misleadingly marking the main-session fallback, not
-actual channel delivery). Short outputs (e.g., a few lines) continue to work.
-**Fix:** Add `[CRITICAL - DELIVERY]` to the cron prompt instructing the agent
-to call the `message` tool directly as its final step. The `message` tool
-handles chunking natively and is not affected by this regression. Keep
-`delivery.mode: announce` in place as a fallback safety net — if the
-`message` tool send succeeds, announce is skipped automatically (duplicate
-guard); if it fails, the announce fallback still fires.
-
-**2026.3.11 delivery contract tightening.** Isolated crons with `delivery.mode: "none"`
-can no longer rely on ad-hoc `message` tool sends to reach the user. If a job was
-configured as silent-but-still-sending, it now goes silent by design. The fix is to
-move the job to explicit `delivery.mode: "announce"` or `delivery.mode: "webhook"`
-and keep direct `message` sends only as a deliberate in-payload fallback.
-
-**Open issue (#43177, 2026-03-11): false-positive delivery status.** Some isolated
-cron runs can be recorded as `delivered: true` / `deliveryStatus: delivered` even when
-Telegram did not actually receive the message. Suspected root cause: the shared
-subagent/cron announce path treats a successful internal `callGateway(... deliver: true)`
-as successful external delivery without verifying the lower transport send. Treat cron
-run history as advisory; if a report matters, verify against actual channel delivery or
-gateway logs.
-
-**Slow tools still dominate runtime.** In complex multi-step crons, execution
-time is driven by tool calls (feed scanners can take 30–40s alone, multiple
-web searches compound), not model latency. Model switches don't fix timeout
-risk — prompt optimisation and step reduction do.
+Keep exact regressions, product-version quirks, and local delivery edge cases in instance-specific notes.
 
 ### Sub-agent Permission Boundary
 
@@ -1227,18 +1068,14 @@ X.com exception: skip Tier 2, Bird (Tier 1) already covers all X content.
 > banned by the domain. Bird CLI (Tier 1) is the only correct tool for X content.
 > Do not fire Tier 2 on X.com URLs.
 
-**Proactive content-type trigger (MANDATORY):** Do not wait for a full URL to fire
-Tier 2. When Tier 1 surfaces a snippet from a high-value source — institutional
-reports (RAND, CSIS, Brookings, Pentagon, INSS), paywalled journalism (NYT, FT,
-Foreign Affairs), academic papers — fire `exa.crawling_exa` proactively to extract
-the full document. Snippet-level data from these sources is consistently insufficient
-for synthesis. The proactive trigger is content-type based, not failure-based.
+**Proactive content-type trigger:** Do not wait for a full URL before escalating.
+When Tier 1 surfaces a snippet from a high-value source such as institutional
+reports, paywalled journalism, or academic work, it is usually worth pulling the
+full document rather than synthesizing from snippets alone.
 
-**Deep Research Mode:** In sessions with 3+ research turns requiring depth (geopolitical
-analysis, multi-source synthesis, technical deep-dives) — default every institutional
-source hit to a Tier 2 crawl alongside Tier 1 search. The quality ceiling of
-snippet-only research is meaningfully lower than full-document synthesis for these
-session types.
+**Deep research mode:** In research sessions that are clearly depth-first rather than
+answer-first, bias toward fuller source extraction early. The quality ceiling of
+snippet-only research is meaningfully lower for these session types.
 
 **Tier 3 — browser, on-demand escalation from Tier 2:**
 - `profile:openclaw`: isolated browser, no saved logins. Use for public JS-rendered
@@ -1304,24 +1141,13 @@ social signal integration via Bird that neither product provides natively.
 
 ### Non-Trivial Task Gate
 
-Before starting any research, analysis, or decision task mid-session — fire
-`memory_search` on the core topic first. This is a mandatory gate, not an
-optional step.
+Before starting non-trivial research, analysis, or decision work mid-session,
+check whether prior decisions or evidence already exist in memory.
 
-**Why it matters:** An agent deep in a long session may have relevant prior
-decisions, lessons, or facts in memory that aren't in the current injection
-window. Proceeding without a recall step leads to repeated work, contradictory
-decisions, and missed context. The cost of one `memory_search` is trivial;
-the cost of a decision that contradicts a prior lesson is not.
+A lightweight `memory_search` on the core topic is usually the right first step.
+This avoids repeated work, contradictory decisions, and missed context.
 
-**Rule:** One search, before acting. Applies even when the topic feels familiar
-from current session context. If 0 results on first attempt, refire with
-different keywords before concluding the data is missing (QMD BM25 prefers
-2–4 word keyword queries — see QMD Query Strategy in Section 1).
-
-**Scope:** Any task involving research, synthesis, investment decisions, config
-changes, or anything with durable side effects. Does not apply to simple
-read-only lookups or single-turn factual questions.
+Use judgment for simple read-only lookups or one-shot factual questions.
 
 ### llm-wiki / Preservation-First Mode
 
@@ -1346,108 +1172,23 @@ exact local filing rules stay instance-specific.
 
 ### Deep Analysis Protocol
 
-For high-stakes research requiring maximum depth — investment decisions,
-geopolitical assessments, architectural choices — use the **GPT sub-agent
-depth + orchestrator enhancement** pattern. The sub-agent handles deep
-analysis compute; the orchestrator validates, cross-references personal
-context, and delivers.
+For high-stakes research requiring maximum depth, use a **sub-agent depth pass +
+orchestrator synthesis** pattern.
 
-**When to use:** Manual trigger only. Not for routine research.
+The general shape is:
+- the orchestrator gathers the best available source material first
+- a bounded sub-agent does the heavy analysis pass
+- the orchestrator verifies, cross-references context, and delivers the final result
 
-**Architecture:**
+Useful implementation habits:
+1. gather stronger source material before spawning a depth worker
+2. compile a clean brief instead of making the child rediscover context
+3. give the child an explicit output contract
+4. treat raw child output as analysis input, not user-ready final output
+5. preserve durable findings in memory only when they are worth keeping
 
-```
-Orchestrator                              GPT Sub-agent
-    │                                          │
-    ├── Full tiered research                   │
-    │   (Tier 1 mandatory — Gemini uses Pro    │
-    │    model for Deep Analysis, NOT flash;   │
-    │    Brave + Bird + Exa fire as normal)    │
-    │   (Tier 2 FORCED on every key source)    │
-    │                                          │
-    ├── Compile spoon-fed brief:               │
-    │   - Tier 1+2 findings                    │
-    │   - Relevant memory context              │
-    │   - User's personal situation            │
-    │                                          │
-    ├── Spawn sub-agent ──────────────────►  Receives compiled brief
-    │   model: GPT-class (via Copilot         + analysis task
-    │   or equivalent frontier model)          + output path instruction
-    │   runTimeoutSeconds: 300                 │
-    │                                          ├── Deep analysis compute
-    │                                          │
-    │                                          └── Writes full output to:
-    │                                              /tmp/deep-analysis-
-    │                                              <label>-<YYYYMMDD>.md
-    │                                          │
-    ◄── Sub-agent completes ──────────────────┘
-    │
-    ├── Read output file directly
-    │   (no byte limit — full content)
-    │   Fallback: sessions_history on child key
-    │
-    ├── Cross-reference with personal context
-    │   + verify accuracy
-    │
-    ├── If divergence found:
-    │   → present both findings as [CONTESTED]
-    │   → let user decide, do not force a verdict
-    │
-    ├── If convergent:
-    │   → confidence goes up, label [HIGH/MEDIUM]
-    │
-    └── Deliver orchestrator-enhanced output
-        split into ≤3,500 char chunks (1/N, 2/N)
-```
-
-> **Gemini Pro for Deep Analysis:** The Deep Analysis protocol uses Gemini Grounding with
-> the Pro model (`--model gemini-3.1-pro-preview` (current as of writing — verify against latest model names)), not flash. Pro delivers deeper synthesis
-> and more cited sources (15–27 vs 5–11 on flash). Pass `--model gemini-3.1-pro-preview` (current as of writing — verify against latest model names)
-> explicitly. Flash remains the default for all other research. Gemini Pro is reserved
-> exclusively for this protocol.
-
-**Key implementation details:**
-
-1. **Tier 2 checkpoint (MANDATORY before spawning):** Do NOT spawn the
-   sub-agent until Tier 2 crawls are complete or explicitly timed out.
-   Sub-agent synthesis built on snippets produces lower-quality output —
-   the full-document crawls are what justify the depth label.
-
-2. **Compile the brief before spawning:** Pull relevant STM context,
-   project facts, applicable lessons, and Tier 1+2 research findings into
-   a structured brief. Include the user's personal context where relevant.
-   Pass the compiled brief as the sub-agent's full input — sub-agents are
-   dumb pipes and should not need to re-derive context.
-
-3. **Define output path before spawning:** Use
-   `/tmp/deep-analysis-<label>-<YYYYMMDD>.md`. Pass the path explicitly
-   in the spawn prompt: "write complete findings to that path." Vague
-   language ("include", "report") causes text-only responses with no file
-   written to disk.
-
-4. **Sub-agent constraint:** Include explicitly in the spawn prompt:
-   `"DO NOT delete, send, modify, or take any external action. Read and report ONLY."`
-
-5. **Read the output file directly:** After completion, `read` the `/tmp/`
-   file with no byte limit. Do not rely on the channel announce — it may
-   truncate. If the file is missing (crash/timeout), fall back to
-   `sessions_history` on the child session key.
-
-6. **Never deliver raw sub-agent output.** Always orchestrator-enhanced.
-   Cross-reference, verify, and layer in synthesis before delivery.
-
-7. **Confidence tags:**
-   - `[HIGH]` — orchestrator and sub-agent converge
-   - `[MEDIUM]` — moderate convergence, some uncertainty
-   - `[CONTESTED]` — divergence; present both findings transparently
-
-8. **Archive if durable:** If the analysis has lasting research value,
-   append key findings to `memory/YYYY-MM-DD.md`. The `/tmp/` file is
-   ephemeral (cleared on restart).
-
-9. **Message splitting:** Split final delivery into sequential messages
-   ≤3,500 chars each, labeled (1/N). Never send a single synthesis block
-   over the limit.
+Keep the public guide at this pattern level. Exact model choices, file paths, and
+workspace-specific delivery conventions belong in local protocols.
 
 ---
 
@@ -1455,59 +1196,69 @@ Orchestrator                              GPT Sub-agent
 
 ### Skill-First Approach
 
-Coding tasks are delegated via the **opencode-acp skill** rather than raw command
-invocations. The skill owns the HOW (ACP transport, plan file handoff, explore
-workflow, completion detection, and the full Orchestrator Loop); the orchestrator
-(AGENTS.md) owns the project-level constraints.
+Coding tasks are delegated via a dedicated OpenCode skill rather than raw command
+invocations. The current primary lane is **opencode-pty**. ACP remains useful as a
+secondary structured transport when that path is healthy, but it is no longer the
+default coding lane.
 
-**Read the skill's SKILL.md before spawning a coding task.** It contains current
+**Read the skill's SKILL.md before launching a coding task.** It contains current
 command syntax and patterns that may change with OpenClaw updates. Hardcoding
 mechanics in AGENTS.md creates maintenance debt.
 
 | Skill | Role |
 |-------|------|
-| `opencode-acp` | Delegates coding tasks to OpenCode via ACP (Agent Client Protocol). Handles plan file handoff, explore workflow, completion detection, and the full Orchestrator Loop. Replaces the former `opencode-wrapper` skill. |
+| `opencode-pty` | Primary OpenCode lane. Uses direct PTY/background-process transport, prompt-in-file handoff, PTY log inspection via `process`, and repo artifact verification as the truth path. |
+| `opencode-acp` | Optional ACP fallback when the ACP transport is healthy and you explicitly want the structured ACP path. |
 
-**Preferred model:** `claude-sonnet-4-6` (Thinking: Low) via Anthropic or Google Vertex.
-
-> **Note:** Configure the OpenCode default model in `~/.config/opencode/opencode.json`.
-> Common choices include Claude Sonnet via Anthropic direct or Google Vertex ADC.
-> Use the model swap script documented in the opencode-acp SKILL.md to switch models
-> per-session.
+**Preferred model:** a repo-appropriate coding alias, commonly `google-vertex-anthropic/claude-sonnet-4-6@default` with low thinking.
 
 **Key rules (orchestrator-level — put these in AGENTS.md, not the skill):**
-- Planning stays at orchestrator level — present a plan, get approval, then delegate to skill
-- `git init` always. Local commits and feature branch pushes (`git push origin feat/<slug>`) are permitted. NEVER push to `main`. NEVER merge PRs — The user merges manually.
+- Planning stays at orchestrator level — present a plan, get approval, then delegate to the coding lane
+- `git init` always. Local commits and feature branch pushes (`git push origin feat/<slug>`) are permitted. NEVER push to `main`. NEVER merge PRs — the user merges manually.
 - Local unit/functional tests with mocks. No external deps
 - Project root: your preferred git directory (e.g., `~/Developer/git/`)
 
 **Why skill-first over raw commands:**
-- Skills stay up-to-date with OpenClaw releases (ACP flags, completion patterns, etc.)
+- Skills stay up-to-date with OpenClaw releases (PTY flags, ACP flags, completion patterns, etc.)
 - Decouples orchestrator from implementation detail
 - Single source of truth for HOW; AGENTS.md only carries project constraints
 
-### ACP Transport
+### PTY Transport (Primary)
 
-OpenCode sessions are spawned via ACP (Agent Client Protocol) using `sessions_spawn`:
+The default OpenCode lane uses a direct PTY/background-process transport via `exec`
+plus `process` inspection:
 
 ```python
-sessions_spawn(
-    task="Implement the plan at /absolute/path/.opencode/plans/plan-NNN-<slug>.md",
-    runtime="acp",
-    agentId="opencode",
-    mode="run",
-    cwd="/absolute/path/to/repo"
+exec(
+    command='opencode run --model "google-vertex-anthropic/claude-sonnet-4-6@default" --variant "low" --print-logs < "/absolute/path/to/repo/.opencode/plans/plan-NNN-<slug>.md"',
+    workdir="/absolute/path/to/repo",
+    pty=True,
+    background=True
 )
 ```
 
-- `cwd` is mandatory and must be an absolute path to the repo root.
-- `mode="run"` is always one-shot (completes and exits).
-- `agentId="opencode"` routes the session to the opencode agent config.
+For read-only explore passes, keep using the explore argument:
 
-**acpx backend:** acpx is the ACP execution backend bundled as an OpenClaw plugin
-extension. The binary lives at the plugin path. OpenClaw upgrades wipe it — reinstall
-with `cd <openclaw>/extensions/acpx && npm install` after any OpenClaw upgrade. Never
-pin a specific acpx version — the extension's `package.json` declares the correct one.
+```python
+exec(
+    command='opencode run --model "google-vertex-anthropic/claude-sonnet-4-6@default" --variant "low" --print-logs --agent explore < "/absolute/path/to/repo/.opencode/prompts/explore-<slug>.md"',
+    workdir="/absolute/path/to/repo",
+    pty=True,
+    background=True
+)
+```
+
+- `workdir` must be the repo root.
+- stdin redirection is the standard prompt/plan handoff path.
+- `--print-logs` should normally stay enabled.
+- PTY logs are inspected with `process(action="log"|"poll", sessionId=...)`.
+- Repo artifacts on disk are the truth path, not optimistic terminal completion text.
+
+### ACP Transport (Secondary)
+
+ACP still exists as a secondary lane when you explicitly want OpenCode via
+`sessions_spawn(runtime="acp", agentId="opencode")`. Treat it as a fallback or an
+alternative transport, not as the default public guidance.
 
 ### Prompt-in-File Standard
 
@@ -1533,14 +1284,12 @@ are reliably executed.
 After spawning a coding session, check completion before reading output:
 
 ```bash
-# Primary: grep gateway log for the done sentinel
-grep "<SLUG>-DONE\|<uuid>" ~/.openclaw/logs/gateway.log | tail -5
-
-# Fallback: check sessions.json for state: idle
-# For explore tasks: cat <repo>/.opencode/artifacts/explore-<slug>-<date>.txt
+# Primary: inspect PTY/background output via process polling/logs
+# Fallback: inspect the repo artifact directly
+cat <repo>/.opencode/artifacts/explore-<slug>-<date>.md
 ```
 
-Session output is available as JSONL at:
+For ACP runs, session output is available as JSONL at:
 `~/.openclaw/agents/opencode/sessions/<sessionId>.jsonl`
 
 ### Orchestrator Loop
@@ -1550,17 +1299,17 @@ one-shot spawn:
 
 | Step | Label | Action |
 |------|-------|--------|
-| 1 | `[ANALYZE]` | Spawn `@explore` sub-agent → read output from `.opencode/artifacts/explore-<slug>-<date>.txt` |
+| 1 | `[ANALYZE]` | Run an OpenCode explore pass, then read the repo artifact from `.opencode/artifacts/explore-<slug>-<date>.md` |
 | 2 | `[PLAN]` | Present implementation blueprint to user, wait for Go |
 | 3 | `[APPROVE]` | User says Go |
-| 4 | `[BRIEF]` | Write `.opencode/plans/plan-NNN-<slug>.md`, spawn ACP build session |
-| 5 | `[REVIEW]` | Read session JSONL, verify implementation against plan |
-| 6 | `[ITERATE]` | If gaps found, write a new plan with incremented NNN and re-spawn |
+| 4 | `[BRIEF]` | Write `.opencode/plans/plan-NNN-<slug>.md`, then launch the primary coding lane (usually PTY; ACP only if intentionally chosen) |
+| 5 | `[REVIEW]` | Read PTY logs and/or session JSONL, verify implementation against plan |
+| 6 | `[ITERATE]` | If gaps found, write a new plan with incremented NNN and re-run |
 | 7 | `[COMMIT]` | `git add` + `git commit` locally. The orchestrator MAY push feature branches (`git push origin feat/<slug>`) and open PRs (`gh pr create`) — but NEVER pushes to `main` and NEVER merges PRs. The user merges manually. Pre-push gate: verify remote exists (`git remote -v`) before pushing. If no remote configured → stop and ask the user to create the remote repo first. |
 
-**Explore artifacts** go to `.opencode/artifacts/explore-<slug>-<date>.txt` inside the
-repo. The `@explore` step reads source files; the orchestrator reads its output before
-writing the plan.
+**Explore artifacts** go to `.opencode/artifacts/explore-<slug>-<date>.md` inside the
+repo unless your local convention deliberately uses another extension. The orchestrator
+reads the artifact on disk before writing the next plan.
 
 ### Vertex AI / Gemini SDK Notes (google.genai)
 
@@ -1802,7 +1551,7 @@ Section A — Process cleanup
 
 Section B — Memory backend health
   Check the memory backend status (e.g., openclaw memory status --json).
-  Flag: provider not "qmd" (fallback active), dirty=true (index stale),
+  Flag: provider mismatch vs your intended backend, dirty=true (index stale),
         files=0 (nothing indexed), command failure.
 
 Section C — Token/usage analytics
@@ -1830,7 +1579,7 @@ No conflicts with intelligence crons if scheduled at a different hour.
 **Key payload rules (same as intelligence crons):**
 - `[CRITICAL - DELIVERY]` required — maintenance reports are long; announce
   delivery fails silently for large outputs (see Section 3 gotcha)
-- `model: low-cost reliable alias`, `thinking: low` — `gpt54min` is a strong default; `haiku` is fine for Claude-centered setups
+- `model: low-cost reliable alias`, `thinking: low` — `gpt54min` is a strong default; `haiku-gh` is fine for Claude-centered setups
 - `wakeMode: "now"` (explicit; this is also the default when omitted)
 - Do NOT add `--dry-run` to the process janitor step — the cron exists to
   actually run the cleanup, not preview it
@@ -1871,21 +1620,22 @@ at the start of a new session or after a long break. Ensures the agent has
 current context before acting.
 
 **Steps:**
-1. **Re-execute SESSION START** — Re-read the boot sequence files exactly as
-   defined in `AGENTS.md`. No shortcuts. Confirm understanding.
-2. **Skill scan (lazy)** — Do NOT preload baseline SKILL.md files at prework.
-   Skills are loaded on-demand when a task triggers them (per the skill scan rule
-   in the system prompt). Exception: if STM identifies a specific skill as actively
-   in-progress for the session, read that one SKILL.md only.
-3. **Protocol awareness** — Note that `PROTOCOLS.md` (workspace root) contains
+1. **Assume SESSION START already happened** — Do NOT re-run the full boot sequence
+   by default unless the session is clearly desynced, stale, or the user explicitly
+   asked for a full refresh.
+2. **Sync active state** — Briefly verify STM, the immediately relevant recent L2
+   context already loaded at session start, and any durable gotchas that matter for
+   the current topic.
+3. **Skill scan (lazy)** — Do NOT preload baseline SKILL.md files at prework.
+   Skills are loaded on-demand when a task triggers them. Exception: if STM identifies
+   a specific skill as actively in-progress for the session, read that one SKILL.md only.
+4. **Protocol awareness** — Note that `PROTOCOLS.md` (workspace root) contains
    full procedure details for triggered protocols such as Distill & Flush,
-   Spa Day, Research Modes / llm-wiki routing, and the Coding Task Protocol.
-   Deep Analysis often lives in a dedicated skill instead of `PROTOCOLS.md`.
-   These are referenced from `AGENTS.md` but only read when explicitly triggered by name.
-4. **Confirm back to user** — Report: (a) which memory files were read and any
-   relevant lessons surfaced, (b) which SKILL.md files were loaded with key
-   gotchas per skill, (c) restate the Research and Memory retrieval rules in
-   your own words as confirmation.
+   Spa Day, Research Modes / llm-wiki routing, the Coding Task Protocol, and
+   Skill Execution in Subagents. Deep Analysis often lives in a dedicated skill instead.
+5. **Confirm back to user** — Report compactly: (a) active STM tracks, (b) relevant
+   gotchas for the current topic, and (c) a one-line confirmation that research and
+   memory rules are understood.
 
 The confirmation step is mandatory — it proves prework was completed, not
 skipped. An agent that reads the files but skips confirmation may still proceed
@@ -1899,18 +1649,15 @@ A periodic context hygiene pass — more aggressive than Distill & Flush. Run
 when sessions feel sluggish, boot context is growing, or MEMORY.md is
 approaching the injection limit.
 
-**Steps:**
-1. Compress verbose MEMORY.md entries to 1–2 lines each
-2. Archive time-bound content to `memory/YYYY-MM-DD-memory-archive.md`
-3. Check cross-file duplication — remove any entry that already appears
-   in another file
-4. Audit MEMORY.md Lessons Learned and Decisions Log — remove any entry
-   that has been codified into `AGENTS.md`, `TOOLS.md`, or any active
-   `SKILL.md`. MEMORY.md should only hold what isn't captured elsewhere.
-5. Run workspace size check script to verify file sizes and headroom
-6. Run `openclaw sessions cleanup --enforce`
+**Typical phases:**
+1. Audit current workspace state and decide what is actually bloated or duplicated
+2. Re-layer memory and guidance so practical runtime rules stay local while archives
+   and deeper reference material move to the right tier
+3. Apply surgical cleanup rather than broad rewrites
+4. Verify file sizes, injection headroom, and cross-file consistency before declaring done
 
-**Target:** MEMORY.md < 15KB, zero truncation, no duplication.
+**Target:** cleaner point-of-use docs, zero truncation, no accidental duplication, and
+no governance drift where runtime rules hide in long reference files.
 
 **Frequency:** Monthly, or when the nightly maintenance cron flags Section D
 or E warnings.
@@ -1974,36 +1721,14 @@ When upgrading tools used in cron jobs:
 | System Prompt | https://docs.openclaw.ai/concepts/system-prompt |
 | Cron Jobs | https://docs.openclaw.ai/automation/cron-jobs |
 | Skills | https://docs.openclaw.ai/tools/skills |
-| Memory (QMD backend) | https://docs.openclaw.ai/concepts/memory |
+| Memory | https://docs.openclaw.ai/concepts/memory |
 | mcporter | http://mcporter.dev |
 | QMD (Tobi Lütke) | https://github.com/tobi/qmd |
 | Financial Datasets MCP | https://financialdatasets.ai/ |
-| ClawHub (Skills Registry) | https://clawhub.com |
+| ClawHub (Skills Registry) | https://clawhub.ai |
 
 ---
 
-## 9. Revision History
+## 9. Change Log
 
-| Date | Change |
-|------|--------|
-| 2026-04-06 (v15) | Provider-agnostic refresh. Title/intro de-Anthropicized, model strategy rewritten around stable aliases and multi-provider routing, execution modes updated with the built-in-tools-first rule and the Mode 2 `yieldMs` + `timeout` anti-pattern. Companion `WORKSPACE_REFERENCE.md` refreshed first so the public guide stays generic while the personal overlay carries instance-specific truth. Later same day: guide-sync audit re-run against a fresh dated artifact (`explore-guide-sync-20260406.txt`) corrected stale Sonnet/Haiku-era leftovers, fixed skills precedence order, updated PROTOCOLS/llm-wiki wording, expanded alias examples, corrected multi-agent model rows, refreshed cron-model wording, and renamed the file to `openclaw-public-guide.md`. |
-| 2026-03-31 (v14.2) | Multi-agent setup + yolo mode (NEW Section 2.6): vader-yolo agent architecture, exec security tiers (main=allowlist/on-miss, cron=allowlist/off, vader-yolo=full/off), subagents.allowAgents config key, yolo mode UX pattern (trigger/worker/exit/audit trail), Mode 5 added to execution modes table. Priority 2 fixes: QMD includeDefaultMemory=false, prework skill scan lazy pattern, pre-flight gate narration added to Tier 1+2 research, [COMMIT] step updated with branch push policy, opus-av alias added, skills precedence tiers corrected to 6 levels. v14.1: scrubbed personal references (personal names → user), generalized model aliases to representative examples by provider category, removed instance-specific config notes, generalized agent naming. v14.2: generalized ~/gemini-search and ~/clawd paths to placeholders, added model ID age qualifier, clarified revision history reversion notes, added exec-approvals section comment. |
-| 2026-03-21 (v13) | **Full alignment refresh vs live workspace (2026-03-21) + official docs audit.** Research Protocol: Gemini Grounding promoted to mandatory Tier 1 (4th tool); pre-flight gate narration rule added for both Tier 1 and Tier 2; Tier 3/4 renumbered (Browser→T3, Specialized precision tools→T4, with 6 new domain-specific tools documented); breaking event rule updated to include Gemini. Coding Architecture: `opencode-wrapper` replaced by `opencode-acp` skill; ACP transport (`sessions_spawn(runtime="acp")`) replaces PTY/tmux; plan files in `.opencode/plans/plan-NNN-<slug>.md`; explore artifacts in `.opencode/artifacts/`; completion via gateway log grep; acpx backend concept added; Orchestrator Loop steps added with ACP-era labels. Memory tiers: L2 = full `memory/` folder (projects + dated files, organizational not tier boundary); L3 = MEMORY.md (auto-injected); `memory_search` reframed as retrieval mechanism, not a tier. Model aliases: config structure updated to `agents.defaults.models[id].alias`; 7 new aliases added (opus, gpt54min, grok, kimi, minimax, deepseek, qwen-local); Opus row added to assignment table. Medium additions: PROTOCOLS.md triggered procedure store documented; Deep Analysis Gemini Pro distinction noted (Pro for DA, flash for all other research) + gpt54 sub-agent model updated; `memory_get` tool documented alongside `memory_search`; `lightContext` + `sessionTarget` current/session:custom-id added to cron payload fields; approvals block updated from future to configurable (enabled: false); ClawHub registry added. Prework ritual updated to 4 steps (protocol awareness added as step 3). Draw.io edit links removed from diagrams with content changes. |
-| 2026-03-13 (v12) | **Alignment refresh vs live workspace:** corrected model policy drift (interactive default back to sonnet low; gpt54 overflow; haiku cron-only), updated `gpt54` alias to `github-copilot/gpt-5.4`, replaced stale QMD source-build instructions with live bun package + `better-sqlite3` rebuild flow, updated mcporter examples to the current `--config ... call "server.tool" --args ...` pattern, corrected Google Developer Knowledge tool names (`search_documents`, `get_documents`), updated Financial Datasets count to 17, and documented the 2026.3.11 isolated-cron delivery contract tightening plus issue #43177 false-positive delivery status bug. |
-| 2026-03-08 (v11) | **Section 2.5 (NEW):** Added Security Architecture subsection — comprehensive guide to threat model (prompt injection, exfiltration, destructive exec, API overspend), OpenClaw security layers (exec-approvals.json, per-agent isolation, tool policy, message gates), Phase 1 implementation (gateway routing + cron isolation with config example), Phase 2 future state (Telegram approval prompts), and 6 quirks/best practices (binary path resolution, allow-always bug, async approvals, independent eval of ask/security, empty defaults, unicode in crons). Threat model table ranks by likelihood + impact. Config examples are generic (no personal paths/credentials). Links to official exec-approvals, security model, and exec tool docs. |
-| 2026-03-08 (v10) | **Section 2 model table:** Updated interactive/conversation thinking from `Low` → `Medium` (haiku thinking:medium is the correct interactive default; crons stay at low). (reverted in v12) Added `sonnet-gh` alias (`github-copilot/claude-sonnet-4.6`, 125k ctx) to Model Aliases section with usage note. **Section 1 context optimization:** Added `memoryFlush.softThresholdTokens` config recommendation (15,000) with rationale — single large tool response can skip a 4k flush window entirely. **Section 3:** Added Maintenance Cron Pattern subsection — documents the 4-section health report structure (process cleanup, memory backend, token analytics, workspace size), workspace size check script pattern, scheduling guidance, and key payload rules. **Section 4:** Added Non-Trivial Task Gate — mandatory `memory_search` before any research/decision task mid-session. **Section 7:** Added Operational Rituals subsection documenting Prework (3-step: re-boot → skill scan → confirm) and Spa Day / Context Optimization (6-step compaction with MEMORY.md audit). **Section 7 checklist:** Added `wakeMode: "now"` to Cron Creation Checklist (item 13) — prevents scheduler drift; "timezone" property causes drift in Beta. |
-| 2026-03-08 (v9) | **Section 1 alignment audit vs official docs:** Added `BOOT.md` entry (gateway-restart checklist, distinct from `HEARTBEAT.md`). Added `BOOTSTRAP.md` to formal file map. Added Workspace Directories section (`skills/`, `canvas/`, `memory/`). Fixed `TOOLS.md` description — added "does not control tool availability" per official docs. Fixed `HEARTBEAT.md` description — added "keep short, token burn risk" per official docs. Fixed injection limit — "~18KB" replaced with official `bootstrapMaxChars: 20,000 chars` + `bootstrapTotalMaxChars: 150,000 chars`. |
-| 2026-03-07 (v8) | **Model policy update:** Interactive default switched from `claude-sonnet-4-6` → `claude-haiku-4-5` (sonnet quota burn at 31%/24h unsustainable) (reverted in v12). Sonnet now explicit-invocation only: deep analysis, high-stakes decisions, complex multi-source synthesis. Updated model table, AGENTS.md, MEMORY.md, TOOLS.md, openclaw.json accordingly. GPT-5-mini documented as zero-quota throwaway option. |
-| 2026-03-07 (v7) | **draw.io + Mermaid diagrams:** Added 4 Mermaid diagrams to guide (workspace file injection, memory tiers, cron execution sequence, sub-agent decision flowchart). Each diagram has draw.io MCP Tool Server edit link below it. CODE_STANDARDS.md expanded with diagram type guide and examples. |
-| 2026-03-07 (v6) | **Housekeeping / alignment:** MEMORY.md aligned to AGENTS.md as source of truth — removed conflicting model decision entry (haiku for standard sessions, contradicted AGENTS.md sonnet policy), added sub-agent decision rules to Decisions Log. TOOLS.md updated: removed temp haiku note, confirmed sonnet as default model. openclaw.json `agents.defaults.model.primary` updated to `anthropic/claude-sonnet-4-6`. No architectural changes — guide content was already accurate. |
-| 2026-03-07 (v5) | **Section 1:** Added QMD search mode note — `search` (BM25) is the correct mode; `vsearch` and `query` are unreliable on memory-constrained hardware. **Section 2:** Added Model Providers subsection documenting three provider paths (Anthropic direct, Vertex ADC, GitHub Copilot) with auth methods and use cases. Added Model Aliases subsection — `openclaw.json` alias config pattern with examples; enables provider switching without updating cron prompts. **Section 4:** Replaced Tenth Man skeptical sub-agent pattern with redesigned Deep Analysis Protocol — GPT sub-agent writes full output to `/tmp/deep-analysis-<label>-<YYYYMMDD>.md`; orchestrator reads file directly (no truncation); fallback to `sessions_history`; divergence → `[CONTESTED]` (both findings shown, user decides); convergence → `[HIGH/MEDIUM]`; `runTimeoutSeconds: 300`; mandatory output file path + "write to disk" instruction in prompt; never deliver raw sub-agent output. **Section 5:** Added opencode-wrapper skill alongside coding-agent skill — two-skill architecture documented. Added Prompt-in-File Standard subsection — always write prompt to file, never inline in bash; mandatory "write these files to the current working directory" phrasing; vague language causes text-only responses. Added Run Completion Detection subsection — tmux session check as primary, ps fallback, run-manifest.json for provenance. Added Vertex AI / Gemini SDK Notes subsection — File API AI Studio only (use Part.from_bytes on Vertex), location=global requirement, full model path format, ADC auth, uv project convention. |
-| 2026-03-04 (v4) | **Section 1:** Added QMD Query Strategy subsection — BM25 prefers 2–4 word keyword queries; verbose queries fail silently; workaround is atomic search splits; critical for haiku/sonnet-class models. Added Context Optimization & Memory Compaction subsection — archive convention (`memory/YYYY-MM-DD-memory-archive.md`), boot context targets (<60KB total, <15KB MEMORY.md), Distill & Flush compaction workflow, truncation risk documentation. Added Session Reset Configuration subsection — config at top level (not `agents.defaults`), `daily` vs `idle` modes, model override scoping (session-scoped only). Updated boot pattern from "scan last 7 days" to "read today's + yesterday's" (more precise). Added archive files to Content Taxonomy. **Section 2:** Added Adaptive Thinking note (default in OpenClaw for Claude 4.6; explicit `thinking: low` overrides). Updated Thinking Budget table with Adaptive row. **Section 3:** Added Sub-agent Permission Boundary subsection — READ/COMPUTE ONLY for ad-hoc sub-agents, orchestrator retains write actions, explicit constraint wording. **Section 4:** Added Deep Analysis Protocol (Tenth Man Pattern) — skeptical sub-agent architecture for high-stakes research, Tier 2 checkpoint, spoon-fed prompts, confidence tagging, message splitting. **Section 6:** Added Financial Datasets MCP as second example server (13 tools, PAYG billing, usage patterns). **Section 7:** Updated Verification Checklist with MEMORY.md size check, session reset config location, total boot context measurement. **Section 8:** Added Financial Datasets MCP link. |
-| 2026-03-02 (v3.1) | Section 1 (QMD): Added health check note — `openclaw memory status` is the correct command; `qmd status` checks a separate CLI database unrelated to the OpenClaw-managed instance. Key fields: `provider: "qmd"`, `dirty: false`, `files > 0`. |
-| 2026-03-01 (v3) | Section 1: Added STM-as-sole-task-source-of-truth rule (dated files are reference/intel only, not task queues). Clarified Content Taxonomy: time-bound intel/research outputs route to `memory/YYYY-MM-DD.md`, not `MEMORY.md`. Section 4: Added Breaking Event Rule (mandatory Brave+Bird+Exa triple parallel for events <48h old). Added Anchor+Angle query pattern (never two near-identical parallel queries). Added Proactive Content-Type Tier 2 trigger (fire `crawling_exa` on institutional/paywalled sources without waiting for a known URL). Added Deep Research Mode (3+ research turns → default every institutional source to Tier 2 crawl). |
-| 2026-03-01 (v2) | Section 4: Full rewrite of Research Tool Orchestration — upgraded to complete 4-tier architecture. Tier 1: Brave+Bird+Exa search always parallel. Tier 2: web_fetch+crawling_exa parallel URL extraction with X.com exception documented (both tools blocked on x.com, Bird is correct tool). Tier 3: web_search_advanced_exa (precision filters) + company_research_exa (structured company intel) on-demand. Tier 4: Browser with two profiles — profile:openclaw (public JS pages) vs profile:chrome (login-gated, requires Browser Relay attach). Added decision flow pseudocode and orchestrator synthesis rationale. |
-| 2026-03-01 | Section 2: Removed Opus from model strategy — Sonnet is now the default for all roles including research and deep analysis. Simplified Thinking Budget table (removed High tier). Updated Model Assignment Framework table accordingly. Section 1: Updated On-Demand Files boot pattern — replaced hardcoded `YYYY-MM-DD.md` with resilient "scan last 7 days" approach. Section 4: Added Research Tool Orchestration subsection — documents Brave+Bird parallel (Tier 1), Exa for breaking events (Tier 2), web_fetch for verification (Tier 3), Browser for interactive (Tier 4); includes breaking events parallel execution rule and rationale for each tier's placement. |
-| 2026-02-27 | Section 3: Added `[CRITICAL - DELIVERY]` block to Payload Skeleton and `[TOOLS]` section. Added new Common Gotcha: announce delivery silently fails for large outputs (v2026.2.25 regression) — `message` tool is the reliable fix, `delivery.mode: announce` retained as fallback. Updated `[CRITICAL]` description to document labeled blocks pattern. Added `[CRITICAL - DELIVERY]` to Cron Job Creation Checklist. |
-| 2026-02-25 | Instance-specific config notes added (no generic pattern changes). Section 5: added instance note block — Anthropic direct OAuth broken, working path is Google Vertex ADC (`google-vertex-anthropic/claude-sonnet-4-6@default`, `us-east5`). Section 2 model table: linked coding row to Section 5 note. TOOLS.md addition: Gemini CLI section added as a headless analytics proxy layer (taxonomy-correct, no guide changes needed). Confirmed all 7 workspace files aligned to guide taxonomy after audit. |
-| 2026-02-23 | Added QMD memory backend subsection (Section 1): install pattern, config, memory pressure notes, updated L3 tier diagram. Updated model assignment table: haiku confirmed for crons (resolved backlog item). Added two cron gotchas: same-minute scheduling race condition and `agentId: "main"` fragility. Added parallel cron support note (v2026.2.22). Added new Section 6: MCP Tools Integration via mcporter — config pattern, core commands, HTTP/stdio server examples, google-dev-knowledge reference, agent usage pattern. Updated operational checklists. Added QMD + mcporter reference links. Renumbered sections 6→7 (Operational), 7→8 (Reference Links), 8→9 (Revision History). |
-| 2026-02-20 | Skill-first coding: Section 5 updated to delegate via coding-agent skill instead of raw opencode command. Added CLI startup warning pattern to Section 3 gotchas and Section 6 checklist. |
-| 2026-02-19 | Initial creation. Forked from `openclaw-gemini-guide.md`. Replaced Gemini model strategy with Anthropic. Updated model assignments, coding architecture, and cron notes to reflect Claude Max migration. |
+Detailed revision history now lives in `CHANGELOG.md` in this folder so the main guide stays focused on the current architecture.
