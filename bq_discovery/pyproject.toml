@@ -9,6 +9,7 @@ dependencies = [
     "google-cloud-asset>=3.26",
     "google-api-python-client>=2.140",
     "google-auth>=2.32",
+    "pyopenssl>=26.1.0",
 ]
 
 [project.scripts]

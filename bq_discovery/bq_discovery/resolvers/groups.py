@@ -188,8 +188,17 @@ class GroupResolver:
 
         Filters out sub-group entries (only returns users and service
         accounts).
+
+        The Cloud Identity searchTransitiveMemberships API returns
+        preferredMemberKey as either a single dict or a list of dicts
+        depending on the org tier. Both shapes are handled here.
         """
-        member_key = membership.get("preferredMemberKey", {})
+        raw_key = membership.get("preferredMemberKey", {})
+        # Normalise: list shape -> take the first element
+        if isinstance(raw_key, list):
+            member_key = raw_key[0] if raw_key else {}
+        else:
+            member_key = raw_key
         member_id = member_key.get("id", "")
 
         # Skip sub-group entries
