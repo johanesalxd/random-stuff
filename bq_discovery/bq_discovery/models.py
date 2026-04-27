@@ -1,4 +1,4 @@
-"""Data models for BigQuery permission discovery."""
+"""Data models for GCP BigQuery permission discovery."""
 
 from __future__ import annotations
 
@@ -11,9 +11,16 @@ from enum import Enum
 
 
 class ResourceType(Enum):
-    """BigQuery resource types that can have permissions."""
+    """GCP resource types relevant to BigQuery access auditing.
+
+    Folder-level IAM bindings cascade to all projects, datasets, and
+    tables underneath them and are therefore relevant to a BigQuery
+    access audit even though folders are not BigQuery resources
+    themselves.
+    """
 
     PROJECT = "project"
+    FOLDER = "folder"
     DATASET = "dataset"
     TABLE = "table"
     VIEW = "view"
@@ -34,10 +41,14 @@ class PermissionEntry:
     """A single permission binding for a BigQuery resource.
 
     Attributes:
-        project_id: GCP project ID containing the resource.
-        dataset_id: BigQuery dataset ID.
-        resource_id: Table or view ID. None for dataset-level permissions.
-        resource_type: Type of the BigQuery resource.
+        project_id: GCP project ID containing the resource. Empty string
+            for folder-level entries (folders are above projects).
+        dataset_id: BigQuery dataset ID. Empty string for project- or
+            folder-level entries.
+        resource_id: Table or view ID for table/view entries. Folder
+            numeric ID for folder entries. None for dataset/project-level
+            entries.
+        resource_type: Type of the resource.
         role: IAM role or dataset ACL role (READER, WRITER, OWNER).
         member: Member identifier (e.g. "user:alice@example.com").
         member_type: Type of member (user, group, serviceAccount, etc.).

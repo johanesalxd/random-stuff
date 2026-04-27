@@ -5,6 +5,10 @@ resources. When project_ids are specified, scopes each call to
 projects/{project_id} to avoid org-wide rate limits. When no project_ids
 are specified, performs a single paginated call across the entire organization.
 
+Folder scanning always uses org-wide scope regardless of project_ids, because
+folder resources exist above projects in the GCP hierarchy and cannot be
+discovered via project-scoped CAI calls.
+
 Limitations:
     - Only captures IAM policies, not legacy dataset ACLs (use acl_scanner
       for those).
@@ -72,6 +76,23 @@ def _extract_member_type(member: str) -> str:
     return "unknown"
 
 
+def _parse_folder_resource_name(resource: str) -> str:
+    """Parse a folder resource name into a folder ID.
+
+    Args:
+        resource: Full resource name, e.g.:
+            //cloudresourcemanager.googleapis.com/folders/123456789
+
+    Returns:
+        The folder numeric ID string, or empty string if not found.
+    """
+    parts = resource.split("/")
+    for i, part in enumerate(parts):
+        if part == "folders" and i + 1 < len(parts):
+            return parts[i + 1]
+    return ""
+
+
 def _build_asset_types(resource_types: set[ResourceType]) -> list[str]:
     """Build the list of Cloud Asset asset type strings to search.
 
@@ -82,6 +103,9 @@ def _build_asset_types(resource_types: set[ResourceType]) -> list[str]:
         List of Cloud Asset API asset type strings.
     """
     asset_types: list[str] = []
+
+    if ResourceType.FOLDER in resource_types:
+        asset_types.append("cloudresourcemanager.googleapis.com/Folder")
 
     if ResourceType.PROJECT in resource_types:
         asset_types.append("cloudresourcemanager.googleapis.com/Project")
@@ -130,7 +154,18 @@ def _process_result(
     resource = result.resource
 
     # Determine resource type and parse resource name
-    if asset_type == "cloudresourcemanager.googleapis.com/Project":
+    if asset_type == "cloudresourcemanager.googleapis.com/Folder":
+        if ResourceType.FOLDER not in resource_types:
+            return
+        res_type = ResourceType.FOLDER
+        folder_id = _parse_folder_resource_name(resource)
+        if not folder_id:
+            logger.warning("Could not parse folder resource name: %s", resource)
+            return
+        project_id = ""
+        dataset_id = ""
+        resource_id = folder_id
+    elif asset_type == "cloudresourcemanager.googleapis.com/Project":
         res_type = ResourceType.PROJECT
         project_id = _parse_project_resource_name(resource)
         dataset_id = ""
@@ -146,7 +181,12 @@ def _process_result(
     else:
         return
 
-    if project_ids and project_id not in project_ids:
+    # Folder entries have no project_id; skip the project filter for them.
+    if (
+        res_type != ResourceType.FOLDER
+        and project_ids
+        and project_id not in project_ids
+    ):
         return
 
     # Check if this resource type was requested. For TABLE asset type,
@@ -179,12 +219,18 @@ def scan_iam_policies(
     resource_types: set[ResourceType],
     project_ids: list[str] | None = None,
 ) -> tuple[list[PermissionEntry], list[str]]:
-    """Scan BigQuery IAM policies using Cloud Asset Inventory.
+    """Scan IAM policies using Cloud Asset Inventory.
 
     When project_ids are provided, performs one searchAllIamPolicies call
     per project scoped to projects/{project_id}, avoiding org-wide rate
     limits. When project_ids is None, performs a single paginated call
     scoped to organizations/{organization_id}.
+
+    Folder scanning always uses org-wide scope regardless of project_ids,
+    because folder resources exist above projects in the GCP hierarchy and
+    cannot be discovered via project-scoped CAI calls. When project_ids is
+    provided and FOLDER is in resource_types, an additional org-scoped call
+    is made for folder-only asset types.
 
     Args:
         organization_id: Numeric GCP organization ID.
@@ -201,34 +247,69 @@ def scan_iam_policies(
     entries: list[PermissionEntry] = []
     errors: list[str] = []
 
-    asset_types = _build_asset_types(resource_types)
-    if not asset_types:
-        return entries, errors
+    # Split FOLDER from the remaining types: folders require org scope even
+    # when project_ids restricts everything else.
+    folder_types: set[ResourceType] = set()
+    non_folder_types: set[ResourceType] = set()
+    for rt in resource_types:
+        if rt == ResourceType.FOLDER:
+            folder_types.add(rt)
+        else:
+            non_folder_types.add(rt)
 
     if project_ids:
-        for project_id in project_ids:
-            scope = f"projects/{project_id}"
+        # Per-project scan for non-folder resources
+        non_folder_asset_types = _build_asset_types(non_folder_types)
+        if non_folder_asset_types:
+            for project_id in project_ids:
+                scope = f"projects/{project_id}"
+                logger.info(
+                    "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
+                    scope,
+                )
+                try:
+                    request = asset_v1.SearchAllIamPoliciesRequest(
+                        scope=scope,
+                        asset_types=non_folder_asset_types,
+                    )
+                    for result in client.search_all_iam_policies(request=request):
+                        _process_result(result, resource_types, None, entries)
+                except Exception as e:
+                    logger.error(
+                        "Cloud Asset Inventory scan failed for project %s: %s",
+                        project_id,
+                        e,
+                    )
+                    errors.append(
+                        f"Cloud Asset Inventory scan failed for project "
+                        f"{project_id}: {e}"
+                    )
+
+        # Additional org-scoped scan for folders (cannot use project scope)
+        if folder_types:
+            folder_asset_types = _build_asset_types(folder_types)
+            org_scope = f"organizations/{organization_id}"
             logger.info(
-                "Scanning IAM policies via Cloud Asset Inventory, scope=%s",
-                scope,
+                "Scanning folder IAM policies via Cloud Asset Inventory, scope=%s "
+                "(folder scanning always uses org scope)",
+                org_scope,
             )
             try:
                 request = asset_v1.SearchAllIamPoliciesRequest(
-                    scope=scope,
-                    asset_types=asset_types,
+                    scope=org_scope,
+                    asset_types=folder_asset_types,
                 )
                 for result in client.search_all_iam_policies(request=request):
                     _process_result(result, resource_types, None, entries)
             except Exception as e:
-                logger.error(
-                    "Cloud Asset Inventory scan failed for project %s: %s",
-                    project_id,
-                    e,
-                )
-                errors.append(
-                    f"Cloud Asset Inventory scan failed for project {project_id}: {e}"
-                )
+                logger.error("Cloud Asset Inventory folder scan failed: %s", e)
+                errors.append(f"Cloud Asset Inventory folder scan failed: {e}")
     else:
+        # Single org-wide scan for all resource types
+        asset_types = _build_asset_types(resource_types)
+        if not asset_types:
+            return entries, errors
+
         scope = f"organizations/{organization_id}"
         logger.info(
             "Scanning IAM policies via Cloud Asset Inventory, scope=%s",

@@ -55,7 +55,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="project,dataset,table,view",
         help=(
             "Comma-separated list of resource types to scan. "
-            "Options: project, dataset, table, view. Default: all."
+            "Options: project, folder, dataset, table, view. "
+            "Default: project,dataset,table,view (folder is opt-in). "
+            "Folder-level IAM bindings cascade to all resources underneath "
+            "and are scanned at org scope even when --project-ids is set."
         ),
     )
     parser.add_argument(
@@ -155,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("Unknown resource type: %s", rt)
             print(
                 f"Error: Unknown resource type '{rt}'. "
-                f"Valid types: dataset, table, view",
+                f"Valid types: project, folder, dataset, table, view",
                 file=sys.stderr,
             )
             return 1

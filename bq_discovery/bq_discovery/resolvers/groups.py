@@ -52,6 +52,11 @@ class GroupResolver:
         # Try transitive first, fall back to direct
         members = self._search_transitive_memberships(group_name)
         if members is None:
+            logger.warning(
+                "Transitive membership unavailable for %s, using direct members only "
+                "(nested group members will not be expanded)",
+                group_email,
+            )
             members = self._list_direct_memberships(group_name)
 
         self._cache[group_email] = members
@@ -98,12 +103,10 @@ class GroupResolver:
             next_page_token = ""
 
             while True:
-                query_params = urlencode(
-                    {
-                        "page_size": 200,
-                        "page_token": next_page_token,
-                    }
-                )
+                params: dict = {"page_size": 200}
+                if next_page_token:
+                    params["page_token"] = next_page_token
+                query_params = urlencode(params)
                 request = (
                     self._service.groups()
                     .memberships()

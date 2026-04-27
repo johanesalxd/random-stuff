@@ -95,8 +95,9 @@ def run_scan(
 
     # --- Phase 3: Expand group memberships (optional) ---
     if expand_groups:
-        expanded = _expand_groups(result.entries)
+        expanded, expand_errors = _expand_groups(result.entries)
         result.entries.extend(expanded)
+        result.errors.extend(expand_errors)
         result.groups_expanded = len(
             {e.inherited_from_group for e in expanded if e.inherited_from_group}
         )
@@ -115,7 +116,9 @@ def _compute_stats(result: ScanResult) -> None:
     Args:
         result: The ScanResult to update with statistics.
     """
-    result.projects_scanned = len({e.project_id for e in result.entries})
+    result.projects_scanned = len(
+        {e.project_id for e in result.entries if e.project_id}
+    )
     result.datasets_scanned = len(
         {(e.project_id, e.dataset_id) for e in result.entries}
     )
@@ -130,19 +133,26 @@ def _compute_stats(result: ScanResult) -> None:
 
 def _expand_groups(
     entries: list[PermissionEntry],
-) -> list[PermissionEntry]:
+) -> tuple[list[PermissionEntry], list[str]]:
     """Expand group members into individual permission entries.
 
     Collects all unique group emails from the entries, resolves each
     group to its individual members via Cloud Identity, and creates
     new PermissionEntry objects that trace back to the original group.
 
+    If the Cloud Identity client cannot be initialised (API disabled,
+    credential error, network failure), the error is captured and
+    returned so the caller can surface it without discarding already-
+    collected scan results.
+
     Args:
         entries: The original permission entries to scan for groups.
 
     Returns:
-        New permission entries for individual group members.
-        The original group entries are not modified.
+        Tuple of (expanded_entries, errors). expanded_entries is a list
+        of new PermissionEntry objects for individual group members.
+        errors is a list of error strings. The original group entries
+        are not modified.
     """
     group_emails: set[str] = set()
     for entry in entries:
@@ -154,14 +164,31 @@ def _expand_groups(
 
     if not group_emails:
         logger.info("No group members found to expand")
-        return []
+        return [], []
 
     logger.info("Expanding %s groups", len(group_emails))
-    resolver = GroupResolver()
+
+    try:
+        resolver = GroupResolver()
+    except Exception as err:
+        logger.error("Failed to initialise group resolver: %s", err)
+        msg = (
+            f"Group expansion failed "
+            f"(could not initialise Cloud Identity client): {err}"
+        )
+        return [], [msg]
+
     expanded: list[PermissionEntry] = []
+    errors: list[str] = []
 
     for group_email in sorted(group_emails):
-        members = resolver.resolve_group(group_email)
+        try:
+            members = resolver.resolve_group(group_email)
+        except Exception as err:
+            logger.error("Failed to resolve group %s: %s", group_email, err)
+            errors.append(f"Failed to resolve group {group_email}: {err}")
+            continue
+
         if not members:
             continue
 
@@ -188,4 +215,4 @@ def _expand_groups(
                 )
 
     logger.info("Expanded into %s individual entries", len(expanded))
-    return expanded
+    return expanded, errors

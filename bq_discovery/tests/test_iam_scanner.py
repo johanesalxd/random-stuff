@@ -8,6 +8,7 @@ from google.iam.v1 import policy_pb2
 from bq_discovery.iam_scanner import (
     _build_asset_types,
     _extract_member_type,
+    _parse_folder_resource_name,
     _parse_project_resource_name,
     _parse_resource_name,
     _process_result,
@@ -96,7 +97,7 @@ def test_extract_member_type_project_editor():
 
 
 def test_build_asset_types_all():
-    """All resource types produce all three asset type strings."""
+    """Default resource types (no folder) produce three asset type strings."""
     types = {
         ResourceType.PROJECT,
         ResourceType.DATASET,
@@ -108,6 +109,41 @@ def test_build_asset_types_all():
     assert "bigquery.googleapis.com/Dataset" in result
     assert "bigquery.googleapis.com/Table" in result
     assert len(result) == 3
+
+
+def test_build_asset_types_with_folder():
+    """Including FOLDER adds the Folder asset type string."""
+    types = {
+        ResourceType.FOLDER,
+        ResourceType.PROJECT,
+        ResourceType.DATASET,
+        ResourceType.TABLE,
+        ResourceType.VIEW,
+    }
+    result = _build_asset_types(types)
+    assert "cloudresourcemanager.googleapis.com/Folder" in result
+    assert "cloudresourcemanager.googleapis.com/Project" in result
+    assert "bigquery.googleapis.com/Dataset" in result
+    assert "bigquery.googleapis.com/Table" in result
+    assert len(result) == 4
+
+
+def test_build_asset_types_folder_only():
+    """FOLDER alone produces only the Folder asset type string."""
+    result = _build_asset_types({ResourceType.FOLDER})
+    assert result == ["cloudresourcemanager.googleapis.com/Folder"]
+
+
+def test_build_asset_types_default_excludes_folder():
+    """Default resource types do not include the Folder asset type."""
+    default_types = {
+        ResourceType.PROJECT,
+        ResourceType.DATASET,
+        ResourceType.TABLE,
+        ResourceType.VIEW,
+    }
+    result = _build_asset_types(default_types)
+    assert "cloudresourcemanager.googleapis.com/Folder" not in result
 
 
 def test_build_asset_types_view_only():
@@ -288,3 +324,70 @@ def test_process_result_multiple_bindings():
     entries = []
     _process_result(result, {ResourceType.DATASET}, None, entries)
     assert len(entries) == 3
+
+
+# --- _parse_folder_resource_name ---
+
+
+def test_parse_folder_resource_name_standard():
+    """Standard folder resource name returns the folder numeric ID."""
+    result = _parse_folder_resource_name(
+        "//cloudresourcemanager.googleapis.com/folders/123456789"
+    )
+    assert result == "123456789"
+
+
+def test_parse_folder_resource_name_empty():
+    """Empty string returns empty string."""
+    assert _parse_folder_resource_name("") == ""
+
+
+def test_parse_folder_resource_name_malformed():
+    """String without 'folders' segment returns empty string."""
+    assert (
+        _parse_folder_resource_name("//cloudresourcemanager.googleapis.com/projects/p")
+        == ""
+    )
+
+
+# --- _process_result folder entries ---
+
+
+def test_process_result_folder_entry():
+    """Folder asset type creates entries with FOLDER type and folder ID."""
+    result = _make_iam_result(
+        "//cloudresourcemanager.googleapis.com/folders/987654321",
+        "cloudresourcemanager.googleapis.com/Folder",
+        [("roles/bigquery.admin", ["user:a@x.com"])],
+    )
+    entries = []
+    _process_result(result, {ResourceType.FOLDER}, None, entries)
+    assert len(entries) == 1
+    assert entries[0].resource_type == ResourceType.FOLDER
+    assert entries[0].resource_id == "987654321"
+    assert entries[0].project_id == ""
+    assert entries[0].dataset_id == ""
+
+
+def test_process_result_folder_skipped_when_not_requested():
+    """Folder asset type is skipped when FOLDER is not in resource_types."""
+    result = _make_iam_result(
+        "//cloudresourcemanager.googleapis.com/folders/123",
+        "cloudresourcemanager.googleapis.com/Folder",
+        [("roles/bigquery.admin", ["user:a@x.com"])],
+    )
+    entries = []
+    _process_result(result, {ResourceType.PROJECT, ResourceType.DATASET}, None, entries)
+    assert len(entries) == 0
+
+
+def test_process_result_folder_not_filtered_by_project_ids():
+    """Folder entries are not filtered by project_ids (folders have no project_id)."""
+    result = _make_iam_result(
+        "//cloudresourcemanager.googleapis.com/folders/111",
+        "cloudresourcemanager.googleapis.com/Folder",
+        [("roles/bigquery.admin", ["user:a@x.com"])],
+    )
+    entries = []
+    _process_result(result, {ResourceType.FOLDER}, ["some-project"], entries)
+    assert len(entries) == 1
