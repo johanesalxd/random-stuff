@@ -17,6 +17,7 @@ dependencies = [
     { name = "google-cloud-asset" },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-resource-manager" },
+    { name = "pyopenssl" },
 ]
 
 [package.dev-dependencies]
@@ -32,6 +33,7 @@ requires-dist = [
     { name = "google-cloud-asset", specifier = ">=3.26" },
     { name = "google-cloud-bigquery", specifier = ">=3.25" },
     { name = "google-cloud-resource-manager", specifier = ">=1.12" },
+    { name = "pyopenssl", specifier = ">=26.1.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -636,6 +638,19 @@ source = { registry = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-sta
 sdist = { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pygments/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887" }
 wheels = [
     { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pygments/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b" },
+]
+
+[[package]]
+name = "pyopenssl"
+version = "26.1.0"
+source = { registry = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pyopenssl/pyopenssl-26.1.0.tar.gz", hash = "sha256:737f0a2275c5bc54f3b02137687e1a765931fb3949b9a92a825e4d33b9eec08b" }
+wheels = [
+    { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pyopenssl/pyopenssl-26.1.0-py3-none-any.whl", hash = "sha256:115563879b2c8ccb207975705d3e491434d8c9d7c79667c902ecbf5f3bbd2ece" },
 ]
 
 [[package]]

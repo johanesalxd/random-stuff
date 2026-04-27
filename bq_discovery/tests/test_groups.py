@@ -77,6 +77,22 @@ def test_parse_transitive_membership_missing_key():
     assert GroupResolver._parse_transitive_membership(data) is None
 
 
+def test_parse_transitive_membership_list_shape():
+    """preferredMemberKey as a list (Cloud Identity Premium shape) is handled."""
+    data = {
+        "preferredMemberKey": [{"id": "alice@example.com"}],
+        "relationType": "DIRECT",
+    }
+    result = GroupResolver._parse_transitive_membership(data)
+    assert result == {"email": "alice@example.com", "type": "user"}
+
+
+def test_parse_transitive_membership_empty_list():
+    """Empty preferredMemberKey list returns None."""
+    data = {"preferredMemberKey": [], "relationType": "DIRECT"}
+    assert GroupResolver._parse_transitive_membership(data) is None
+
+
 # --- GroupResolver._parse_direct_membership (static) ---
 
 
