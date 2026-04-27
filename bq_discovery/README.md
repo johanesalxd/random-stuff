@@ -24,6 +24,7 @@ single command.
 
 | Source | Level | What's captured | Examples |
 |--------|-------|-----------------|----------|
+| Cloud Asset Inventory | Folder | IAM bindings on folders — cascade to all projects/datasets/tables underneath (opt-in via `--resource-types folder,...`) | `roles/bigquery.admin` on a folder |
 | Cloud Asset Inventory | Project | All IAM bindings on each project | `roles/owner`, `roles/editor`, `roles/bigquery.admin`, service agent roles |
 | Cloud Asset Inventory | Dataset | IAM bindings on datasets | `roles/bigquery.dataViewer`, `roles/bigquery.dataOwner` |
 | Cloud Asset Inventory | Table / View | IAM bindings on tables and views | `roles/bigquery.dataViewer` on a specific table |
@@ -53,7 +54,7 @@ flowchart TD
     B --> D["acl_scanner.py<br/>scan_dataset_acls()"]
     B -->|"--expand-groups"| E["resolvers/groups.py<br/>GroupResolver"]
 
-    C -->|"searchAllIamPolicies<br/>org-wide (default) or per-project (--project-ids)<br/>Cloud Asset Inventory API"| F["IAM Policy Bindings<br/>· projects<br/>· datasets<br/>· tables<br/>· views"]
+    C -->|"searchAllIamPolicies<br/>org-wide (default) or per-project (--project-ids)<br/>Cloud Asset Inventory API"| F["IAM Policy Bindings<br/>· folders (opt-in, always org-scoped)<br/>· projects<br/>· datasets<br/>· tables<br/>· views"]
 
     D --> G["resolvers/projects.py<br/>list_org_projects()"]
     G -->|"list projects + folders<br/>recursive BFS<br/>Resource Manager API"| H["Project IDs"]
@@ -74,6 +75,10 @@ flowchart TD
   output will show `table` for all table-level resources.
 - Dataset ACL scan time scales linearly with the number of datasets. For large
   organizations, use `--skip-acls` to return IAM-only results in seconds.
+- **Folder scanning always uses org-wide scope**, even when `--project-ids` is
+  specified. This is because folders exist above projects in the GCP hierarchy
+  and cannot be discovered via project-scoped Cloud Asset Inventory calls. All
+  folder IAM bindings in the organization are returned.
 
 ## Prerequisites
 
@@ -221,6 +226,11 @@ env -u GOOGLE_APPLICATION_CREDENTIALS \
 env -u GOOGLE_APPLICATION_CREDENTIALS \
   uv run bq-discovery --org-id YOUR_ORG_ID \
   --resource-types dataset,table,view -v -o reports/results.json
+
+# Full audit including folder-level IAM (cascades to all resources underneath)
+env -u GOOGLE_APPLICATION_CREDENTIALS \
+  uv run bq-discovery --org-id YOUR_ORG_ID \
+  --resource-types folder,project,dataset,table,view -v -o reports/results.json
 ```
 
 ### Loading into BigQuery
@@ -300,6 +310,7 @@ Access granted at a higher level cascades to all resources below it.
 
 | `resource_type` | `resource_id` | What it means |
 |-----------------|---------------|---------------|
+| `folder` | folder numeric ID | Roles bound to the folder — cascades to all projects, datasets, and tables underneath (opt-in via `--resource-types folder,...`) |
 | `project` | null | Roles bound to the project — cascades to all datasets and tables |
 | `dataset` | null | Roles/ACLs on the dataset — cascades to all tables within |
 | `table` | table or view ID | Roles granted directly on a specific table or view |
@@ -330,7 +341,7 @@ ORDER BY dataset_id, resource_id;
 | `--org-id` | required | GCP organization ID (numeric) |
 | `--list-projects` | false | List all projects (ID + number) and exit; no scan performed |
 | `--skip-acls` | false | Skip dataset ACL scan; return IAM policies only |
-| `--resource-types` | `project,dataset,table,view` | Comma-separated resource types to scan |
+| `--resource-types` | `project,dataset,table,view` | Comma-separated resource types to scan. Also accepts `folder` (opt-in) |
 | `--project-ids` | discover from org | Comma-separated project IDs to limit scope (allowlist) |
 | `--expand-groups` | false | Expand group memberships to individual users |
 | `--format` | `json` | Output format: `json`, `jsonl`, or `csv` |
@@ -411,8 +422,8 @@ organization_id,scanned_at,project_id,dataset_id,resource_id,resource_type,role,
 |-------|-------------|
 | `project_id` | GCP project ID |
 | `dataset_id` | BigQuery dataset ID; empty string for project-level IAM entries |
-| `resource_id` | Table or view ID; null for dataset/project-level entries |
-| `resource_type` | `project`, `dataset`, `table`, or `view` (see known limitations for table vs view) |
+| `resource_id` | Table or view ID for table/view entries; folder numeric ID for folder entries; null for dataset/project-level entries |
+| `resource_type` | `folder`, `project`, `dataset`, `table`, or `view` (see known limitations for table vs view) |
 | `role` | IAM role (e.g. `roles/bigquery.dataViewer`) or ACL role (`READER`, `WRITER`, `OWNER`) |
 | `member` | IAM member string or formatted ACL identity |
 | `member_type` | `user`, `group`, `serviceAccount`, `domain`, `specialGroup`, `authorizedView`, `authorizedDataset`, `authorizedRoutine` |

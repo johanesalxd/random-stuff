@@ -80,6 +80,20 @@ def test_to_dict_project_resource_type():
     assert d["dataset_id"] == ""
 
 
+def test_to_dict_folder_resource_type():
+    """Folder entry serialises resource_type='folder' with folder ID in resource_id."""
+    d = _make_entry(
+        project_id="",
+        dataset_id="",
+        resource_id="123456789",
+        resource_type=ResourceType.FOLDER,
+    ).to_dict()
+    assert d["resource_type"] == "folder"
+    assert d["project_id"] == ""
+    assert d["dataset_id"] == ""
+    assert d["resource_id"] == "123456789"
+
+
 # --- ScanResult.to_json ---
 
 

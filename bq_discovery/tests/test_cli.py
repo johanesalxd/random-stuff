@@ -39,3 +39,15 @@ def test_parse_args_verbose_stacking():
     """-vv increments verbose count to 2."""
     args = parse_args(["--org-id", "1", "-vv"])
     assert args.verbose == 2
+
+
+def test_parse_args_resource_types_default_excludes_folder():
+    """Default --resource-types does not include 'folder'."""
+    args = parse_args(["--org-id", "1"])
+    assert "folder" not in args.resource_types
+
+
+def test_parse_args_resource_types_accepts_folder():
+    """'folder' is accepted as a valid --resource-types value."""
+    args = parse_args(["--org-id", "1", "--resource-types", "folder,dataset"])
+    assert args.resource_types == "folder,dataset"
