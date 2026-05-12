@@ -118,9 +118,25 @@ def upsert_agent(
             data_agent=agent,
             update_mask=update_mask,
         )
-        operation = client.update_data_agent(request=update_request)
-        result = operation.result()
-        logger.info("Agent updated: %s", result.name)
+        try:
+            operation = client.update_data_agent(request=update_request)
+            result = operation.result()
+            logger.info("Agent updated: %s", result.name)
+        except Exception as update_err:
+            if "soft deleted" in str(update_err).lower():
+                logger.warning(
+                    "Agent %s is soft-deleted. Waiting 60s for deletion to "
+                    "complete before retrying create...",
+                    agent_id,
+                )
+                import time
+
+                time.sleep(60)
+                operation = client.create_data_agent(request=request)
+                result = operation.result()
+                logger.info("Agent created (after soft-delete wait): %s", result.name)
+            else:
+                raise
 
 
 def list_agents(

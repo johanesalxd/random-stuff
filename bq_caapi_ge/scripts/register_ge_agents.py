@@ -217,8 +217,8 @@ def list_ge_agents(token: str) -> None:
         logger.info("No agents registered in app: %s", APP_ID)
         return
 
-    print(f"\n{'GE Agent ID':<25} {'Display Name':<30} {'Type':<8} {'State'}")
-    print("-" * 80)
+    header = f"{'GE Agent ID':<25} {'Display Name':<30} {'Type':<8} {'State'}"
+    logger.info("\n%s\n%s", header, "-" * 80)
     for agent in agents:
         name = agent.get("name", "")
         ge_id = name.split("/")[-1]
@@ -230,8 +230,7 @@ def list_ge_agents(token: str) -> None:
             kind = "ADK"
         else:
             kind = "builtin"
-        print(f"{ge_id:<25} {display:<30} {kind:<8} {state}")
-    print()
+        logger.info("%-25s %-30s %-8s %s", ge_id, display, kind, state)
 
 
 def register_agent(
