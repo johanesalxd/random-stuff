@@ -103,7 +103,7 @@ Fetch the A2A agent cards from the CA API and register them in GE:
 # Register specific agents with an OAuth authorization resource
 uv run python scripts/register_ge_agents.py \
   --agents order_user_agent inventory_product_agent \
-  --auth-id bq-caapi-oauth
+  --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inv
 
 # List agents registered in the GE app
 uv run python scripts/register_ge_agents.py --list
@@ -138,18 +138,18 @@ Register CA API data agents in Gemini Enterprise via A2A.
 # Register agents
 uv run python scripts/register_ge_agents.py \
   --agents agent_id_1 agent_id_2 \
-  --auth-id my-auth-resource
+  --auth-ids auth-resource-1 auth-resource-2
 
 # Custom display names
 uv run python scripts/register_ge_agents.py \
   --agents agent_id_1 agent_id_2 \
   --display-names "Orders Analyst,Inventory Analyst" \
-  --auth-id my-auth-resource
+  --auth-ids auth-resource-1 auth-resource-2
 
 # Update existing agents
 uv run python scripts/register_ge_agents.py \
   --agents agent_id_1 \
-  --auth-id my-auth-resource \
+  --auth-ids my-auth-resource \
   --force
 
 # List registered agents
