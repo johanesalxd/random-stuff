@@ -5,8 +5,10 @@ Simple Flask app to test OAuth passthrough to Agent Engine.
 ## Setup
 
 ```bash
-cd test_web
-pip install -r requirements.txt
+cd advanced/test_web
+uv venv .venv
+source .venv/bin/activate
+uv pip install --index-url https://pypi.org/simple/ flask requests google-auth-oauthlib python-dotenv
 ```
 
 ## Prerequisites
@@ -16,7 +18,7 @@ pip install -r requirements.txt
 
 2. Agent deployed to Agent Engine
 
-3. Environment variables in `../.env`:
+3. Environment variables in root `../../.env`:
    - `OAUTH_CLIENT_ID`
    - `OAUTH_CLIENT_SECRET`
    - `GOOGLE_CLOUD_PROJECT`

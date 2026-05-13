@@ -55,14 +55,14 @@ deploy_agent() {
 }
 
 echo -e "${YELLOW}=== Deploying Orders Agent ===${NC}"
-deploy_agent "app/orders" "Orders Analyst"
+deploy_agent "advanced/app/orders" "Orders Analyst"
 
 echo -e "${YELLOW}=== Deploying Inventory Agent ===${NC}"
-deploy_agent "app/inventory" "Inventory Analyst"
+deploy_agent "advanced/app/inventory" "Inventory Analyst"
 
 echo -e "${GREEN}=== Deployment Complete ===${NC}"
 echo ""
 echo "Next steps:"
 echo "1. Note the Reasoning Engine IDs from the output above"
 echo "2. Update .env with ORDERS_REASONING_ENGINE_ID and INVENTORY_REASONING_ENGINE_ID"
-echo "3. Register with Gemini Enterprise: uv run python scripts/register_agents.py"
+echo "3. Register with Gemini Enterprise: uv run python advanced/scripts/register_agents.py"

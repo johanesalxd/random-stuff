@@ -12,7 +12,7 @@ Key differences from DataAgentToolset:
 - Renders Vega-Lite charts locally using Altair
 
 Usage:
-    python docs/examples/chart_with_ca_api.py
+    python advanced/docs/examples/chart_with_ca_api.py
 
 Requirements:
     pip install altair requests python-dotenv
@@ -31,7 +31,7 @@ load_dotenv()
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 DATA_AGENT_ID = os.getenv("AGENT_ORDERS_ID")
-LOCATION = "global"
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
 DATA_AGENT_NAME = (
     f"projects/{PROJECT_ID}/locations/{LOCATION}/dataAgents/{DATA_AGENT_ID}"
@@ -58,7 +58,7 @@ def render_vega_chart(vega_config: dict, output_path: str = "chart.png"):
     Returns:
         The Altair chart object.
     """
-    print(f"\n=== Vega-Lite Spec ===")
+    print("\n=== Vega-Lite Spec ===")
     print(json.dumps(vega_config, indent=2)[:2000])
     if len(json.dumps(vega_config)) > 2000:
         print("... (truncated)")
@@ -78,7 +78,7 @@ def chat_with_chart_rest(prompt: str):
     Returns:
         List of parsed messages.
     """
-    print(f"\n=== Sending prompt ===")
+    print("\n=== Sending prompt ===")
     print(f"Data Agent: {DATA_AGENT_NAME}")
     print(f"Prompt: {prompt}")
 
@@ -98,7 +98,7 @@ def chat_with_chart_rest(prompt: str):
         },
     }
 
-    print(f"\n=== Streaming response ===")
+    print("\n=== Streaming response ===")
 
     # Make streaming request
     messages = []
@@ -184,7 +184,7 @@ def chat_with_chart_rest(prompt: str):
 
                     # Check for Vega-Lite config
                     if "vegaConfig" in result:
-                        print(f"[CHART RESULT] Vega-Lite config received!")
+                        print("[CHART RESULT] Vega-Lite config received!")
                         chart_found = True
                         render_vega_chart(result["vegaConfig"])
 
@@ -232,7 +232,7 @@ def main():
     prompt = test_prompts[0]
     messages = chat_with_chart_rest(prompt)
 
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"Total messages received: {len(messages)}")
 
 

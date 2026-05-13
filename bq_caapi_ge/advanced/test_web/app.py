@@ -10,7 +10,7 @@ from flask import Flask, redirect, render_template, request, session, url_for
 from google_auth_oauthlib.flow import Flow
 
 # Load environment from parent directory
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
@@ -236,9 +236,9 @@ def logout():
 if __name__ == "__main__":
     # Allow OAuth over HTTP for localhost
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    print(f"\nTest Web App Starting...")
+    print("\nTest Web App Starting...")
     print(f"  Project: {PROJECT_ID}")
     print(f"  Reasoning Engine: {REASONING_ENGINE_ID}")
     print(f"  Auth Resource ID: {AUTH_RESOURCE_ID}")
-    print(f"\nOpen http://localhost:8080 in your browser\n")
+    print("\nOpen http://localhost:8080 in your browser\n")
     app.run(host="0.0.0.0", port=8080, debug=True)

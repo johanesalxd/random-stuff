@@ -1,6 +1,8 @@
-# Gemini Conversational Analytics ADK Demo
+# Conversational Analytics API with Gemini Enterprise
 
-Deploy Google ADK Agents that bridge the Conversational Analytics API with Gemini Enterprise using OAuth identity passthrough.
+Create BigQuery data agents using the Conversational Analytics API and publish
+them to Gemini Enterprise via the built-in A2A protocol. No custom agent
+runtime or deployment infrastructure required.
 
 ## Architecture
 
@@ -8,17 +10,14 @@ Deploy Google ADK Agents that bridge the Conversational Analytics API with Gemin
 sequenceDiagram
     participant User
     participant GE as Gemini Enterprise
-    participant ADK as ADK Agent
     participant CA as Conversational Analytics API
     participant BQ as BigQuery
 
-    User->>GE: Asks question (OAuth)
-    GE->>ADK: Routes query
-    ADK->>CA: ask_data_agent(query)
+    User->>GE: Asks question
+    GE->>CA: Routes via A2A
     CA->>BQ: Executes SQL (as user)
     BQ-->>CA: Returns data
-    CA-->>ADK: Returns answer
-    ADK-->>GE: Formats response
+    CA-->>GE: Returns answer
     GE-->>User: Displays answer
 ```
 
@@ -29,46 +28,38 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 ## Project Structure
 
 ```text
-├── app/
-│   ├── orders/                 # Orders Analyst Agent
-│   │   ├── agent.py            # Agent definition + DataAgentToolset
-│   │   └── .env                # Runtime environment variables
-│   └── inventory/              # Inventory Analyst Agent
-│       ├── agent.py            # Agent definition + DataAgentToolset
-│       └── .env                # Runtime environment variables
+├── scripts/
+│   ├── admin_tools.py            # Create/update CA API data agents
+│   └── register_ge_agents.py     # Fetch A2A card and register in GE
+├── advanced/                     # Custom ADK runtime (see advanced/README.md)
+│   ├── app/                      # ADK agent packages
+│   ├── scripts/                  # Deploy, auth, and registration scripts
+│   └── test_web/                 # Flask OAuth test harness
 ├── docs/
-│   ├── examples/               # Reference implementations
-│   │   └── chart_with_ca_api.py  # Custom CA API call with chart support
 │   ├── gemini-enterprise-demo.png
 │   └── test-web-demo.png
-├── scripts/
-│   ├── admin_tools.py          # Manage Data Agents (backend)
-│   ├── setup_auth.py           # Create OAuth resources
-│   ├── register_agents.py      # Register with Gemini Enterprise
-│   └── deploy_agents.sh        # Automated deployment
-├── test_web/                   # OAuth test harness
-│   ├── app.py                  # Flask app for local testing
-│   └── templates/              # HTML templates
-├── .env                        # Environment variables
+├── .env.example
+├── pyproject.toml
 └── README.md
 ```
 
 ## Prerequisites
 
-1. Python 3.11+ with `uv` package manager
-2. Google Cloud Project with APIs enabled:
-   - Vertex AI API
-   - Conversational Analytics API
-   - Discovery Engine API
-   - BigQuery API
-3. OAuth 2.0 Client Credentials (Client ID + Secret)
-4. gcloud CLI authenticated:
+1. Python 3.11+ with [`uv`](https://docs.astral.sh/uv/) package manager
+2. Google Cloud project with APIs enabled:
+   - Conversational Analytics API (`geminidataanalytics.googleapis.com`)
+   - Discovery Engine API (`discoveryengine.googleapis.com`)
+   - BigQuery API (`bigquery.googleapis.com`)
+3. OAuth 2.0 client credentials (Client ID + Secret) with redirect URIs:
+   - `https://vertexaisearch.cloud.google.com/oauth-redirect`
+   - `https://vertexaisearch.cloud.google.com/static/oauth/oauth.html`
+4. A Gemini Enterprise app (for agent registration)
+5. gcloud CLI authenticated:
    ```bash
    gcloud auth application-default login
-   gcloud auth login
    ```
 
-## Setup
+## Quick Start
 
 ### 1. Install Dependencies
 
@@ -83,76 +74,90 @@ cp .env.example .env
 ```
 
 Edit `.env` with your project details:
+
 ```bash
 GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_PROJECT_NUMBER=your-project-number
-AGENT_ORDERS_ID=your-orders-data-agent-id
-AGENT_INVENTORY_ID=your-inventory-data-agent-id
+BIGQUERY_DATASET_ID=your-dataset-id
+AGENT_ORDERS_ID=your-agent-id
 GEMINI_APP_ID=your-gemini-app-id
 OAUTH_CLIENT_ID=your-oauth-client-id
 OAUTH_CLIENT_SECRET=your-oauth-client-secret
 ```
 
-Create per-agent `.env` files:
+### 3. Create Data Agents
 
-```bash
-# app/orders/.env
-cat > app/orders/.env << EOF
-GOOGLE_CLOUD_PROJECT=your-project-id
-AGENT_ORDERS_ID=your-orders-data-agent-id
-AUTH_RESOURCE_ORDERS=bq-caapi-oauth
-EOF
-
-# app/inventory/.env
-cat > app/inventory/.env << EOF
-GOOGLE_CLOUD_PROJECT=your-project-id
-AGENT_INVENTORY_ID=your-inventory-data-agent-id
-AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
-EOF
-```
-
-> `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` are **not** needed by the deployed agents.
-> They are only required by `scripts/setup_auth.py` to create the Gemini Enterprise
-> authorization resources. Keep them in the root `.env` for that script.
-
-### 3. Create Backend Data Agents
+Create the CA API data agents in your project:
 
 ```bash
 uv run python scripts/admin_tools.py
 ```
 
-## Deployment
+This creates (or updates) the backend data agents with BigQuery table
+references and system instructions.
 
-### Step 1: Deploy to Agent Engine
+### 4. Register in Gemini Enterprise
 
-```bash
-bash scripts/deploy_agents.sh
-```
-
-Save the Reasoning Engine resource names from the output.
-
-### Step 2: Setup OAuth Authorization
+Fetch the A2A agent cards from the CA API and register them in GE:
 
 ```bash
-uv run python scripts/setup_auth.py
+# Register specific agents with an OAuth authorization resource
+uv run python scripts/register_ge_agents.py \
+  --agents order_user_agent inventory_product_agent \
+  --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inv
+
+# List agents registered in the GE app
+uv run python scripts/register_ge_agents.py --list
 ```
 
-### Step 3: Register with Gemini Enterprise
+The script:
+1. Calls the CA API `getCard` endpoint to fetch the canonical A2A agent card
+2. Creates an OAuth authorization resource in GE (if `--auth-id` is provided)
+3. Registers each agent in GE via the Discovery Engine API
+
+### 5. Use in Gemini Enterprise
+
+Open your Gemini Enterprise app in the Google Cloud console. The registered
+agents appear as available data agents for users to query.
+
+## Script Reference
+
+### `scripts/admin_tools.py`
+
+Create or update CA API data agents. Idempotent -- creates on first run,
+updates existing agents on subsequent runs.
 
 ```bash
-# Register Orders agent only
-uv run python scripts/register_agents.py \
-  --orders-resource <ORDERS_RESOURCE_NAME>
-
-# Or register both agents
-uv run python scripts/register_agents.py \
-  --orders-resource <ORDERS_RESOURCE_NAME> \
-  --inventory-resource <INVENTORY_RESOURCE_NAME>
+uv run python scripts/admin_tools.py
 ```
 
-### Step 4: Test
+### `scripts/register_ge_agents.py`
 
-Access Gemini Enterprise to see "Order & User Analyst" and "Inventory & Product Analyst" agents.
+Register CA API data agents in Gemini Enterprise via A2A.
+
+```bash
+# Register agents
+uv run python scripts/register_ge_agents.py \
+  --agents agent_id_1 agent_id_2 \
+  --auth-ids auth-resource-1 auth-resource-2
+
+# Custom display names
+uv run python scripts/register_ge_agents.py \
+  --agents agent_id_1 agent_id_2 \
+  --display-names "Orders Analyst,Inventory Analyst" \
+  --auth-ids auth-resource-1 auth-resource-2
+
+# Update existing agents
+uv run python scripts/register_ge_agents.py \
+  --agents agent_id_1 \
+  --auth-ids my-auth-resource \
+  --force
+
+# List registered agents
+uv run python scripts/register_ge_agents.py --list
+
+# Delete an agent by GE ID
+uv run python scripts/register_ge_agents.py --delete 12345678901234567890
+```
 
 ## Sample Queries
 
@@ -166,32 +171,17 @@ Access Gemini Enterprise to see "Order & User Analyst" and "Inventory & Product 
 - "Which distribution center has the most inventory?"
 - "How many products are in the 'Accessories' category?"
 
-## Local Development
+## Advanced: Custom ADK Runtime
 
-Test agents locally:
+For use cases requiring custom agent orchestration, a standalone frontend,
+or chart visualization support, see [`advanced/README.md`](advanced/README.md).
 
-```bash
-export $(cat .env | xargs)
-uv run adk run app/orders
-```
-
-## Local Testing with OAuth
-
-Test the OAuth passthrough flow using the test web app:
+The advanced path deploys ADK agent packages to Vertex AI Agent Engine with
+custom OAuth identity passthrough. Install the additional dependencies with:
 
 ```bash
-cd test_web
-uv venv .venv
-source .venv/bin/activate
-uv pip install --index-url https://pypi.org/simple/ -r requirements.txt
-python app.py
+uv sync --extra advanced
 ```
-
-Open http://localhost:8080, login with Google, and query the agent.
-
-**Prerequisites:**
-- Add `http://localhost:8080/auth/callback` to OAuth client redirect URIs in Cloud Console
-- Set `ORDERS_REASONING_ENGINE_ID` in root `.env`
 
 ## Demo
 
@@ -199,32 +189,7 @@ Open http://localhost:8080, login with Google, and query the agent.
 
 ![Gemini Enterprise Demo](docs/gemini-enterprise-demo.png)
 
-*Order & User Analyst responding to queries in Gemini Enterprise*
-
-### Test Web App
-
-![Test Web App Demo](docs/test-web-demo.png)
-
-*Local OAuth test harness showing token passthrough*
-
-## Limitations
-
-### Chart Visualization
-
-The ADK's built-in `DataAgentToolset` does not currently support chart responses
-from the Conversational Analytics API. The CA API returns Vega-Lite specifications
-in `systemMessage.chart.result.vegaConfig`, but the toolset only processes `text`,
-`schema`, and `data` messages.
-
-To add chart support, implement a custom tool that calls the CA API directly
-and parses the `chart` messages from the streaming response.
-
-See [`docs/examples/chart_with_ca_api.py`](docs/examples/chart_with_ca_api.py) for
-a reference implementation that demonstrates:
-
-- Direct CA API calls with OAuth credentials
-- Parsing streaming responses including chart data
-- Rendering Vega-Lite specs to PNG using Altair
+*Data agent responding to queries in Gemini Enterprise*
 
 ## License
 

@@ -1,13 +1,17 @@
 [project]
 name = "bq-caapi-ge"
-version = "0.1.0"
-description = "ADK Agents for Conversational Analytics with Gemini Enterprise"
+version = "0.2.0"
+description = "Conversational Analytics API agents with Gemini Enterprise integration"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "google-adk>=1.28.0",
     "google-cloud-geminidataanalytics>=0.9.0",
     "python-dotenv>=1.2.1",
+]
+
+[project.optional-dependencies]
+advanced = [
+    "google-adk>=1.28.1",
 ]
 
 [dependency-groups]
