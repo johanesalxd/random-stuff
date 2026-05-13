@@ -30,7 +30,7 @@ uv run ruff format --check .  # format check (CI)
 # Default path: create agents and register in GE
 uv run python scripts/admin_tools.py
 uv run python scripts/register_ge_agents.py \
-    --agents agent_id_1 agent_id_2 --auth-id bq-caapi-oauth
+    --agents agent_id_1 agent_id_2 --auth-ids bq-caapi-oauth-1 bq-caapi-oauth-2
 
 # Advanced path: ADK agent runtime
 export $(cat .env | xargs)
