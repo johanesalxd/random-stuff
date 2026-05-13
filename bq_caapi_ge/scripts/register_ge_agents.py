@@ -11,10 +11,10 @@ Usage::
     export OAUTH_CLIENT_ID=your-oauth-client-id
     export OAUTH_CLIENT_SECRET=your-oauth-client-secret
 
-    # Register specific agents
+    # Register specific agents with unique auth resources
     uv run python scripts/register_ge_agents.py \\
         --agents campaign_monitor marketing_analyst \\
-        --auth-id bq-caapi-oauth
+        --auth-ids auth-campaign auth-marketing
 
     # List agents registered in the GE app
     uv run python scripts/register_ge_agents.py --list
@@ -34,7 +34,7 @@ import sys
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +43,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 APP_ID = os.getenv("GEMINI_APP_ID")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
@@ -263,7 +264,7 @@ def register_agent(
     if auth_id:
         payload["authorizationConfig"] = {
             "agentAuthorization": (
-                f"projects/{PROJECT_ID}/locations/{LOCATION}/authorizations/{auth_id}"
+                f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{auth_id}"
             )
         }
 
@@ -350,10 +351,12 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--auth-id",
+        "--auth-ids",
+        nargs="+",
         metavar="AUTH_ID",
         help=(
-            "Authorization resource ID to create and attach to the registered agents. "
+            "Authorization resource IDs to create and attach to the registered agents. "
+            "Must provide exactly one auth-id per agent to satisfy the 1:1 GE mapping. "
             "Requires OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET to be set."
         ),
     )
@@ -404,15 +407,27 @@ def main() -> None:
     else:
         display_names = [None] * len(args.agents)
 
-    if args.auth_id:
-        create_auth_resource(args.auth_id, token)
+    auth_ids: list[str | None] = []
+    if args.auth_ids:
+        auth_ids = args.auth_ids
+        if len(auth_ids) != len(args.agents):
+            logger.error(
+                "--auth-ids count (%d) does not match --agents count (%d).",
+                len(auth_ids),
+                len(args.agents),
+            )
+            sys.exit(1)
+        for unique_auth_id in set(auth_ids):
+            create_auth_resource(unique_auth_id, token)
+    else:
+        auth_ids = [None] * len(args.agents)
 
-    for agent_id, display_name in zip(args.agents, display_names):
+    for agent_id, display_name, auth_id in zip(args.agents, display_names, auth_ids):
         try:
             register_agent(
                 agent_id=agent_id,
                 token=token,
-                auth_id=args.auth_id,
+                auth_id=auth_id,
                 display_name=display_name,
                 force=args.force,
             )

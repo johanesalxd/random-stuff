@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from google.cloud import geminidataanalytics_v1beta as geminidataanalytics
 from google.protobuf import field_mask_pb2
 
-load_dotenv()
+load_dotenv(override=True)
 
 logging.basicConfig(
     level=logging.INFO,
