@@ -20,4 +20,4 @@
 | ... | ... | ... | ... | ... |
 
 ## Assessment
-The project is currently running entirely on the **On-Demand** model ($6.25/TB). Given the high query volume (avg 40k queries/day), this is likely inefficient compared to a capacity-based model.
+The project is currently running entirely on the **On-Demand** model. Given the high query volume (avg 40k queries/day), capacity pricing is worth evaluating, but do not assume it is cheaper without comparing current regional on-demand pricing, slot-hour pricing, discounts, and BigQuery recommender output.
