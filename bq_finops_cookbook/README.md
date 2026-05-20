@@ -140,9 +140,11 @@ If your project is in a different region, you can customize this rate by editing
 Use this prompt to run a complete analysis on your project.
 
 ### Prerequisites
-1.  **OpenCode Agent** running **Gemini 3 Pro**.
+1.  **OpenCode Agent** running **Gemini 3.5 Flash** (`gemini-3.5-flash`).
 2.  **Authentication**: `gcloud auth login` or valid MCP credentials.
 3.  **Permissions**: `bigquery.resourceViewer` on the target project.
+
+**Runtime note:** This cookbook is tuned specifically for OpenCode running Gemini 3.5 Flash (`gemini-3.5-flash`); keep the workflow OpenCode-specific rather than runtime-agnostic.
 
 ### Execution
 Ask the agent:

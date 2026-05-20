@@ -11,7 +11,7 @@
 | resourcesExceeded | 5 | 0.0% | Yes |
 
 ## Expensive Queries
-*Top users by estimated on-demand cost.*
+*Top users by estimated on-demand cost. Treat cost estimates as regional-pricing placeholders unless the configured rate has been verified for the project location.*
 
 | User | Query Count | TB Scanned | Est. Cost ($) | Avg GB/Query |
 |------|------------|------------|---------------|--------------|

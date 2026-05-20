@@ -12,12 +12,13 @@
 **Reasoning:**
 Your workload is highly bursty (4x peak-to-median ratio). A fixed baseline of 500 slots would hurt performance during your critical 9AM peaks (requiring 2,200 slots). However, paying for 2,200 slots 24/7 is wasteful.
 
-**Autoscaling** allows you to pay for ~500 slots during the day but instantly burst to 2,000+ when needed, optimizing both cost and performance.
+**Autoscaling** can scale capacity for the morning peaks without committing to peak capacity 24/7. Validate the economics with current regional slot-hour pricing, scaled-slot billing behavior, and any committed-use discounts before treating this as a cost-saving change.
 
 **Configuration:**
-- **Edition:** Standard (pay for what you use, no commit required)
+- **Edition:** Standard (autoscaling-only; billed for scaled slot capacity, not actual slot utilization)
 - **Max Autoscale:** 2,500 slots (to cover the max peak)
-- **Baseline:** 0 (optional, or small baseline if moved to Enterprise)
+- **Baseline:** Not applicable in Standard Edition; evaluate Enterprise/Enterprise Plus only if guaranteed baseline capacity or commitments are needed
+- **Validation:** Cross-check BigQuery Slot Recommender / `INFORMATION_SCHEMA.RECOMMENDATIONS` before production changes.
 
 ## Alternative Analysis
 
@@ -25,11 +26,11 @@ Your workload is highly bursty (4x peak-to-median ratio). A fixed baseline of 50
 
 **Option A: Stay On-Demand (PAYG)**
 - **Why Considered:** Simplicity.
-- **Why Rejected:** At $8,500/month, you are likely overpaying. Autoscaling slot-hours are typically cheaper for steady-but-heavy workloads.
+- **Why Rejected:** Current spend appears high enough to justify evaluating capacity pricing, but do not assume autoscaling is cheaper universally; compare against actual regional on-demand bytes processed, slot-hour pricing, and recommender output.
 
-**Option C: Baseline Reservations (Enterprise)**
+**Option C: Baseline Reservations (Enterprise/Enterprise Plus)**
 - **Why Considered:** Discounts (1-year commit).
-- **Why Rejected:** Your "Valley" usage is low. Committing to your "Peak" (2000) would waste 75% of capacity. Committing to "Average" (500) would kill morning performance.
+- **Why Rejected:** Valley usage is low. Committing to peak capacity (~2,000 slots) would likely waste substantial capacity, while committing near the average (~500 slots) may still leave morning peaks dependent on autoscaling or queues.
 
 ## Implementation Steps
 
@@ -40,5 +41,5 @@ bq mk --reservation --project_id=my-project --location=US --edition=STANDARD --a
 
 ### Step 2: Assign Project
 ```bash
-bq mk --reservation_assignment --project_id=my-project --location=US --reservation=prod_autoscale --assignee_type=PROJECT --assignee_id=ecommerce-prod
+bq mk --reservation_assignment --reservation_id=my-project:US.prod_autoscale --job_type=QUERY --assignee_type=PROJECT --assignee_id=ecommerce-prod
 ```

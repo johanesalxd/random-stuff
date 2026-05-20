@@ -10,9 +10,9 @@
 | `staging.test_dump_2024` | 15 TB | 0 TB | 15 TB | 100% |
 
 **Recommendation:**
-- **CRITICAL:** `logs.app_events_archive` is consuming **250 TB** of storage and is 100% Long Term (unused for >90 days).
-- **Potential Savings:** 250 TB * $0.01/GB = **$2,500/month**.
-- **Action:** Move this table to Google Cloud Storage (Archive Class) or set a Partition Expiration to delete data older than 1 year.
+- **CRITICAL:** `logs.app_events_archive` is consuming **250 TB** of long-term storage. Confirm retention requirements before moving or deleting it.
+- **Potential Savings:** Material, but depends on current regional BigQuery storage pricing and any destination storage/retrieval costs.
+- **Action:** Consider partition expiration, lifecycle/retention policy changes, or export to cheaper storage only after validating access patterns and compliance needs.
 
 ## Estimated Monthly Spend (Current)
 - **Compute (On-Demand):** ~$8,500
@@ -20,6 +20,6 @@
 - **Total:** ~$14,500 / month
 
 **Optimization Target:**
-- **Compute:** Switch to Autoscaling (~$6,000)
-- **Storage:** Archive logs (~$2,500 savings)
-- **New Total:** ~$9,500 (**$5,000/month savings**)
+- **Compute:** Evaluate Standard Edition autoscaling against actual regional on-demand bytes processed, slot-hour pricing, scaled-slot billing, and recommender output.
+- **Storage:** Reduce or tier archive logs where retention policy permits.
+- **Expected Outcome:** Potential savings are likely meaningful, but final estimates require current pricing inputs and production validation.

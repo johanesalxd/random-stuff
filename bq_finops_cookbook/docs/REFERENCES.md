@@ -36,6 +36,11 @@ This file contains additional resources and official documentation links for the
 - [INFORMATION_SCHEMA.RESERVATIONS View](https://cloud.google.com/bigquery/docs/information-schema-reservations) - Reservation configuration and join patterns
 - [INFORMATION_SCHEMA.TABLE_STORAGE View](https://cloud.google.com/bigquery/docs/information-schema-table-storage) - Storage consumption analysis
 - [INFORMATION_SCHEMA.WRITE_API_TIMELINE View](https://cloud.google.com/bigquery/docs/information-schema-write-api) - Streaming ingestion metrics
+- [INFORMATION_SCHEMA.RECOMMENDATIONS View](https://cloud.google.com/bigquery/docs/information-schema-recommendations) - Active Assist recommendation metadata exposed through BigQuery
+
+### Recommenders and Slot Estimator
+- [BigQuery Slot Recommender](https://cloud.google.com/bigquery/docs/slot-recommender) - Edition and on-demand workload capacity recommendations
+- [Recommender API](https://cloud.google.com/recommender/docs/overview) - API surface and IAM model for recommendations
 
 ## Query Pattern Sources
 
@@ -51,6 +56,7 @@ All SQL queries in this guide are based on official Google Cloud BigQuery docume
 - **Bytes Processed (Query 4.2):** [Bytes processed per user identity](https://cloud.google.com/bigquery/docs/information-schema-jobs#bytes_processed_per_user_identity)
 - **Average Slot Utilization:** [Calculate average slot utilization](https://cloud.google.com/bigquery/docs/information-schema-jobs#calculate_average_slot_utilization)
 - **Queue Pressure (Query 4.10):** [JOBS_TIMELINE PENDING/RUNNING](https://cloud.google.com/bigquery/docs/information-schema-jobs-timeline#number_of_running_and_pending_jobs_over_time)
+- **Recommendations Cross-Check (Query 4.11):** [INFORMATION_SCHEMA.RECOMMENDATIONS view](https://cloud.google.com/bigquery/docs/information-schema-recommendations) and [BigQuery Slot Recommender](https://cloud.google.com/bigquery/docs/slot-recommender)
 - **Streaming Ingestion (Query 5.1):** [WRITE_API_TIMELINE view](https://cloud.google.com/bigquery/docs/information-schema-write-api)
 - **Storage Analysis (Query 6.1):** [Table storage view](https://cloud.google.com/bigquery/docs/information-schema-table-storage)
 
