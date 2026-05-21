@@ -49,3 +49,7 @@ WORKSPACE_REFERENCE.md
 **/.ruff_cache/
 **/.pytest_cache/
 temp/*
+
+_config.yml
+.antigravitycli
+**/.antigravitycli
