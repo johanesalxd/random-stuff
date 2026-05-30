@@ -115,6 +115,96 @@ flowchart LR
 
 ---
 
+## How the Components Work Together
+
+Cloud Composer 3 has five key components. Understanding which component does what -- and where the bottleneck occurs -- is essential for diagnosing concurrency issues.
+
+### Infrastructure Architecture
+
+```mermaid
+flowchart TB
+    subgraph composer["Cloud Composer 3 Environment"]
+        direction TB
+        SCH["Scheduler\n(decides what runs,\nwrites task states)"]
+        DB[("Metadata DB\n(PostgreSQL)\nTask states, Variables,\nXComs, connections")]
+        REDIS["Redis\n(Celery Broker)\nTask messages:\n'run task X'"]
+        WORKER["Workers\n(Celery)\n~6 slots per pod\nTHE BOTTLENECK"]
+        TRIG["Triggerer\n(asyncio event loop)\nHandles 100s of\ndeferred tasks"]
+    end
+
+    API["External APIs\n(Airbyte, etc.)"]
+
+    SCH -->|"1. Write task state\n(scheduled → queued)"| DB
+    SCH -->|"2. Send task message"| REDIS
+    REDIS -->|"3. Worker consumes\ntask message"| WORKER
+    WORKER -->|"4a. Init: call API\n(POST /v1/jobs)"| API
+    WORKER -->|"4b. Defer: register\ntrigger"| TRIG
+    TRIG -->|"5. Poll API\n(GET /v1/jobs/id)\nevery 60s"| API
+    TRIG -->|"6. Fire TriggerEvent\n(task → queued)"| REDIS
+    REDIS -->|"7. Worker consumes\ncallback message"| WORKER
+    WORKER -->|"8. Update state\n(→ success/failed)"| DB
+
+    style WORKER fill:#f88,stroke:#d33,color:#fff
+    style TRIG fill:#8d8,stroke:#3a3,color:#fff
+    style DB fill:#88f,stroke:#33d,color:#fff
+    style REDIS fill:#fd8,stroke:#da3
+```
+
+### Who Calls What in Each Phase
+
+| Phase | Component | What it does | Calls external API? | Worker slot held? |
+|:---|:---|:---|:---|:---|
+| **Init** | **Worker** | Submits job to external service (e.g., `POST /v1/jobs`), then calls `self.defer()` | **Yes** -- Worker makes the HTTP call | **Yes** (~2-5s) |
+| **Defer** | **Triggerer** | Polls job status (e.g., `GET /v1/jobs/{id}`) via asyncio event loop every 60s | **Yes** -- Triggerer makes the HTTP calls | **No** |
+| **Callback** | **Worker** | Reads the trigger event, checks status, marks task success or failed | **No** -- just reads the event dict | **Yes** (~1s) |
+
+Key points:
+- The **Worker** makes the initial API call (Phase 1). If the external API is slow/stuck, the worker slot is held until the HTTP request times out.
+- The **Triggerer** makes all polling calls (Phase 2). If the API is stuck, only that trigger's thread blocks -- other triggers continue running (asyncio). The task stays in `deferred` state until the trigger's timeout fires.
+- The **Callback** (Phase 3) does NOT call any external API. It only reads the event from the triggerer and updates the task state. This should take ~1 second.
+
+### The Callback Bottleneck (Why Tasks Get "Stuck in Queued")
+
+When all 70 tasks complete their defer phase and need a worker slot for the callback, they go through the Celery queue (Redis). If workers are busy, tasks wait:
+
+```mermaid
+flowchart TD
+    A["Triggerer fires TriggerEvent\nfor 70 tasks"] --> B["70 tasks enter\nCelery queue (Redis)\nstate: QUEUED"]
+    B --> C{"Worker slots\navailable?"}
+    C -->|"Yes (6 at a time)"| D["Worker runs\nexecute_complete()\n~1s per task"]
+    D --> E["Task marked SUCCESS\nWorker slot released"]
+    C -->|"No (all 6 busy)"| F["Task waits in queue"]
+    F --> G{"How long\nin queue?"}
+    G -->|"< threshold"| C
+    G -->|"> threshold"| H["Scheduler detects:\n'Task stuck in queued'\nAttempts requeue"]
+    H --> I{"Requeue\nattempts left?"}
+    I -->|"Yes"| C
+    I -->|"No (max exceeded)"| J["Task marked FAILED\n'requeue attempts\nexceeded max'"]
+
+    style J fill:#f44,stroke:#d32,color:#fff
+    style E fill:#4a4,stroke:#2a2,color:#fff
+    style F fill:#fa4,stroke:#d83
+```
+
+**With correct callbacks (~1s each):** 70 tasks / 6 slots * 1s = ~12 seconds. No task gets stuck.
+
+**With `time.sleep(30)` in callback:** 70 tasks / 6 slots * 30s = ~350 seconds (~6 min). Later tasks wait in `queued` long enough to trigger the "stuck in queued" detection.
+
+**With `time.sleep(180)` in callback (original bug):** 70 tasks / 6 slots * 180s = ~35 minutes. Tasks regularly hit the requeue limit and are marked `failed`.
+
+### Failure Modes
+
+| Failure | Cause | Component affected | Impact |
+|:---|:---|:---|:---|
+| **External API stuck during init** | Service unresponsive | Worker holds slot until HTTP timeout (default 3600s) | 1 worker slot blocked for up to 1 hour |
+| **External API stuck during polling** | Service unresponsive | Triggerer thread blocks | Other triggers unaffected (asyncio isolation). Task stays `deferred` until trigger timeout. |
+| **Callback can't get worker slot** | All workers busy (other callbacks or inits) | Redis queue grows | `Task stuck in queued` → requeue attempts → if exceeded: `FAILED` |
+| **`time.sleep()` in callback** | Application bug | Worker slot held unnecessarily | Cascading failure: blocks other callbacks → more tasks stuck → more failures |
+| **Metadata DB slow** | Heavy Variable/XCom writes, high connection count | Scheduler slows down | Delayed state updates, slow "stuck in queued" detection, scheduler heartbeat warnings |
+| **Redis broker overloaded** | Too many queued messages | Task delivery delayed | Rare in Composer 3 (Google-managed). Would manifest as tasks slow to transition from `queued` to `running`. |
+
+---
+
 ## Airbyte-Specific Flow
 
 When using `AirbyteTriggerSyncOperator(deferrable=True)`, the deferrable lifecycle applies to Airbyte sync jobs.
