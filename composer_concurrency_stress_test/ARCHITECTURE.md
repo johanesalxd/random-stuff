@@ -200,6 +200,50 @@ AirbyteTriggerSyncOperator(
 )
 ```
 
+### Demonstrating the Anti-Pattern
+
+This repository includes two DAGs for a side-by-side comparison:
+
+| DAG | Callback behavior | Expected total time (70 tasks) |
+|:---|:---|:---|
+| `airbyte_broken_stress_test.py` | `time.sleep(30)` in callback | ~9-10 minutes |
+| `airbyte_deferrable_stress_test.py` | Standard operator (~1s callback) | ~4-5 minutes |
+
+Both DAGs use the same mock Airbyte server and the same deferrable pattern for Phase 1 (init) and Phase 2 (defer). The **only** difference is Phase 3 (callback).
+
+```mermaid
+flowchart LR
+    subgraph broken["Broken: time.sleep(30) in callback"]
+        direction TB
+        B1["Phase 1-2: IDENTICAL\nInit + Defer work correctly"]
+        B2["Phase 3: BROKEN\n70 callbacks * 30s sleep\n/ 6 worker slots\n= ~350s bottleneck"]
+        B1 --> B2
+    end
+
+    subgraph fixed["Fixed: standard operator"]
+        direction TB
+        F1["Phase 1-2: IDENTICAL\nInit + Defer work correctly"]
+        F2["Phase 3: CORRECT\n70 callbacks * ~1s\n/ 6 worker slots\n= ~12s"]
+        F1 --> F2
+    end
+
+    style broken fill:#fee,stroke:#d33
+    style fixed fill:#efe,stroke:#3a3
+```
+
+To run the comparison:
+1. Deploy the mock Airbyte server and set up the environment (see [Running the Airbyte Deferrable Stress Test](#running-the-airbyte-deferrable-stress-test))
+2. Upload both DAGs to the DAG bucket:
+   ```bash
+   gsutil cp dags/airbyte_broken_stress_test.py ${DAG_BUCKET}/
+   gsutil cp dags/airbyte_deferrable_stress_test.py ${DAG_BUCKET}/
+   ```
+3. Trigger `airbyte_broken_stress_test` first, wait for completion (~10 min)
+4. Trigger `airbyte_deferrable_stress_test`, wait for completion (~5 min)
+5. Compare the total run times and the callback phase duration in the Airflow UI
+
+The broken DAG clearly shows that even when Phase 1-2 (deferral) works correctly, blocking the worker in Phase 3 (callback) undoes all the concurrency gains.
+
 ---
 
 ## Mock Airbyte Server
@@ -366,7 +410,8 @@ composer_concurrency_stress_test/
   ARCHITECTURE.md                           # This document
   composer_concurrency_stress_test.ipynb    # End-to-end notebook (TimeDeltaSensor test)
   dags/
-    airbyte_deferrable_stress_test.py       # 70-task Airbyte deferrable test DAG
+    airbyte_broken_stress_test.py           # Anti-pattern demo (time.sleep in callback)
+    airbyte_deferrable_stress_test.py       # 70-task Airbyte deferrable test DAG (correct)
   mock_airbyte/
     main.py                                 # Flask mock Airbyte API
     Dockerfile                              # Cloud Run container
