@@ -39,6 +39,8 @@ Override these settings to remove Gates A and B:
 | `[core]max_active_tasks_per_dag` | `>= max tasks in any single DAG` | `70` |
 | `default_pool` slots | `>= [core]parallelism` | `150` |
 
+> **Note:** Deferred tasks do NOT occupy pool slots by default ([Airflow docs](https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/deferring.html)). The `default_pool` only needs to accommodate tasks in the init and callback phases, not all 70 simultaneously. Setting it to `>= parallelism` provides headroom for non-deferrable tasks in the same environment.
+
 But this alone doesn't solve Gate C -- tasks still saturate worker slots. That's where deferrable operators come in.
 
 ---
@@ -129,7 +131,7 @@ flowchart TB
         DB[("Metadata DB\n(PostgreSQL)\nTask states, Variables,\nXComs, connections")]
         REDIS["Redis\n(Celery Broker)\nTask messages:\n'run task X'"]
         WORKER["Workers\n(Celery)\n~6 slots per pod\nTHE BOTTLENECK"]
-        TRIG["Triggerer\n(asyncio event loop)\nHandles 100s of\ndeferred tasks"]
+        TRIG["Triggerer\n(asyncio event loop)\nDefault capacity: 1000\ndeferred tasks per instance"]
     end
 
     API["External APIs\n(Airbyte, etc.)"]
@@ -165,7 +167,7 @@ Key points:
 
 ### The Callback Bottleneck (Why Tasks Get "Stuck in Queued")
 
-When all 70 tasks complete their defer phase and need a worker slot for the callback, they go through the Celery queue (Redis). If workers are busy, tasks wait:
+As triggers fire, tasks re-enter the Celery queue (Redis) to get a worker slot for the callback. If callbacks are slow (e.g., `time.sleep()` in `execute_complete`), the queue grows faster than workers can drain it:
 
 ```mermaid
 flowchart TD
