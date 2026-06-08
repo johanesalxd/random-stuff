@@ -99,12 +99,16 @@ Select the best strategy based on the Decision Logic (see Options A-D below).
 9.  **Slot Recommender Cross-Check**: Run Query 4.11 (Slot Recommender) if recommendations are available for the admin project/location.
     *   Compare official recommender savings/slot guidance to the heuristic reservation simulation.
     *   If unavailable because of IAM, API, or region constraints, state that explicitly in `04_optimization_opportunities.md` and `06_final_recommendation.md`.
+10. **Query Performance Insights**: Run Query 4.12 (Query Performance Insights) to analyze native query engine insights (partition skew, slot contention bottlenecks, high-cardinality joins).
+11. **BI Engine Diagnostics**: Run Query 4.13 (BI Engine Diagnostics) to list reason codes and counts for disabled memory acceleration.
+12. **Partition & Cluster Audit**: Run Query 4.14 (Active Tables Partition/Cluster Audit) to flag actively read base tables missing partitioning/clustering.
 
 ### Step 5: Storage & Cost Analysis
 
 1.  **Storage Analysis**: Run Query 6.1 (Storage Analysis)
 2.  **Unused/Old Tables**: Run Query 6.2 (Old Tables)
 3.  **Streaming Ingestion**: Run Query 5.1 (Streaming Ingestion Monitoring) — if the project uses Storage Write API or legacy streaming
+4.  **Storage Billing Model Savings**: Run Query 6.3 (Storage Billing Model Savings) to evaluate Logical vs. Physical storage billing model savings and output ALTER SCHEMA DDLs.
 
 ### Step 6: Generate Reports
 
@@ -1260,4 +1264,153 @@ WHERE
   AND (statement_type != 'SCRIPT' OR statement_type IS NULL)
 GROUP BY
   reservation_id;
+```
+
+### Query 4.12: Query Performance Insights
+```sql
+-- Retrieve queries with engine-generated performance insights (e.g., slot contention, partition skew)
+-- Source: Adapted from bigquery-utils/scripts/optimization/query_performance_insights.sql
+SELECT
+  project_id,
+  job_id,
+  creation_time,
+  query,
+  total_slot_ms,
+  -- Check for stand-alone performance insights
+  EXISTS (
+    SELECT 1 FROM UNNEST(query_info.performance_insights.stage_performance_standalone_insights) insights
+    WHERE insights.slot_contention OR insights.insufficient_shuffle_quota OR insights.bi_engine_reasons IS NOT NULL OR insights.high_cardinality_joins IS NOT NULL OR insights.partition_skew IS NOT NULL
+  ) AS has_standalone_insights,
+  -- Check for input data change insights
+  EXISTS (
+    SELECT 1 FROM UNNEST(query_info.performance_insights.stage_performance_change_insights) insights
+    WHERE insights.input_data_change.records_read_diff_percentage IS NOT NULL
+  ) AS has_change_insights,
+  -- Extract specific insights for detailed diagnostics
+  (
+    SELECT ARRAY_AGG(STRUCT(slot_contention, insufficient_shuffle_quota, partition_skew IS NOT NULL as has_partition_skew))
+    FROM UNNEST(query_info.performance_insights.stage_performance_standalone_insights)
+  ) AS standalone_details
+FROM
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+WHERE
+  creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+  AND job_type = 'QUERY'
+  AND state = 'DONE'
+  AND error_result IS NULL
+  AND statement_type != 'SCRIPT'
+ORDER BY
+  total_slot_ms DESC
+LIMIT 50;
+```
+
+### Query 4.13: BI Engine Disabled Diagnostics
+```sql
+-- Identify and count specific reason codes why BI Engine memory acceleration was disabled
+-- Source: Adapted from bigquery-utils/scripts/optimization/bi_engine_disabled_reasons.sql
+SELECT
+  reasons.code AS disabled_reason_code,
+  COUNT(*) AS query_count,
+  ROUND(SUM(total_slot_ms) / (1000 * 60 * 60), 2) AS total_slot_hours_impacted
+FROM
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT,
+  UNNEST(bi_engine_statistics.bi_engine_reasons) AS reasons
+WHERE
+  creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+  AND bi_engine_statistics.bi_engine_mode = 'DISABLED'
+GROUP BY
+  disabled_reason_code
+ORDER BY
+  query_count DESC;
+```
+
+### Query 4.14: Active Tables Partition/Cluster Audit
+```sql
+-- Identify top actively read tables missing partitioning or clustering configurations
+-- Source: Adapted from bigquery-utils/scripts/optimization/tables_without_partitioning_or_clustering.sql
+SELECT
+  t.table_schema,
+  t.table_name,
+  SUM(j.total_slot_ms) / (1000 * 60 * 60) as read_slot_hours,
+  COUNT(DISTINCT j.job_id) as total_jobs_reading,
+  -- Check partitioning status
+  ANY_VALUE(t.partitioning_type) as partitioning_type,
+  -- Check clustering status
+  ANY_VALUE(CASE WHEN t.clustering_required_fields IS NOT NULL THEN 'YES' ELSE 'NO' END) as is_clustered,
+  -- Table size
+  ROUND(SUM(ts.total_logical_bytes) / POW(1024, 3), 2) as table_logical_gb
+FROM
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT j
+CROSS JOIN UNNEST(j.referenced_tables) ref_t
+JOIN
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLES t
+  ON ref_t.project_id = t.table_catalog AND ref_t.dataset_id = t.table_schema AND ref_t.table_id = t.table_name
+LEFT JOIN
+  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT ts
+  ON t.table_catalog = ts.project_id AND t.table_schema = ts.table_schema AND t.table_name = ts.table_name
+WHERE
+  j.creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+  AND t.table_type = 'BASE TABLE'
+  -- Filter for tables without partitioning or clustering
+  AND (t.partitioning_type IS NULL OR t.clustering_required_fields IS NULL)
+GROUP BY
+  t.table_schema, t.table_name
+ORDER BY
+  read_slot_hours DESC
+LIMIT 20;
+```
+
+### Query 6.3: Storage Billing Model Savings
+```sql
+-- Evaluate cost savings of switching datasets from Logical to Physical billing models
+-- Source: Adapted from bigquery-utils/scripts/optimization/storage_billing_model_savings_ddl.sql
+-- US Rates: Logical active = $0.02, long_term = $0.01; Physical active = $0.04, long_term = $0.02 per GiB
+WITH storage_sizes AS (
+  SELECT
+    project_id,
+    table_schema AS dataset_name,
+    -- Logical sizes
+    SUM(active_logical_bytes) / POW(1024, 3) AS active_logical_gib,
+    SUM(long_term_logical_bytes) / POW(1024, 3) AS long_term_logical_gib,
+    -- Physical sizes (fail-safe and time-travel factored in)
+    SUM(active_physical_bytes - time_travel_physical_bytes) / POW(1024, 3) AS active_no_tt_physical_gib,
+    SUM(time_travel_physical_bytes) / POW(1024, 3) AS time_travel_physical_gib,
+    SUM(fail_safe_physical_bytes) / POW(1024, 3) AS fail_safe_physical_gib,
+    SUM(long_term_physical_bytes) / POW(1024, 3) AS long_term_physical_gib
+  FROM
+    `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT
+  WHERE
+    total_physical_bytes > 0
+  GROUP BY
+    project_id, table_schema
+),
+cost_comparison AS (
+  SELECT
+    project_id,
+    dataset_name,
+    -- Logical Pricing
+    (active_logical_gib * 0.02) + (long_term_logical_gib * 0.01) AS monthly_logical_cost,
+    -- Physical Pricing
+    ((active_no_tt_physical_gib + time_travel_physical_gib + fail_safe_physical_gib) * 0.04) + (long_term_physical_gib * 0.02) AS monthly_physical_cost
+  FROM
+    storage_sizes
+)
+SELECT
+  project_id,
+  dataset_name,
+  ROUND(monthly_logical_cost, 2) AS monthly_logical_cost,
+  ROUND(monthly_physical_cost, 2) AS monthly_physical_cost,
+  ROUND(monthly_logical_cost - monthly_physical_cost, 2) AS net_monthly_savings,
+  CASE
+    WHEN monthly_logical_cost > monthly_physical_cost THEN 'PHYSICAL'
+    ELSE 'LOGICAL'
+  END AS recommended_billing_model,
+  -- Generate ALTER SCHEMA DDL dynamically
+  CONCAT("ALTER SCHEMA `", project_id, ".", dataset_name, "` SET OPTIONS(storage_billing_model='", IF(monthly_logical_cost > monthly_physical_cost, "PHYSICAL", "LOGICAL"), "');") AS recommendation_ddl
+FROM
+  cost_comparison
+WHERE
+  ABS(monthly_logical_cost - monthly_physical_cost) > 5.0 -- Focus on datasets with at least $5 variance
+ORDER BY
+  net_monthly_savings DESC;
 ```
