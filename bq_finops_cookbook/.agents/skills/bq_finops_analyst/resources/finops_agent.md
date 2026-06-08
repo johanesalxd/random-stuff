@@ -1218,7 +1218,7 @@ FROM
   `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLES t
 JOIN
   `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT ts
-  ON t.table_schema = ts.table_schema AND t.table_name = ts.table_name
+  ON t.table_catalog = ts.project_id AND t.table_schema = ts.table_schema AND t.table_name = ts.table_name
 WHERE
   t.creation_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)
   AND t.table_type = 'BASE TABLE'
