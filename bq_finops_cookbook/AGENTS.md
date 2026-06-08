@@ -11,7 +11,7 @@ To "test" changes to the agent logic or prompts:
 1.  **Dry Run**: Execute the agent against a known Google Cloud Project (or ask the user for one).
     ```bash
     # Example command to trigger the agent (simulated in chat)
-    "Follow the workflow in .agents/commands/optimize_slots.md to analyze project <PROJECT_ID> in <REGION>"
+    "Create/run a subagent with the `bq-finops-analyst` skill to analyze project <PROJECT_ID> in <REGION>"
     ```
 2.  **Verify Output Generation**:
     - Ensure all expected reports are created in `analysis_results/`.
@@ -52,12 +52,12 @@ ORDER BY
 ```
 
 ### Markdown Style
-- **File Naming**: Use snake_case for filenames (e.g., `optimize_slots.md`).
+- **File Naming**: Use snake_case for filenames (e.g., `finops_agent.md`).
 - **Report Naming**: Use numbered prefixes for ordered reports (e.g., `01_slot_metrics.md`, `02_top_consumers.md`).
 - **Frontmatter**: Agent files (`.agents/`) should use YAML frontmatter for metadata.
   ```yaml
   ---
-  description: Brief description of the agent or command
+  description: Brief description of the agent or skill
   input: required inputs
   output: expected outputs
   ---

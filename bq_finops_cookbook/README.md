@@ -122,75 +122,86 @@ Before starting the analysis, ensure you have:
 - [ ] Access to `INFORMATION_SCHEMA.JOBS_BY_PROJECT` and `INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT`
 - [ ] Project ID where compute occurs
 - [ ] Region where compute occurs (e.g., `us`, `eu`, `asia-northeast1`)
-- [ ] AI assistant with MCP server access (bigquery-data-analytics)
+- [ ] AI assistant (such as **Antigravity**) with MCP server access (`bigquery-data-analytics` or equivalent)
 
 ### Tool Priority: MCP First
 
-This agent is designed to use **MCP Tools** (`bigquery-data-analytics`) as the primary execution method for safety and structured output.
-- **Primary**: MCP Tools (`execute_sql`, `get_table_info`)
-- **Fallback**: `bq` CLI (if MCP is unavailable)
+This framework uses **MCP Tools** (`bigquery-data-analytics`) as the primary execution method for safety, speed, and structured output.
+- **Primary**: MCP Tools (`execute_sql`, `get_table_info`, etc.)
+- **Fallback**: `bq` CLI (if MCP tools are unavailable, restricted, or return insufficient details)
 
 ### Pricing Configuration
 
 The agent uses a default On-Demand pricing of **$6.25 per TB** (US Multi-region).
-If your project is in a different region, you can customize this rate by editing `.agents/agents/finops_agent.md` and modifying the constant in **Query 4.2**.
+If your project is in a different region, you can customize this rate by editing `.agents/skills/bq_finops_analyst/resources/finops_agent.md` and modifying the constant in **Query 4.2**.
 
-## 🚀 Quick Start (Demo)
+---
 
-Use this prompt to run a complete analysis on your project.
+## 🚀 Quick Start & How to Run
+
+This framework is natively compatible with **Antigravity (agy) Desktop 2.0 / CLI**, utilizing **Gemini 3.5 Flash (Medium/High)** for rapid and precise execution.
 
 ### Prerequisites
-1.  **OpenCode Agent** running **Gemini 3.5 Flash** (`gemini-3.5-flash`).
-2.  **Authentication**: `gcloud auth login` or valid MCP credentials.
+1.  **AI Workspace Environment**: Opened in **Antigravity (agy) Desktop / CLI** with Gemini 3.5 Flash (Medium/High) selected.
+2.  **Authentication**: `gcloud auth login` or valid MCP credentials configured in your environment.
 3.  **Permissions**: `bigquery.resourceViewer` on the target project.
 
-**Runtime note:** This cookbook is tuned specifically for OpenCode running Gemini 3.5 Flash (`gemini-3.5-flash`); keep the workflow OpenCode-specific rather than runtime-agnostic.
+---
 
-### Execution
-Ask the agent:
-> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project <YOUR_PROJECT_ID> in <REGION>"
+### 💻 Setup and Execution (Antigravity `agy` - Recommended)
+
+For any user cloning this repository, follow these simple steps:
+
+#### Step 1: Clone the Repository
+Go to your local terminal and run:
+```bash
+git clone https://github.com/johanesalxd/random-stuff.git
+cd random-stuff/bq_finops_cookbook
+```
+
+#### Step 2: Open in Antigravity
+*   **Agy Desktop:** Open the `bq_finops_cookbook` folder in your `agy` Desktop application as your active workspace.
+*   **Agy CLI:** Execute your commands within the `bq_finops_cookbook/` directory.
+
+#### Step 3: Custom Skill Discovery
+Upon opening, the `agy` harness automatically scans the `.agents/skills/` directory, discovers the custom skill definition in `.agents/skills/bq_finops_analyst/SKILL.md`, and registers the `bq-finops-analyst` capability workspace-wide.
+
+#### Step 4: Run the Analyst Subagent
+Instruct the main assistant:
+```markdown
+Create/run a subagent with the `bq-finops-analyst` skill to analyze project [YOUR_PROJECT_ID] in [YOUR_REGION].
+```
 
 **Example:**
-> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project my-playground-123 in region-us"
+```markdown
+Create/run a subagent with the `bq-finops-analyst` skill to analyze project my-gcp-project in region-us.
+```
 
-### Expected Output
-The agent will generate 7 reports in `analysis_results/` covering usage, cost, storage, and a final strategy recommendation.
+---
 
-### Step-by-Step Instructions
+## 📋 Step-by-Step Analysis Flow
 
-**Step 1: Execute the Analysis**
+### Step 1: Execute the Analysis
+Once triggered via `agy`, the assistant will automatically:
+1.  Verify the targeted region and resolve any schema inconsistencies (such as omitted optional fields).
+2.  Run SQL queries against your project's `INFORMATION_SCHEMA` using MCP tools.
+3.  Calculate slot percentiles, Coefficient of Variation (CV) for stability, and Burst Ratio.
+4.  Examine active/long-term storage splits and evaluate streaming ingestion.
+5.  Check for capacity-related error rates and queuing limits (interactive query queues).
+6.  Generate structured reports in the `analysis_results/` directory.
 
-Ask the agent:
-> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project <PROJECT_ID> in <REGION>"
-
-**Example**:
-> "Follow the workflow in .agents/commands/optimize_slots.md to analyze project my-gcp-project in region-us"
-
-The agent will automatically:
-1.  Run SQL queries against your project's INFORMATION_SCHEMA
-2.  Calculate stability and burstiness metrics
-3.  Analyze current reservations (if any)
-4.  Identify optimization opportunities
-5.  Generate detailed reports in the `analysis_results/` directory
-
-**Step 2: Review Generated Reports**
-
-Reports will be created in the `analysis_results/` directory:
+### Step 2: Review Generated Reports
+Reports are written directly into `bq_finops_cookbook/analysis_results/`:
 - `00_current_configuration.md` - Current reservation setup (if applicable)
-- `01_slot_metrics.md` - Percentiles, variability, burstiness
-- `02_top_consumers.md` - Project breakdown
-- `03_usage_patterns.md` - Hourly/daily patterns
-- `04_optimization_opportunities.md` - Contention, expensive queries, performance insights
-- `05_storage_and_cost.md` - Storage analysis and on-demand cost estimation
-- `06_final_recommendation.md` - Strategy and implementation plan
+- `01_slot_metrics.md` - Percentiles, variability classification, and burstiness
+- `02_top_consumers.md` - Multi-project resource breakdown and concentration rankings
+- `03_usage_patterns.md` - Weekly trends, hourly peaks, and off-peak scheduling recommendations
+- `04_optimization_opportunities.md` - Job slot contention, queues, capacity errors, and simulation results
+- `05_storage_and_cost.md` - Storage analysis, cleanup candidates, and streaming write API migration opportunities
+- `06_final_recommendation.md` - Executive summary, recommended capacity strategy, and verified proposed CLI commands
 
-**Step 3: Implement Recommendations**
-
-Follow the implementation steps in the final recommendation report. This typically includes:
-- Creating or modifying reservations
-- Assigning projects to reservations
-- Setting up monitoring queries
-- Validating the changes
+### Step 3: Implement Recommendations
+Review the proposed commands in `06_final_recommendation.md`. Under manual validation from an administrator, these commands can be used to create, resize, or assign reservations.
 
 ## Output Structure
 
@@ -219,6 +230,6 @@ Each report provides detailed analysis and actionable recommendations. See the g
 - [BigQuery Editions](https://cloud.google.com/bigquery/docs/editions-intro)
 
 ### Related Guides
-- `.agents/agents/finops_agent.md` - Detailed analysis guide with all SQL queries
-- `docs/REFERENCES.md` - Official documentation links and query sources
+- `.agents/skills/bq_finops_analyst/resources/finops_agent.md` - Detailed analysis guide with all SQL queries
+- `.agents/skills/bq_finops_analyst/resources/REFERENCES.md` - Official documentation links and query sources
 - `analysis_results/` - Generated reports from your analysis
