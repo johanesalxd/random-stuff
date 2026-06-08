@@ -1329,32 +1329,45 @@ ORDER BY
 -- Identify top actively read tables missing partitioning or clustering configurations
 -- Source: Adapted from bigquery-utils/scripts/optimization/tables_without_partitioning_or_clustering.sql
 SELECT
-  t.table_schema,
-  t.table_name,
-  SUM(j.total_slot_ms) / (1000 * 60 * 60) as read_slot_hours,
-  COUNT(DISTINCT j.job_id) as total_jobs_reading,
-  -- Check partitioning status
-  ANY_VALUE(t.partitioning_type) as partitioning_type,
-  -- Check clustering status
-  ANY_VALUE(CASE WHEN t.clustering_required_fields IS NOT NULL THEN 'YES' ELSE 'NO' END) as is_clustered,
+  c.table_schema,
+  c.table_name,
+  SUM(j.total_slot_ms) / (1000 * 60 * 60) AS read_slot_hours,
+  COUNT(DISTINCT j.job_id) AS total_jobs_reading,
+  -- Partitioning status (derived from INFORMATION_SCHEMA.COLUMNS)
+  ANY_VALUE(IF(c.partitioning_column IS NOT NULL, 'YES', 'NO')) AS is_partitioned,
+  -- Clustering status (derived from INFORMATION_SCHEMA.COLUMNS)
+  ANY_VALUE(IF(c.clustering_columns IS NOT NULL, 'YES', 'NO')) AS is_clustered,
   -- Table size
-  ROUND(SUM(ts.total_logical_bytes) / POW(1024, 3), 2) as table_logical_gb
+  ROUND(SUM(ts.total_logical_bytes) / POW(1024, 3), 2) AS table_logical_gb
 FROM
   `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT j
 CROSS JOIN UNNEST(j.referenced_tables) ref_t
-JOIN
-  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLES t
-  ON ref_t.project_id = t.table_catalog AND ref_t.dataset_id = t.table_schema AND ref_t.table_id = t.table_name
+JOIN (
+  -- Aggregate partition/cluster config per table from COLUMNS
+  SELECT
+    table_catalog,
+    table_schema,
+    table_name,
+    STRING_AGG(IF(is_partitioning_column = 'YES', column_name, NULL)) AS partitioning_column,
+    STRING_AGG(
+      IF(clustering_ordinal_position IS NOT NULL, column_name, NULL)
+      ORDER BY clustering_ordinal_position
+    ) AS clustering_columns
+  FROM
+    `region-[YOUR_REGION]`.INFORMATION_SCHEMA.COLUMNS
+  GROUP BY
+    table_catalog, table_schema, table_name
+) c
+  ON ref_t.project_id = c.table_catalog AND ref_t.dataset_id = c.table_schema AND ref_t.table_id = c.table_name
 LEFT JOIN
   `region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT ts
-  ON t.table_catalog = ts.project_id AND t.table_schema = ts.table_schema AND t.table_name = ts.table_name
+  ON c.table_catalog = ts.project_id AND c.table_schema = ts.table_schema AND c.table_name = ts.table_name
 WHERE
   j.creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
-  AND t.table_type = 'BASE TABLE'
   -- Filter for tables without partitioning or clustering
-  AND (t.partitioning_type IS NULL OR t.clustering_required_fields IS NULL)
+  AND (c.partitioning_column IS NULL OR c.clustering_columns IS NULL)
 GROUP BY
-  t.table_schema, t.table_name
+  c.table_schema, c.table_name
 ORDER BY
   read_slot_hours DESC
 LIMIT 20;
