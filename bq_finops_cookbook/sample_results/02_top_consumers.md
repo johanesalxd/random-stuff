@@ -1,10 +1,13 @@
 # Top Slot Consumers (30-Day Analysis)
 
-## Top Projects
-| Project ID | Slot Hours | Job Count |
-|:--- |:--- |:--- |
-| demo-project | 0.4 | 392 |
+## Project Rankings
+
+| Rank | Project ID | Slot-Hours | Job Count |
+|------|-----------|------------|-----------|
+| 1 | sample-finops-project-123456 | 0.224 | 160 |
 
 ## Analysis
-*   **Dominant Project**: `demo-project` accounts for 100% of the (negligible) slot consumption.
-*   **Usage Volume**: Total consumption of 0.4 slot hours over 30 days is extremely low. Slot-hours do not convert directly to on-demand bytes-scanned charges, so use this as a workload-size signal rather than a pricing estimate.
+
+- **Top Consumer:** `sample-finops-project-123456` accounts for 100% of total usage.
+- **Concentration:** The top project represents 100% of the slot hours consumed.
+- **Recommendation:** Since the workload is extremely small (0.224 total slot-hours) and centered entirely in a single playground project, there is no need for complex multi-project reservations or reservation assignments. Standard on-demand pricing is ideal.

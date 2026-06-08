@@ -53,3 +53,6 @@ temp/*
 _config.yml
 .antigravitycli
 **/.antigravitycli
+
+# BigQuery FinOps Cookbook results
+bq_finops_cookbook/analysis_results/
