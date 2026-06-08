@@ -70,7 +70,7 @@ Execute each of the following steps sequentially, writing your outputs directly 
 *   **Output:** Write `analysis_results/01_slot_metrics.md`, `analysis_results/02_top_consumers.md`, and `analysis_results/03_usage_patterns.md`.
 
 ### Step 3: Identify Optimization Opportunities
-*   **Goal:** Uncover slow/expensive queries, contention issues, error profiles, and pending queues.
+*   **Goal:** Uncover slow/expensive queries, contention issues, error profiles, pending queues, BI Engine memory acceleration, table partitioning/clustering, and query engine performance insights.
 *   **Queries to run:**
     *   Query 4.1 (Slot Contention Insights)
     *   Query 4.2 (Expensive Queries by Identity)
@@ -81,17 +81,22 @@ Execute each of the following steps sequentially, writing your outputs directly 
     *   Query 4.9 (Job Impact at different slot sizes)
     *   Query 4.10 (Queue Pressure & Interactive query limits)
     *   Query 4.11 (Official BigQuery Slot Recommender - if active)
+    *   Query 4.12 (Query Performance Insights - stand-alone and partition skew insights)
+    *   Query 4.13 (BI Engine Diagnostics - count and codes for disabled memory acceleration)
+    *   Query 4.14 (Active Tables Partition/Cluster Audit - flag actively read unpartitioned/unclustered base tables)
 *   **Output:** Write `analysis_results/04_optimization_opportunities.md`.
 
 ### Step 4: Storage & Cost Analysis
-*   **Goal:** Analyze active/long-term storage splits, old/unused tables, and streaming ingestion modes.
+*   **Goal:** Analyze active/long-term storage splits, old/unused tables, streaming ingestion modes, and Logical vs. Physical storage billing model savings.
 *   **Queries to run:**
     *   Query 6.1 (Storage Analysis by Table)
     *   Query 6.2 (Unused tables older than 90 days)
     *   Query 5.1 (Streaming Ingestion Monitoring)
+    *   Query 6.3 (Storage Billing Model Savings - calculate physical vs logical costs and output ALTER SCHEMA DDLs)
 *   **Heuristics:**
     *   If tables have >90% long-term storage, check if they are actually being queried.
     *   If legacy streaming ingestion is used, calculate the 50% storage ingestion cost savings from migrating to the Storage Write API.
+    *   If a dataset's physical storage model would result in cost reduction (net logical cost > physical cost), output the recommended DDL.
 *   **Output:** Write `analysis_results/05_storage_and_cost.md`.
 
 ### Step 5: Formulate Final Recommendation

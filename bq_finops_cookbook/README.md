@@ -186,9 +186,10 @@ Once triggered via `agy`, the assistant will automatically:
 1.  Verify the targeted region and resolve any schema inconsistencies (such as omitted optional fields).
 2.  Run SQL queries against your project's `INFORMATION_SCHEMA` using MCP tools.
 3.  Calculate slot percentiles, Coefficient of Variation (CV) for stability, and Burst Ratio.
-4.  Examine active/long-term storage splits and evaluate streaming ingestion.
-5.  Check for capacity-related error rates and queuing limits (interactive query queues).
-6.  Generate structured reports in the `analysis_results/` directory.
+4.  Examine active/long-term storage splits, streaming ingestion modes, and evaluate Logical vs. Physical storage billing model optimization opportunities.
+5.  Audit actively read tables to identify missing partitioning or clustering configurations, and extract native engine-generated query performance insights (such as slot contention, partition skew, and BI Engine disabled reasons).
+6.  Check for capacity-related error rates and queuing limits (interactive query queues).
+7.  Generate structured reports in the `analysis_results/` directory.
 
 ### Step 2: Review Generated Reports
 Reports are written directly into `bq_finops_cookbook/analysis_results/`:
@@ -196,8 +197,8 @@ Reports are written directly into `bq_finops_cookbook/analysis_results/`:
 - `01_slot_metrics.md` - Percentiles, variability classification, and burstiness
 - `02_top_consumers.md` - Multi-project resource breakdown and concentration rankings
 - `03_usage_patterns.md` - Weekly trends, hourly peaks, and off-peak scheduling recommendations
-- `04_optimization_opportunities.md` - Job slot contention, queues, capacity errors, and simulation results
-- `05_storage_and_cost.md` - Storage analysis, cleanup candidates, and streaming write API migration opportunities
+- `04_optimization_opportunities.md` - Job slot contention, queues, capacity errors, BI Engine acceleration diagnostics, partition skew/skewed joins, and simulation results
+- `05_storage_and_cost.md` - Storage size analysis, cleanup candidates, streaming write API migration opportunities, and Logical vs. Physical billing model savings with executable DDL
 - `06_final_recommendation.md` - Executive summary, recommended capacity strategy, and verified proposed CLI commands
 
 ### Step 3: Implement Recommendations
