@@ -4,10 +4,6 @@ description: |
   Analyzes BigQuery slot utilization, workload characteristics (stability, burstiness), and database cost structures.
   Recommends optimal capacity management strategies (on-demand vs autoscaling vs committed) conforming to GCP product rules.
   Applies Standard/Enterprise edition-specific constraints and verified INFORMATION_SCHEMA views using MCP-first querying.
-metadata:
-  version: v1.0.0
-  publisher: local
-  framework: antigravity
 ---
 
 # BigQuery FinOps Analyst Skill
@@ -19,8 +15,8 @@ This skill allows an Antigravity (`agy`) main agent or delegated subagent to per
 ## 1. Prerequisites and Context
 
 Before running any SQL queries or checking CLI parameters, you must initialize your analysis context:
-1. **Load Guidelines & Logic:** View and read [finops_agent.md](file:///Users/johanesa/Developer/git/random-stuff/bq_finops_cookbook/.agents/skills/bq_finops_analyst/resources/finops_agent.md) to understand the full set of SQL query references, fallback logic, and decision metrics.
-2. **Retrieve Official Docs:** Read [REFERENCES.md](file:///Users/johanesa/Developer/git/random-stuff/bq_finops_cookbook/.agents/skills/bq_finops_analyst/resources/REFERENCES.md) for quick-reference URLs of Google Cloud specifications.
+1. **Load Guidelines & Logic:** View and read [finops_agent.md](resources/finops_agent.md) to understand the full set of SQL query references, fallback logic, and decision metrics.
+2. **Retrieve Official Docs:** Read [REFERENCES.md](resources/REFERENCES.md) for quick-reference URLs of Google Cloud specifications.
 
 ---
 
