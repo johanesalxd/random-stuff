@@ -1,6 +1,6 @@
 # Agent Directives
 
-Core behavioral directives for AI coding agents. For code style and formatting, see [CODE_STANDARDS.md](./CODE_STANDARDS.md).
+Core behavioral directives for AI coding agents. Before implementing, reviewing, or formatting code, read and follow [CODE_STANDARDS.md](./CODE_STANDARDS.md).
 
 ## Project Environment
 
