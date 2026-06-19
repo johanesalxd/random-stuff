@@ -195,6 +195,31 @@ When combining **Row-Level Security (RLS)** and **Authorized Views** to share fi
 >
 > If you query the base table through an Authorized View, BigQuery **does not bypass** this lookup table permission check. The querying user will still receive an "Access Denied" error if they lack direct read permissions on the mapping/lookup table.
 
+The diagram below contrasts the failing setup (RLS subquery on the base table, which forces direct grants on the lookup/master tables) with the working Authorized View pattern (the view reads sources under its own authorized identity, so the end-user needs zero access to them):
+
+```mermaid
+flowchart LR
+    subgraph BAD["❌ RLS subquery on base table (the Permission Catch)"]
+        direction LR
+        U1["Restricted<br/>End-User"]
+        T1["Base table<br/>(RLS subquery policy)"]
+        M1["Lookup / master<br/>tables"]
+        U1 -->|queries| T1
+        T1 -.->|policy subquery reads| M1
+        U1 ===>|"must ALSO be granted<br/>getData directly → leaks<br/>the access matrix"| M1
+    end
+
+    subgraph GOOD["✅ Authorized View join (the workaround)"]
+        direction LR
+        U2["Restricted<br/>End-User"]
+        V2["Authorized View<br/>(reporting_dataset.secure_view)<br/>JOIN ... ON SESSION_USER()"]
+        S2["raw_dataset.fact_table<br/>config_dataset.access_map"]
+        U2 -->|"dataViewer on<br/>view dataset ONLY"| V2
+        V2 -.->|"reads under view's<br/>authorized identity"| S2
+        U2 -. "no direct access" .-x S2
+    end
+```
+
 ### The Security Vulnerability:
 If you grant users read access to the mapping/lookup table to satisfy the RLS requirement, you leak the entire access control matrix, allowing users to see other tenants' mapping records.
 
@@ -213,6 +238,36 @@ To completely hide the base tables, master tables, and user mapping tables from 
    ```
 3. **Isolate View Dataset:** Grant end-users the `roles/bigquery.dataViewer` role **only** on the view dataset (`reporting_dataset`).
 4. **Authorize the View/Dataset:** Authorize the `reporting_dataset` (or the specific view) on the source `raw_dataset` and `config_dataset`. BigQuery will execute the background join securely using the view's authorized identity, completely hiding the underlying source and mapping tables from the user.
+
+#### CLI: authorize the view's dataset on each source dataset
+
+There is no single `bq` flag for this; you read the source dataset's current
+metadata, append the view dataset as an authorized dataset under `access`, and
+write it back with `bq update`. Run these as an admin (replace `PROJECT` and the
+dataset names with your own):
+
+```bash
+# Authorize reporting_dataset on raw_dataset
+bq show --format=prettyjson PROJECT:raw_dataset > /tmp/raw_dataset.json
+# Add an entry to the "access" array in /tmp/raw_dataset.json, e.g.:
+#   {
+#     "dataset": {
+#       "dataset": { "projectId": "PROJECT", "datasetId": "reporting_dataset" },
+#       "targetTypes": ["VIEWS"]
+#     }
+#   }
+bq update --source /tmp/raw_dataset.json PROJECT:raw_dataset
+
+# Repeat for the config (mapping) dataset
+bq show --format=prettyjson PROJECT:config_dataset > /tmp/config_dataset.json
+# ...append the same authorized-dataset entry, then:
+bq update --source /tmp/config_dataset.json PROJECT:config_dataset
+```
+
+> Alternatively, in the Cloud Console open each source dataset → **Sharing →
+> Authorize Datasets** and add `reporting_dataset` as an authorized dataset. To
+> authorize a single view instead of the whole dataset, use **Sharing →
+> Authorize Views**.
 
 ## Data-modeling note
 
