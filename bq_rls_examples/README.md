@@ -186,6 +186,34 @@ the new range; the hardcoded policy silently does not.
 - Quotas: up to **400** policies per table; a query may touch up to **6000**
   policies; DDL rate limits apply (5 CREATE/DROP per policy per 10s).
 
+## Combining RLS with Authorized Views (The Permission Catch)
+
+When combining **Row-Level Security (RLS)** and **Authorized Views** to share filtered datasets with external partners or restricted users, there is a critical IAM constraint regarding subqueries:
+
+> [!WARNING]
+> For subquery-based RLS policies (where the policy filters rows using a `SELECT` subquery from a lookup table), **grantees must have direct `bigquery.tables.getData` read permission on both the target table AND the referenced lookup/mapping tables** (`best-practices-row-level-security`).
+>
+> If you query the base table through an Authorized View, BigQuery **does not bypass** this lookup table permission check. The querying user will still receive an "Access Denied" error if they lack direct read permissions on the mapping/lookup table.
+
+### The Security Vulnerability:
+If you grant users read access to the mapping/lookup table to satisfy the RLS requirement, you leak the entire access control matrix, allowing users to see other tenants' mapping records.
+
+### The Workaround (Authorized View Join):
+To completely hide the base tables, master tables, and user mapping tables from restricted end-users, **do not use RLS on the base table**. Instead, shift the security filter and join logic into the **Authorized View definition itself**:
+
+1. **No RLS on Base Table:** Keep the raw datasets and mapping tables restricted, granting zero direct permissions to end-users.
+2. **Define View with SESSION_USER():** Create an Authorized View that performs the join on `SESSION_USER()`:
+   ```sql
+   CREATE OR REPLACE VIEW `reporting_dataset.secure_view` AS
+   SELECT f.*
+   FROM `raw_dataset.fact_table` AS f
+   INNER JOIN `config_dataset.access_map` AS m
+     ON LOWER(m.email) = LOWER(SESSION_USER())
+     AND f.store_code BETWEEN m.low_value AND m.high_value;
+   ```
+3. **Isolate View Dataset:** Grant end-users the `roles/bigquery.dataViewer` role **only** on the view dataset (`reporting_dataset`).
+4. **Authorize the View/Dataset:** Authorize the `reporting_dataset` (or the specific view) on the source `raw_dataset` and `config_dataset`. BigQuery will execute the background join securely using the view's authorized identity, completely hiding the underlying source and mapping tables from the user.
+
 ## Data-modeling note
 
 `store_code` is a STRING, so `BETWEEN` compares **lexicographically**
