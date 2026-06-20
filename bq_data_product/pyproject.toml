@@ -5,7 +5,7 @@ description = "Dataplex Data Product demo using TheLook e-commerce dataset"
 requires-python = ">=3.10"
 dependencies = [
     "python-dotenv>=1.2.2",
-    "requests>=2.32",
+    "requests>=2.34.0",
 ]
 
 [tool.ruff]
