@@ -1,5 +1,7 @@
 # Storage & Cost Analysis
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Top Storage Consumers
 *Top tables by total storage size.*
 
@@ -15,9 +17,9 @@
 - **Action:** Consider partition expiration, lifecycle/retention policy changes, or export to cheaper storage only after validating access patterns and compliance needs.
 
 ## Estimated Monthly Spend (Current)
-- **Compute (On-Demand):** ~$8,500
-- **Storage:** ~$6,000
-- **Total:** ~$14,500 / month
+- **Compute:** NOT VERIFIED
+- **Storage:** NOT VERIFIED
+- **Total:** NOT VERIFIED
 
 **Optimization Target:**
 - **Compute:** Evaluate Standard Edition autoscaling against actual regional on-demand bytes processed, slot-hour pricing, scaled-slot billing, and recommender output.

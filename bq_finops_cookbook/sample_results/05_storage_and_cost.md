@@ -1,5 +1,7 @@
 # Storage & Cost Analysis
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Top Storage Consumers
 
 | Table | Total Size (GB) | Active (GB) | Long Term (GB) | % Long Term |
@@ -16,8 +18,8 @@
 | demo_dataset.taxi_events_json | 28.90 | 0.00 | 28.90 | 100.0% |
 
 **Recommendation:**
-- Almost 100% of the storage in this project is long-term storage (older than 90 days without modifications), which automatically qualifies for a 50% discount on storage pricing ($0.01 per GB logical instead of $0.02).
-- Tables like `mdm_demo.customers_standardized` and `mdm_demo.customers_with_embeddings` should be evaluated. Since they have 100% long-term storage and are not actively being queried, they can be deleted, archived to Google Cloud Storage (Coldline/Archive class), or compressed if they are no longer needed.
+- Almost 100% of the synthetic logical bytes are long-term. Current location-specific storage prices were not supplied, so no dollar or percentage savings are claimed.
+- Table age and long-term status are triage signals, not deletion evidence. Verify ownership, retention, legal hold, dependencies, backups, and recent reads before proposing archival or deletion.
 
 ## Potential Cleanup Candidates (Created > 90 days ago)
 
@@ -46,10 +48,10 @@ No active high-volume streaming was detected in the project:
 
 **Recommendations:**
 - The errors on `dlp_result_210923` should be investigated in the application writing to it (e.g. check schema compatibility or IAM writer permissions).
-- If any future high-volume streaming workloads are planned, ensure they use the modern **Storage Write API** instead of legacy `tabledata.insertAll` to save 50% on ingestion costs ($0.025/GiB vs $0.05/GiB).
+- If future high-volume streaming is planned, compare current location-specific ingestion prices and delivery requirements. Storage Write API exactly-once semantics require application-created streams with correctly managed offsets.
 
 ## Estimated On-Demand Costs
 
 - **Total Bytes Scanned (30d):** 405,978,646 bytes (~0.0004 TiB)
-- **Estimated Cost:** $0.0023 USD (at $6.25/TiB standard US on-demand rate)
-- **Top Spender:** `admin@example.com` (~$0.0021 USD for 150 queries)
+- **Estimated Cost:** NOT VERIFIED (location-specific price not supplied)
+- **Top Principal:** synthetic fingerprint `9d5e…` (150 queries)

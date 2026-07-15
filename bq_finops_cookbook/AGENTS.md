@@ -1,80 +1,63 @@
 # Agent Operating Guidelines
 
-This repository contains **FinOps Agents and Cookbooks** for BigQuery. It is not a traditional software project but a collection of prompt engineering artifacts, documentation, and SQL analysis templates.
+This directory is a prompt, SQL, and evidence project for the `bq-finops-analyst` Antigravity skill. It is not an application service.
 
-## 1. Build, Lint, and Test
+## Runtime target
 
-Since this is a content-based repository, "building" and "testing" refer to validating the agent's logic and output quality.
+- Antigravity CLI
+- Gemini 3.5 Flash with thinking set to **High**
+- Workspace skill discovery from `.agents/skills/bq-finops-analyst/SKILL.md`
+- `bq`/`gcloud` CLI authenticated with Application Default Credentials (ADC); read-only commands only
 
-### Validation Workflow
-To "test" changes to the agent logic or prompts:
-1.  **Dry Run**: Execute the agent against a known Google Cloud Project (or ask the user for one).
-    ```bash
-    # Example command to trigger the agent (simulated in chat)
-    "Create/run a subagent with the `bq-finops-analyst` skill to analyze project <PROJECT_ID> in <REGION>"
-    ```
-2.  **Verify Output Generation**:
-    - Ensure all expected reports are created in `analysis_results/`.
-    - Expected files: `00_current_configuration.md` (optional), `01_slot_metrics.md` through `06_final_recommendation.md`.
-3.  **Verify Content Integrity**:
-    - Check that SQL queries in `analysis_results/` are syntactically correct.
-    - Ensure `bq` CLI commands in `06_final_recommendation.md` are valid and use the correct flags.
+Do not optimize this project for another runtime at the expense of Antigravity/Flash behavior.
 
-### Linting
-- **Markdown**: Ensure valid Markdown formatting.
-  - Headers should be properly nested (`#`, `##`, `###`).
-  - Code blocks must have language tags (e.g., ````sql`, ````bash`, ````markdown`).
-- **SQL**: All SQL queries embedded in prompts must be valid BigQuery Standard SQL.
+## Canonical ownership
 
-## 2. Code & Style Guidelines
+| Surface | Owns |
+|---|---|
+| `README.md` | Human onboarding and high-level safety |
+| `.agents/skills/bq-finops-analyst/SKILL.md` | Trigger, inputs, workflow, guardrails, outputs |
+| `resources/finops_agent.md` | Query corpus, calculations, decision/report templates |
+| `resources/execution_manifest.json` | Compact query order, applicability, fallback, target report |
+| `resources/claim_matrix.json` | Dated volatile product/price claims |
+| `resources/REFERENCES.md` | Official source catalogue |
+| `resources/IAM.md` | Staged access and privacy model |
+| `sample_results/` | Synthetic example reports, never current truth |
 
-### SQL Style (BigQuery Standard SQL)
-- **Keywords**: Use UPPERCASE for all SQL keywords (`SELECT`, `FROM`, `WHERE`, `GROUP BY`, `ORDER BY`).
-- **Indentation**: Use **2 spaces** for indentation.
-- **Structure**:
-  - Place `SELECT`, `FROM`, `WHERE` on their own lines.
-  - Field lists should be indented on new lines.
-- **Comments**: Use `--` for single-line comments. Provide a source URL or brief explanation for complex logic.
+Do not duplicate detailed product rules across surfaces. Link to the canonical owner.
 
-**Example:**
-```sql
-SELECT
-  project_id,
-  ROUND(SUM(total_slot_ms) / (1000 * 60 * 60), 1) AS total_slot_hours
-FROM
-  `region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
-WHERE
-  job_type = 'QUERY'
-GROUP BY
-  project_id
-ORDER BY
-  total_slot_hours DESC;
-```
+## Safety
 
-### Markdown Style
-- **File Naming**: Use snake_case for filenames (e.g., `finops_agent.md`).
-- **Report Naming**: Use numbered prefixes for ordered reports (e.g., `01_slot_metrics.md`, `02_top_consumers.md`).
-- **Frontmatter**: Agent files (`.agents/`) should use YAML frontmatter for metadata.
-  ```yaml
-  ---
-  description: Brief description of the agent or skill
-  input: required inputs
-  output: expected outputs
-  ---
-  ```
+1. All live GCP access is read-only: only `bq query` (SELECT), `bq show`, `bq ls`, `gcloud ... describe/list`.
+2. Never run reservation, assignment, commitment, or dataset billing-model changes, and never emit runnable mutation commands or DDL.
+3. Capacity/reservation/storage changes are written as recommendations with links to official docs, for the user to perform themselves.
+4. Do not commit credentials, tokens, project secrets, raw customer query text, or identifiable user emails.
+5. Missing evidence must remain visible; do not fabricate or silently omit it.
 
-### Naming Conventions
-- **Files**: `snake_case` (e.g., `finops_agent.md`).
-- **Directories**: `snake_case` (e.g., `analysis_results`, `sample_results`).
-- **BigQuery Identifiers**: Follow existing schema (e.g., `INFORMATION_SCHEMA.JOBS_BY_PROJECT`).
+## SQL conventions
 
-### Error Handling & Safety
-- **Placeholders**: When writing templates, use clear placeholders like `[YOUR_REGION]` or `<PROJECT_ID>`.
-- **Destructive Commands**: The agent should NEVER execute destructive `bq` commands (like `bq rm`) without explicit user confirmation.
-- **Fallback Logic**: SQL queries should handle missing fields (e.g., specific edition columns) gracefully or provide fallback queries.
+- BigQuery GoogleSQL only.
+- Uppercase keywords; two-space indentation.
+- Keep project/location placeholders explicit.
+- Use `(statement_type != 'SCRIPT' OR statement_type IS NULL)` where script-parent double counting applies.
+- Use `SAFE_DIVIDE` or an equivalent zero guard.
+- Keep slot-seconds, slot-hours, average slots, baseline slots, scaled slots, and billed slots distinct.
+- Add an official source URL above each complex query.
+- Document required IAM, scope, retention, and fallback in the query ledger/manifest.
 
-## 3. Agent Behavior
-- **Role**: You are an expert BigQuery Administrator and FinOps Analyst.
-- **Tone**: Professional, data-driven, and prescriptive.
-- **Output**: Prefer structured Markdown tables and bullet points over dense paragraphs.
-- **Transparency**: Always explain the "why" behind a recommendation (e.g., "We recommend Autoscaling because your Burst Ratio is > 3.0").
+## Sample-report rules
+
+- Every sample starts with `**Synthetic sample:**`.
+- Every numeric price has a dated assumptions block or is marked unverified.
+- Final samples implement the complete report-heading contract.
+- Samples must never violate current edition limits.
+- Samples must never contain runnable mutation commands or DDL — recommendations link to official docs.
+
+## Review gate
+
+Before commit:
+
+- Verify the named queries remain present and unique.
+- Review every product-rule change against current official docs.
+- Confirm no runtime file references MCP, and no mutation command or DDL is emitted.
+- Treat a live BigQuery smoke as a separate approved gate; static review is not live proof.

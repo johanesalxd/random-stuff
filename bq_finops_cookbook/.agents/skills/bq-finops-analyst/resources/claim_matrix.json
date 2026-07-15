@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-07-15",
+  "policy": "Official Google Cloud documentation is authoritative. Volatile pricing must be supplied as a dated runtime input; no dollar recommendation is allowed when pricing is unverified.",
+  "claims": [
+    {
+      "id": "standard_max_reservation_slots",
+      "claim": "Standard edition maximum reservation size",
+      "value": 1600,
+      "unit": "slots",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/editions-intro",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "product_limit"
+    },
+    {
+      "id": "reservation_slot_increment",
+      "claim": "Baseline and maximum reservation sizes normally use 50-slot increments when not covered by excess commitments",
+      "value": 50,
+      "unit": "slots",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/reservations-tasks",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "product_rule"
+    },
+    {
+      "id": "autoscale_billing_duration",
+      "claim": "Capacity is billed per second with a one-minute minimum by default; BigQuery fluid scaling can change the minimum-duration behavior when enabled",
+      "value": "one_minute_default_with_fluid_scaling_caveat",
+      "unit": "billing_behavior",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/reservations-intro",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "product_rule"
+    },
+    {
+      "id": "reservation_flag_mutex",
+      "claim": "autoscale_max_slots cannot be combined with max_slots or scaling_mode; max_slots and scaling_mode must be configured together",
+      "value": "mutually_exclusive",
+      "unit": "cli_rule",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/reservations-tasks",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "cli_rule"
+    },
+    {
+      "id": "storage_write_exactly_once",
+      "claim": "Storage Write API supports exactly-once semantics only when clients use application-created streams and correctly manage stream offsets",
+      "value": "conditional",
+      "unit": "delivery_semantics",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/write-api-best-practices",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "product_behavior"
+    },
+    {
+      "id": "on_demand_price",
+      "claim": "On-demand query price per TiB is location- and date-dependent",
+      "value": null,
+      "unit": "currency_per_TiB",
+      "authority_url": "https://cloud.google.com/bigquery/pricing#on_demand_pricing",
+      "verified_on": "2026-07-15",
+      "status": "runtime_input",
+      "volatility": "pricing"
+    },
+    {
+      "id": "storage_write_price",
+      "claim": "Storage Write API and legacy streaming prices and free tiers are location- and date-dependent",
+      "value": null,
+      "unit": "currency_per_GiB",
+      "authority_url": "https://cloud.google.com/bigquery/pricing#data_ingestion_pricing",
+      "verified_on": "2026-07-15",
+      "status": "runtime_input",
+      "volatility": "pricing"
+    },
+    {
+      "id": "queue_limit_interactive",
+      "claim": "Interactive query queue limit is 1000 queued queries per project per region",
+      "value": 1000,
+      "unit": "queries",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/query-queues#limitations",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "quota"
+    },
+    {
+      "id": "storage_billing_model_change_delay",
+      "claim": "A dataset storage billing model change takes about 24 hours to apply and cannot be changed again for 14 days",
+      "value": {
+        "effective_after_hours": 24,
+        "change_lock_days": 14
+      },
+      "unit": "time",
+      "authority_url": "https://docs.cloud.google.com/bigquery/docs/storage_overview",
+      "verified_on": "2026-07-15",
+      "status": "verified",
+      "volatility": "product_rule"
+    }
+  ]
+}

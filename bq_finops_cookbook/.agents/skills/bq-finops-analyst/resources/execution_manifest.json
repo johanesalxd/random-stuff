@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "runtime": "Antigravity CLI / Gemini 3.5 Flash / thinking: High",
+  "rules": [
+    "Read this manifest before loading detailed SQL.",
+    "Run required queries in order; run optional queries only when applicable.",
+    "Use the bq/gcloud CLI with ADC and issue only read-only commands.",
+    "A failed or unavailable query becomes an explicit evidence gap; never fabricate or silently omit it.",
+    "Load only the relevant Query section from resources/finops_agent.md."
+  ],
+  "queries": [
+    {"id":"0.1","required":true,"report":"00_current_configuration.md","evidence_type":"reservation_configuration","fallback":"0.1-legacy"},
+    {"id":"0.2","required":true,"report":"00_current_configuration.md","evidence_type":"reservation_assignments","fallback":null},
+    {"id":"0.2a","required":false,"report":"00_current_configuration.md","evidence_type":"commitment_history","fallback":null},
+    {"id":"0.3","required":false,"report":"00_current_configuration.md","evidence_type":"reservation_usage","fallback":"0.3-no-autoscale"},
+    {"id":"0.4","required":false,"report":"00_current_configuration.md","evidence_type":"baseline_headroom","fallback":null},
+    {"id":"0.5","required":true,"report":"00_current_configuration.md","evidence_type":"billing_model_usage","fallback":null},
+    {"id":"1.1","required":true,"report":"01_slot_metrics.md","evidence_type":"hourly_slot_distribution","fallback":null},
+    {"id":"1.2","required":true,"report":"02_top_consumers.md","evidence_type":"project_slot_hours","fallback":null},
+    {"id":"1.3","required":true,"report":"03_usage_patterns.md","evidence_type":"workload_patterns","fallback":null},
+    {"id":"4.1","required":false,"report":"04_optimization_opportunities.md","evidence_type":"slot_contention","fallback":"jobs_timeline_runnable_units"},
+    {"id":"4.2","required":true,"report":"04_optimization_opportunities.md","evidence_type":"bytes_processed","fallback":null},
+    {"id":"4.3","required":true,"report":"04_optimization_opportunities.md","evidence_type":"slow_jobs","fallback":null},
+    {"id":"4.4","required":true,"report":"04_optimization_opportunities.md","evidence_type":"historical_capacity_sensitivity","fallback":null},
+    {"id":"4.5","required":true,"report":"03_usage_patterns.md","evidence_type":"weekly_trend","fallback":null},
+    {"id":"4.8","required":true,"report":"04_optimization_opportunities.md","evidence_type":"error_taxonomy","fallback":null},
+    {"id":"4.9","required":true,"report":"04_optimization_opportunities.md","evidence_type":"per_job_slot_distribution","fallback":null},
+    {"id":"4.10","required":true,"report":"04_optimization_opportunities.md","evidence_type":"queue_pressure","fallback":null},
+    {"id":"4.11","required":false,"report":"04_optimization_opportunities.md","evidence_type":"official_recommendations","fallback":"slot_estimator_or_recommender_api"},
+    {"id":"4.12","required":false,"report":"04_optimization_opportunities.md","evidence_type":"query_performance_insights","fallback":null},
+    {"id":"4.13","required":false,"report":"04_optimization_opportunities.md","evidence_type":"bi_engine_diagnostics","fallback":null},
+    {"id":"4.14","required":false,"report":"04_optimization_opportunities.md","evidence_type":"partition_cluster_triage","fallback":"dataset_scoped_metadata"},
+    {"id":"5.1","required":false,"report":"05_storage_and_cost.md","evidence_type":"storage_write_activity","fallback":"cloud_monitoring"},
+    {"id":"6.1","required":true,"report":"05_storage_and_cost.md","evidence_type":"logical_and_physical_storage","fallback":null},
+    {"id":"6.2","required":false,"report":"05_storage_and_cost.md","evidence_type":"stale_table_triage","fallback":null},
+    {"id":"6.3","required":false,"report":"05_storage_and_cost.md","evidence_type":"storage_billing_sensitivity","fallback":"pricing_calculator"}
+  ]
+}

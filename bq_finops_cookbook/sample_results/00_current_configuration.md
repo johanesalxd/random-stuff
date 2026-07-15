@@ -1,5 +1,7 @@
 # Current Configuration Analysis
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Existing Reservations
 
 A single unused reservation was detected in the project:
