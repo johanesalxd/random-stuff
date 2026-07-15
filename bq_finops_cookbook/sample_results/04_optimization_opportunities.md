@@ -1,5 +1,7 @@
 # Optimization Opportunities (30-Day Analysis)
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Slot Contention
 
 - **Jobs with Contention:** 0
@@ -42,8 +44,8 @@
 
 | User | Query Count | TiB Scanned | Avg GB/Query |
 |------|------------|-------------|--------------|
-| admin@example.com | 150 | 0.0003 | 0.0027 |
-| user@example.com | 14 | 0.0000 | 0.0000 |
+| principal `9d5e…` | 150 | 0.0003 | 0.0027 |
+| principal `04f8…` | 14 | 0.0000 | 0.0000 |
 
 **Recommendations:**
 - All query scans are microscopic (less than 1 MB per query on average). No partitioning, clustering, or optimization of table scans is necessary.
@@ -52,10 +54,10 @@
 
 | Job ID | User | Duration (s) | GB Processed | Slot-Hours |
 |--------|------|--------------|--------------|------------|
-| bquxjob_794d081b_19e44003c72 | admin@example.com | 169 | 0.0000 | 0.0488 |
-| bquxjob_6f584b_19e440a13f5 | admin@example.com | 7 | 0.0000 | 0.0058 |
-| bquxjob_42bebcc0_19e71e9b298 | admin@example.com | 4 | 0.0000 | 0.0050 |
-| XUOffqQ9GCpOEPYKc73n5TOtOXK | admin@example.com | 4 | 0.0000 | 0.0050 |
+| job `2c7d…` | principal `9d5e…` | 169 | 0.0000 | 0.0488 |
+| job `ae12…` | principal `9d5e…` | 7 | 0.0000 | 0.0058 |
+| job `7bd1…` | principal `9d5e…` | 4 | 0.0000 | 0.0050 |
+| job `41a9…` | principal `9d5e…` | 4 | 0.0000 | 0.0050 |
 
 **Interpretation:**
 - The slowest query took 169 seconds but processed 0 bytes and consumed only 0.0488 slot-hours. This indicates it was likely an idle metadata command, a system-waiting task, or a small script loop rather than a heavy scanning query.

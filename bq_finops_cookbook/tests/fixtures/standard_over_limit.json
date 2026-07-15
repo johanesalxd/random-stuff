@@ -1,0 +1,19 @@
+{
+  "input": {
+    "evidence_complete": true,
+    "avg_slots": 700,
+    "p25_slots": 200,
+    "p50_slots": 450,
+    "p95_slots": 1800,
+    "max_slots": 2400,
+    "cv": 0.8,
+    "monthly_on_demand_cost": 8500,
+    "standard_max_slots": 1600,
+    "recommender_strategy": null
+  },
+  "expected": {
+    "strategy": "ENTERPRISE_EVALUATION",
+    "confidence": "MEDIUM",
+    "warnings": ["STANDARD_CAP_EXCEEDED", "RECOMMENDER_UNAVAILABLE"]
+  }
+}

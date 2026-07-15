@@ -1,5 +1,7 @@
 # Current Configuration Analysis
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Existing Reservations
 *No reservations found in project.*
 

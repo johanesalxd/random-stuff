@@ -1,5 +1,7 @@
 # Usage Patterns (30-Day Analysis)
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Peak Usage Hours
 - **Primary Peak:** Daily, 09:00 - 11:00 UTC (Morning Reporting) - 2,200 slots
 - **Secondary Peak:** Daily, 01:00 UTC (ETL Batch) - 1,500 slots

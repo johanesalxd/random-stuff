@@ -1,0 +1,18 @@
+{
+  "input": {
+    "evidence_complete": true,
+    "avg_slots": 20,
+    "p25_slots": 2,
+    "p50_slots": 5,
+    "p95_slots": 80,
+    "max_slots": 160,
+    "cv": 1.8,
+    "monthly_on_demand_cost": 80,
+    "standard_max_slots": 1600,
+    "recommender_strategy": "ON_DEMAND"
+  },
+  "expected": {
+    "strategy": "ON_DEMAND",
+    "confidence": "HIGH"
+  }
+}

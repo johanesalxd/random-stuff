@@ -1,6 +1,10 @@
-# Top Slot Consumers (30-Day Analysis)
+# Analyzed Project Slot Usage (30-Day Analysis)
 
-## Project Rankings
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
+## Explicit Multi-Project Scope
+
+> `ASSUMPTION`: This synthetic ranking assumes an approved explicit union or organization-scope collection. Query 1.2 alone cannot produce it.
 
 | Rank | Project ID | Slot-Hours | Job Count |
 |------|-----------|------------|-----------|

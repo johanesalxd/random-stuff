@@ -1,45 +1,74 @@
 # Final Recommendation
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Current State Summary
-- **Slot Metrics:** p50=450, p95=1,800, max=2,400
-- **Variability:** CV=0.79 (Moderate)
-- **Burstiness:** Ratio=4.0 (High Burst)
-- **Current Spend (Est):** ~$8,500/month (On-Demand)
+
+- `OBSERVED`: p50=450, p95=1,800, max=2,400 synthetic slots.
+- `DERIVED`: the workload exceeds the current 1,600-slot Standard-edition ceiling.
+- `HEURISTIC`: steady baseline use plus large peaks merits Enterprise capacity evaluation.
+- `OFFICIAL`: an invalid 2,500-slot Standard reservation must never be proposed.
+
+## Evidence Quality
+
+- **Confidence:** MEDIUM
+- **Query status:** synthetic fixture; no live MCP execution
+- **IAM / visibility gaps:** current Slot Recommender output unavailable
+- **Pricing verification:** NOT VERIFIED; no dollar savings claimed
 
 ## Recommended Strategy
-**Choice: Autoscaling Reservations (Standard Edition)**
 
-**Reasoning:**
-Your workload is highly bursty (4x peak-to-median ratio). A fixed baseline of 500 slots would hurt performance during your critical 9AM peaks (requiring 2,200 slots). However, paying for 2,200 slots 24/7 is wasteful.
+**Choice:** Enterprise evaluation with baseline plus autoscaling
 
-**Autoscaling** can scale capacity for the morning peaks without committing to peak capacity 24/7. Validate the economics with current regional slot-hour pricing, scaled-slot billing behavior, and any committed-use discounts before treating this as a cost-saving change.
-
-**Configuration:**
-- **Edition:** Standard (autoscaling-only; billed for scaled slot capacity, not actual slot utilization)
-- **Max Autoscale:** 2,500 slots (to cover the max peak)
-- **Baseline:** Not applicable in Standard Edition; evaluate Enterprise/Enterprise Plus only if guaranteed baseline capacity or commitments are needed
-- **Validation:** Cross-check BigQuery Slot Recommender / `INFORMATION_SCHEMA.RECOMMENDATIONS` before production changes.
+`HEURISTIC`: Start scenario testing around a 500-slot baseline plus 1,900 additional autoscaling slots, for a 2,400-slot total maximum. Final sizing requires Slot Estimator/Recommender evidence, current pricing, queue/runtime SLOs, and administrator review.
 
 ## Alternative Analysis
 
-### Why Other Options Were Not Recommended
+- **On-demand:** viable fallback while evidence is incomplete.
+- **Standard autoscaling:** rejected because the synthetic peak exceeds the documented 1,600-slot maximum.
+- **Enterprise baseline:** candidate, subject to economics and SLOs.
+- **Hybrid:** candidate if production and development projects can be isolated cleanly.
 
-**Option A: Stay On-Demand (PAYG)**
-- **Why Considered:** Simplicity.
-- **Why Rejected:** Current spend appears high enough to justify evaluating capacity pricing, but do not assume autoscaling is cheaper universally; compare against actual regional on-demand bytes processed, slot-hour pricing, and recommender output.
+## Optimization Actions
 
-**Option C: Baseline Reservations (Enterprise/Enterprise Plus)**
-- **Why Considered:** Discounts (1-year commit).
-- **Why Rejected:** Valley usage is low. Committing to peak capacity (~2,000 slots) would likely waste substantial capacity, while committing near the average (~500 slots) may still leave morning peaks dependent on autoscaling or queues.
+1. Optimize the highest-slot queries before purchasing capacity.
+2. Move noncritical batch work away from peak windows.
+3. Compare on-demand, Enterprise, and hybrid scenarios using verified prices.
 
-## Implementation Steps
+## Implementation Proposals
 
-### Step 1: Create Reservation
+**Classification:** `PROPOSAL_NONDESTRUCTIVE` — text only, not executed. Replace every placeholder and validate current CLI rules before administrator approval.
+
 ```bash
-bq mk --reservation --project_id=my-project --location=US --edition=STANDARD --autoscale_max_slots=2500 prod_autoscale
+bq mk --reservation \
+  --project_id=[ADMIN_PROJECT_ID] \
+  --location=[REGION] \
+  --edition=ENTERPRISE \
+  --slots=500 \
+  --autoscale_max_slots=1900 \
+  [RESERVATION_NAME]
 ```
 
-### Step 2: Assign Project
-```bash
-bq mk --reservation_assignment --reservation_id=my-project:US.prod_autoscale --job_type=QUERY --assignee_type=PROJECT --assignee_id=ecommerce-prod
-```
+No assignment or commitment purchase is proposed until project ownership and pricing are verified.
+
+## Validation Criteria
+
+- [ ] Slot Estimator/Recommender evidence reconciled.
+- [ ] Queue and p95 runtime SLOs improve or remain healthy.
+- [ ] Current edition/location prices support the economics.
+- [ ] Rollback and assignment ownership are approved.
+
+## Documentation Checks
+
+- Standard maximum verified from current BigQuery editions documentation.
+- Reservation flags and increment behavior must be rechecked immediately before implementation.
+
+## MCP / bq Execution Notes
+
+This is a synthetic offline fixture. No MCP or `bq` command ran.
+
+## Next Steps
+
+1. Run the read-only analysis against an approved project.
+2. Collect current Slot Estimator/Recommender and pricing evidence.
+3. Have a BigQuery administrator review any final proposal.
