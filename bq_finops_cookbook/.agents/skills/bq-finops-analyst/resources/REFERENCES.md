@@ -2,20 +2,49 @@
 
 **Last reviewed:** 2026-07-15
 **Authority:** Current Google Cloud and Antigravity documentation.
-**Policy:** Re-check volatile pricing, quotas, limits, CLI flags, and preview features before every recommendation. `claim_matrix.json` records the dated contract; runtime prices remain explicit inputs.
+**Policy:** Open the linked first-party pages and re-check volatile pricing,
+quotas, limits, schemas, CLI behavior, and preview features before every
+recommendation. Repository maintenance prefers Google Developer Knowledge MCP,
+then Context7 or official-web retrieval. The Antigravity runtime may use any
+available read-only documentation or web capability; MCP is not required.
+`claim_matrix.json` records the dated contract, and runtime prices remain
+explicit inputs.
+
+## Agentic verification procedure
+
+1. Retrieve the exact first-party page from `cloud.google.com`,
+   `docs.cloud.google.com`, or `antigravity.google`; a catalogued link is not
+   proof that the claim was checked.
+2. Record the retrieval date, target location, edition, CLI version, API state,
+   and preview scope that affect the claim.
+3. Mark `PASS` only when the page supports the exact value or qualified
+   behavior. Mark inaccessible, ambiguous, mismatched, or unsupported claims
+   `GAP`.
+4. Propagate strategy-changing gaps to `REVIEW_REQUIRED`. Omit dollar estimates
+   when a pricing claim is `GAP`.
+5. Construct current `bq`/gcloud syntax from the retrieved references; do not
+   copy command examples from this repository as durable recipes.
+
+Use this output contract in every final report:
+
+| Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
+|---|---|---|---|---|---|
 
 ## Antigravity runtime
 
 - [Agent Skills](https://antigravity.google/docs/skills)
-- [Antigravity CLI overview](https://www.antigravity.google/docs/cli-overview)
-- [Background tasks and subagents](https://antigravity.google/docs/cli/subagents)
-- [CLI reference](https://antigravity.google/docs/cli-reference)
+- [Antigravity CLI reference](https://antigravity.google/docs/cli-reference)
+- [CLI features](https://antigravity.google/docs/cli-features)
+- [Subagents and background tasks](https://antigravity.google/docs/cli-subagents)
+- [CLI permissions](https://www.antigravity.google/docs/cli-permissions)
+- [Model Context Protocol](https://antigravity.google/docs/mcp)
 - [Antigravity models](https://antigravity.google/docs/models)
 
 ## Authentication and IAM
 
-- [Application Default Credentials (ADC)](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
-- [Set up ADC for a local environment (`gcloud auth application-default login`)](https://docs.cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)
+- [gcloud CLI authentication](https://docs.cloud.google.com/sdk/docs/authorizing)
+- [gcloud CLI credentials are distinct from ADC](https://docs.cloud.google.com/docs/authentication/provide-credentials-adc)
+- [`bq` command-line authentication and impersonation](https://docs.cloud.google.com/bigquery/docs/reference/bq-cli-reference)
 - [BigQuery access control (predefined roles)](https://docs.cloud.google.com/bigquery/docs/access-control)
 
 ## BigQuery workload management
@@ -61,6 +90,10 @@ Exactly-once support requires application-created streams plus correctly managed
 - [JOBS views](https://docs.cloud.google.com/bigquery/docs/information-schema-jobs)
 - [JOBS_TIMELINE views](https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline)
 - [Reservations](https://docs.cloud.google.com/bigquery/docs/information-schema-reservations)
+- [Reservation timeline](https://docs.cloud.google.com/bigquery/docs/information-schema-reservation-timeline)
+- [Current capacity commitments](https://docs.cloud.google.com/bigquery/docs/information-schema-capacity-commitments)
+- [Capacity commitment changes](https://docs.cloud.google.com/bigquery/docs/information-schema-capacity-commitment-changes)
+- [Reservation REST schema](https://docs.cloud.google.com/bigquery/docs/reference/reservations/rest/v1/projects.locations.reservations)
 - [Assignments](https://docs.cloud.google.com/bigquery/docs/information-schema-assignments)
 - [Recommendations](https://docs.cloud.google.com/bigquery/docs/information-schema-recommendations)
 - [Table storage](https://docs.cloud.google.com/bigquery/docs/information-schema-table-storage)
@@ -84,6 +117,10 @@ Official utility queries are implementation references, not a substitute for che
 ## CLI
 
 - [`bq` command-line reference](https://docs.cloud.google.com/bigquery/docs/reference/bq-cli-reference)
+- [Run BigQuery queries](https://docs.cloud.google.com/bigquery/docs/running-queries)
+- [Authenticate to BigQuery](https://docs.cloud.google.com/bigquery/docs/authentication)
 - [Reservation management commands](https://docs.cloud.google.com/bigquery/docs/reservations-tasks)
 
-`--autoscale_max_slots` is mutually exclusive with `--max_slots`/`--scaling_mode`; the latter two are configured together. Re-check preview status and location/edition support before proposing either form.
+Use these pages to resolve current syntax and option compatibility. Re-check
+preview status and location/edition support before proposing any configuration;
+do not preserve a command recipe in the cookbook.

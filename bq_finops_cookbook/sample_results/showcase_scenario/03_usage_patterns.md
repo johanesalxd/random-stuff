@@ -1,6 +1,11 @@
-# Usage Patterns (30-Day Analysis)
+# Usage Patterns
 
 > **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
+- **Analysis Window:** [2025-12-18T00:00:00Z, 2026-01-17T00:00:00Z)
+
+Unless labelled otherwise, fixture query rows are OBSERVED, calculations are
+DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 ## Peak Usage Hours
 - **Primary Peak:** Daily, 09:00 - 11:00 UTC (Morning Reporting) - 2,200 slots
@@ -16,3 +21,16 @@
 
 ## Scheduling Recommendations
 - **Action:** The "Morning Reporting" spike is causing the p95 to jump. Pre-calculate these reports during the off-peak window (04:00) using dbt or scheduled queries.
+
+## Query Status
+
+| Query | Status | Evidence / Fallback | Scope or Blocking Note |
+|---|---|---|---|
+| 1.3 | PASS | Synthetic primary result | Project-local patterns only |
+| 4.5 | PASS | Synthetic primary result | Weekly trend evidence present |
+
+## Documentation Checks
+
+| Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
+|---|---|---|---|---|---|
+| JOBS_TIMELINE regional scope | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-15 | Synthetic workload location | PASS | Location remains explicit |
