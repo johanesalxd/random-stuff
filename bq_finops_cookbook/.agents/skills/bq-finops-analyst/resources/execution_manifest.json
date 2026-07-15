@@ -4,7 +4,7 @@
   "rules": [
     "Read this manifest before loading detailed SQL.",
     "Run required queries in order; run optional queries only when applicable.",
-    "Use MCP first and keep every cloud operation read-only.",
+    "Use the bq/gcloud CLI with ADC and issue only read-only commands.",
     "A failed or unavailable query becomes an explicit evidence gap; never fabricate or silently omit it.",
     "Load only the relevant Query section from resources/finops_agent.md."
   ],

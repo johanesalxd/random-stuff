@@ -12,7 +12,7 @@
 ## Evidence Quality
 
 - **Confidence:** MEDIUM
-- **Query status:** synthetic fixture; no live MCP execution
+- **Query status:** synthetic fixture; no live bq/gcloud execution
 - **IAM / visibility gaps:** current Slot Recommender output unavailable
 - **Pricing verification:** NOT VERIFIED; no dollar savings claimed
 
@@ -35,21 +35,17 @@
 2. Move noncritical batch work away from peak windows.
 3. Compare on-demand, Enterprise, and hybrid scenarios using verified prices.
 
-## Implementation Proposals
+## Recommended Actions (User-Executed)
 
-**Classification:** `PROPOSAL_NONDESTRUCTIVE` — text only, not executed. Replace every placeholder and validate current CLI rules before administrator approval.
+The analyst does not change any cloud resource. The following is a recommendation for the user to perform.
 
-```bash
-bq mk --reservation \
-  --project_id=[ADMIN_PROJECT_ID] \
-  --location=[REGION] \
-  --edition=ENTERPRISE \
-  --slots=500 \
-  --autoscale_max_slots=1900 \
-  [RESERVATION_NAME]
-```
+### Recommendation 1: Evaluate an Enterprise reservation with baseline + autoscaling
+- **Intended outcome:** ~500-slot baseline plus autoscaling up to a 2,400-slot maximum, covering steady demand while absorbing peaks that exceed the 1,600-slot Standard ceiling.
+- **Prechecks:** reconcile size with Slot Estimator/Recommender, confirm reservation location and administration project, verify current edition/location pricing.
+- **Rollback / lock-in:** slot-hour billing is flexible; any capacity commitment carries a fixed term — verify before purchase.
+- **How to apply:** [Manage workload reservations](https://docs.cloud.google.com/bigquery/docs/reservations-tasks).
 
-No assignment or commitment purchase is proposed until project ownership and pricing are verified.
+No assignment or commitment is recommended until project ownership and pricing are verified.
 
 ## Validation Criteria
 
@@ -63,9 +59,9 @@ No assignment or commitment purchase is proposed until project ownership and pri
 - Standard maximum verified from current BigQuery editions documentation.
 - Reservation flags and increment behavior must be rechecked immediately before implementation.
 
-## MCP / bq Execution Notes
+## bq / gcloud Execution Notes
 
-This is a synthetic offline fixture. No MCP or `bq` command ran.
+This is a synthetic offline fixture. No `bq` or `gcloud` command ran.
 
 ## Next Steps
 

@@ -1,17 +1,36 @@
 # IAM and Privacy Matrix
 
-The analyst must use the smallest evidence surface available. Role names are starting points, not guarantees; verify permissions in the target organization and record gaps.
+The analyst authenticates with Application Default Credentials (ADC) and issues only read-only `bq`/`gcloud` commands. This skill never mutates cloud resources, so it only ever needs read access. The roles below are the minimum for the analysis to run; the running user brings their own ADC identity. Verify effective permissions in the target organization and record any gaps.
 
-## Staged access
+## Minimum read-only roles
 
-| Stage | Evidence | Typical permission family | Sensitive fields | Fallback |
-|---|---|---|---|---|
-| Workload jobs | `JOBS_BY_PROJECT`, `JOBS_TIMELINE_BY_PROJECT` | `bigquery.jobs.listAll` / BigQuery Resource Viewer | User email, job ID, optional query text | Aggregate project-level evidence only |
-| Reservation config | `RESERVATIONS*`, `ASSIGNMENTS*` | BigQuery reservation metadata permissions in admin project | Assignee IDs | Mark configuration unavailable |
-| Commitments | `CAPACITY_COMMITMENT_CHANGES*` | Reservation/commitment metadata permissions | Commercial configuration | Omit historical commitment analysis |
-| Recommendations | `RECOMMENDATIONS*` or Recommender API | Recommender list/get permissions | Cost impact and target resources | Use Slot Estimator UI evidence supplied by administrator |
-| Storage | `TABLE_STORAGE*`, `TABLES` | BigQuery metadata/list permissions | Dataset/table names | Aggregate only accessible datasets |
-| Write API | `WRITE_API_TIMELINE*` | BigQuery resource metadata permissions | Table and error metadata | Cloud Monitoring evidence supplied by administrator |
+All roles verified against Google Cloud documentation on 2026-07-15.
+
+| Role | Grants | Evidence surfaces it unlocks |
+|---|---|---|
+| `roles/bigquery.jobUser` | `bigquery.jobs.create` | Running the read-only SELECT queries (minimal job-run role) |
+| `roles/bigquery.resourceViewer` | `jobs.listAll`, `reservations.list`, `reservationAssignments.list`, `capacityCommitments.list` | `JOBS_BY_PROJECT`, `JOBS_TIMELINE_BY_PROJECT`, `RESERVATIONS*`, `ASSIGNMENTS*`, `CAPACITY_COMMITMENT_CHANGES*` |
+| `roles/bigquery.metadataViewer` | `tables.get`, `tables.list` | `TABLES`, `COLUMNS`, `TABLE_STORAGE_BY_PROJECT`, `WRITE_API_TIMELINE_BY_PROJECT` |
+
+Grant `roles/bigquery.resourceViewer` in the **reservation administration project** as well when reservations live in a separate project.
+
+**Optional (only if official Slot Recommender output or dollar figures are requested):**
+
+| Role | Grants | Purpose |
+|---|---|---|
+| `roles/bigquery.slotRecommenderViewer` | `recommender.bigqueryCapacityCommitmentsRecommendations.get/list` | `RECOMMENDATIONS_BY_PROJECT` + Slot Recommender/Estimator |
+| `roles/billing.viewer` | `billing.accounts.getPricing` | Reveal hidden monthly cost values in recommendations |
+
+## Never grant
+
+These carry mutation permissions and must not be attached to the analysis identity: `roles/owner`, `roles/editor`, `roles/bigquery.admin`, `roles/bigquery.resourceAdmin`, `roles/bigquery.resourceEditor`, `roles/bigquery.dataEditor`, `roles/bigquery.dataOwner`, and any custom role containing `reservations.create/update/delete`, `reservationAssignments.create/delete`, `capacityCommitments.*`, or `tables.update/delete`.
+
+## Evidence fallbacks
+
+- Jobs unavailable → aggregate project-level evidence only.
+- Reservation/commitment metadata denied → mark configuration unavailable; omit historical commitment analysis.
+- Recommender denied → use Slot Estimator UI evidence supplied by the administrator.
+- Storage/Write API denied → aggregate only accessible datasets; use Cloud Monitoring evidence supplied by the administrator.
 
 ## Privacy defaults
 
@@ -34,4 +53,4 @@ Fallback: None available without administrator-supplied evidence
 
 ## Mutation boundary
 
-No role granted to this analyst is permission to mutate. Even when the authenticated principal has broader permissions, the skill remains read-only. Reservation, assignment, commitment, and dataset billing changes are proposals for a separate administrator-controlled workflow.
+The skill only issues read-only `bq`/`gcloud` commands. Even when the ADC principal happens to hold broader (write) permissions, the analyst must never run a resource-changing command. Reservation, assignment, commitment, and dataset storage-billing changes are recommendations the user performs themselves by following the linked official documentation.

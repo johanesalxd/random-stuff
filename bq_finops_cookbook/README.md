@@ -2,7 +2,9 @@
 
 A read-only BigQuery capacity, workload, storage, and cost-analysis skill designed for **Antigravity CLI with Gemini 3.5 Flash with thinking set to High**.
 
-The cookbook uses BigQuery MCP tools first, falls back to read-only `bq query`/metadata inspection when necessary, and writes seven structured Markdown reports. It never changes reservations, assignments, commitments, or dataset billing configuration.
+The cookbook runs read-only `bq`/`gcloud` CLI commands (authenticated with Application Default Credentials) and writes seven structured Markdown reports.
+
+> **This skill is read-only. It only produces analysis and recommendations — it never changes any cloud resource.** Every reservation, assignment, commitment, or storage-billing change is described as a recommendation with a link to the official documentation, for **you** to perform yourself.
 
 ## What it analyzes
 
@@ -25,30 +27,32 @@ Every final recommendation separates:
 | `OFFICIAL` | Current Google Cloud constraint or recommendation |
 | `HEURISTIC` | Cookbook planning rule, not a Google product rule |
 | `ASSUMPTION` | Price, discount, date, workload window, or missing evidence |
-| `PROPOSED` | Human-reviewed action that was not executed |
+| `RECOMMENDATION` | A documented action for the user to perform themselves; never executed by this skill |
 
 Pricing is **not embedded as timeless truth**. Supply and cite current location-specific prices before producing dollar savings. Without verified prices, the analyst provides capacity guidance and marks savings `NOT VERIFIED`.
 
 ## Safety boundary
 
-- Cloud execution is strictly read-only.
-- MCP is the primary query and metadata path.
-- `bq` is a fallback for read-only inspection only.
-- Reservation, assignment, commitment, and storage-model commands may appear only as labelled proposals.
+- Cloud execution is strictly read-only; only `bq query` (SELECT), `bq show`, `bq ls`, and `gcloud ... describe/list` are ever issued.
+- The skill never runs a resource-changing command and never emits runnable mutation commands or DDL.
+- Reservation, assignment, commitment, and storage-model changes appear only as recommendations with links to official docs, for the user to perform.
 - Missing IAM, unsupported fields, empty history, or unavailable recommender data are reported as evidence gaps.
 - Raw query text is not included in reports by default; user identities should be pseudonymized unless explicitly authorized.
 
 ## Requirements
 
 - Antigravity CLI with Gemini 3.5 Flash with thinking set to High
-- A connected BigQuery MCP server
-- Google Cloud authentication appropriate to that MCP server
+- `bq` and `gcloud` CLIs authenticated with Application Default Credentials (`gcloud auth application-default login`)
 - Target workload project ID
 - Exact BigQuery location (`us`, `eu`, `asia-northeast1`, and so on)
 - Reservation administration project ID when different from the workload project
-- Read permissions for the required `INFORMATION_SCHEMA` views
+- The minimum read-only IAM roles for your ADC identity:
+  - `roles/bigquery.jobUser` (run the read-only queries)
+  - `roles/bigquery.resourceViewer` (jobs, reservations, assignments, commitments)
+  - `roles/bigquery.metadataViewer` (tables, columns, storage, write-API metadata)
+  - optional: `roles/bigquery.slotRecommenderViewer` and `roles/billing.viewer` for official Slot Recommender output and dollar figures
 
-See [`resources/IAM.md`](.agents/skills/bq-finops-analyst/resources/IAM.md) for the staged access model.
+See [`resources/IAM.md`](.agents/skills/bq-finops-analyst/resources/IAM.md) for the full role matrix and the roles you must **not** grant.
 
 ## Install and run
 
@@ -61,7 +65,7 @@ agy
 Inside Antigravity CLI:
 
 1. Run `/skills` and verify `bq-finops-analyst` is listed.
-2. Run `/mcp` and verify the BigQuery MCP server is connected.
+2. Verify ADC is active: `gcloud auth application-default print-access-token` succeeds and `gcloud config list` shows the expected account.
 3. Start the analysis:
 
 ```text
@@ -79,10 +83,10 @@ If the workload has no separate administration project, say so explicitly.
 3. Load only the required query sections from `resources/finops_agent.md`.
 4. Verify volatile facts through `resources/claim_matrix.json` and current official docs.
 5. For broad audits, let the main agent delegate independent product-rule, SQL, and report-review lanes; monitor them with `/agents`. Subagents remain read-only and the main agent verifies their findings.
-6. Execute read-only SQL through BigQuery MCP.
+6. Execute read-only SQL via `bq query`, and read metadata via `bq show`/`bq ls`/`gcloud ... describe/list`.
 7. Record every failed/unavailable query and fallback.
 8. Generate reports.
-9. Run the deterministic decision guardrail before presenting the final strategy.
+9. Apply the deterministic decision rules (see the Decision Logic section of `finops_agent.md`) before presenting the final strategy.
 
 ## Reports
 
@@ -106,10 +110,10 @@ The final report must include:
 - Recommended Strategy
 - Alternative Analysis
 - Optimization Actions
-- Implementation Proposals
+- Recommended Actions (User-Executed)
 - Validation Criteria
 - Documentation Checks
-- MCP / bq Execution Notes
+- bq / gcloud Execution Notes
 - Next Steps
 
 ## Decision guardrails
@@ -122,23 +126,10 @@ Important rules:
 - High burstiness with tiny absolute usage does not automatically justify reservations.
 - `p25 >= 50` alone does not justify a commitment.
 - Standard edition has no baseline slots and is bounded by its current documented maximum reservation size.
-- A workload above the current Standard limit must branch to another valid strategy; never emit an invalid Standard command.
+- A workload above the current Standard limit must branch to another valid strategy; never recommend an invalid Standard size.
 - Assigned jobs exceeding available capacity do not automatically spill to on-demand.
 - Slot usage is not the same as autoscaling billing.
 - Recommender disagreement forces review rather than silent override.
-
-## Contributor verification
-
-The project uses Python standard-library tests only:
-
-```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/validate_cookbook.py all
-python3 scripts/validate_cookbook.py inventory
-git diff --check
-```
-
-Live metadata smoke tests require an explicitly approved non-production project. Offline green does not imply live GCP validation.
 
 ## Source hierarchy
 
@@ -151,7 +142,7 @@ Live metadata smoke tests require an explicitly approved non-production project.
 Start with:
 
 - [Antigravity skills](https://antigravity.google/docs/skills)
-- [Antigravity MCP](https://antigravity.google/docs/mcp)
+- [Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
 - [BigQuery editions](https://docs.cloud.google.com/bigquery/docs/editions-intro)
 - [Workload reservations](https://docs.cloud.google.com/bigquery/docs/reservations-workload-management)
 - [Reservation management](https://docs.cloud.google.com/bigquery/docs/reservations-tasks)

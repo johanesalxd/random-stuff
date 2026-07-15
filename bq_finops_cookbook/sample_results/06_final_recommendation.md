@@ -12,7 +12,7 @@
 ## Evidence Quality
 
 - **Confidence:** MEDIUM
-- **Query status:** synthetic fixture; no live MCP execution
+- **Query status:** synthetic fixture; no live bq/gcloud execution
 - **IAM / visibility gaps:** recommender and billing export unavailable
 - **Pricing verification:** NOT VERIFIED; no dollar savings claimed
 
@@ -34,9 +34,9 @@
 2. Re-run the analysis after 30 complete days of material workload.
 3. Obtain Slot Estimator/Recommender evidence before any capacity purchase.
 
-## Implementation Proposals
+## Recommended Actions (User-Executed)
 
-No reservation changes are proposed. No GCP mutation was executed.
+No reservation changes are recommended. No GCP resource was changed.
 
 ## Validation Criteria
 
@@ -49,9 +49,9 @@ No reservation changes are proposed. No GCP mutation was executed.
 - BigQuery pricing must be re-read for the project location before any dollar estimate.
 - Product limits were not needed for this on-demand recommendation.
 
-## MCP / bq Execution Notes
+## bq / gcloud Execution Notes
 
-This is a synthetic offline fixture. No MCP or `bq` command ran.
+This is a synthetic offline fixture. No `bq` or `gcloud` command ran.
 
 ## Next Steps
 

@@ -7,11 +7,16 @@
 ## Antigravity runtime
 
 - [Agent Skills](https://antigravity.google/docs/skills)
-- [Model Context Protocol](https://antigravity.google/docs/mcp)
 - [Antigravity CLI overview](https://www.antigravity.google/docs/cli-overview)
 - [Background tasks and subagents](https://antigravity.google/docs/cli/subagents)
 - [CLI reference](https://antigravity.google/docs/cli-reference)
 - [Antigravity models](https://antigravity.google/docs/models)
+
+## Authentication and IAM
+
+- [Application Default Credentials (ADC)](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
+- [Set up ADC for a local environment (`gcloud auth application-default login`)](https://docs.cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)
+- [BigQuery access control (predefined roles)](https://docs.cloud.google.com/bigquery/docs/access-control)
 
 ## BigQuery workload management
 

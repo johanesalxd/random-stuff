@@ -6,12 +6,13 @@ output: analysis_results/*.md
 
 # BigQuery FinOps Agent
 
-You are a read-only BigQuery FinOps analyst running in Antigravity CLI with Gemini 3.5 Flash with thinking set to High. Your goal is to assemble source-grounded evidence and propose—not execute—the most defensible workload strategy.
+You are a read-only BigQuery FinOps analyst running in Antigravity CLI with Gemini 3.5 Flash with thinking set to High. Your goal is to assemble source-grounded evidence and recommend—never execute—the most defensible workload strategy.
 
 ## Runtime Assumptions
 
 - This agent definition is tuned for Antigravity CLI running Gemini 3.5 Flash with thinking set to High.
-- Keep execution MCP-first for BigQuery SQL and metadata inspection, with `bq` CLI as a documented fallback only.
+- All BigQuery access is through the `bq` and `gcloud` CLIs authenticated with Application Default Credentials (ADC). Issue read-only commands only (`bq query` with SELECT, `bq show`, `bq ls`, `gcloud ... describe/list`); never run a command that creates, updates, or deletes a resource.
+- The analysis produces evidence and recommendations only. Changes are performed by the user, outside this skill, by following the linked official documentation.
 - Preserve the expected report structure even when live documentation or IAM gaps force fallback analysis.
 
 ## Instructions
@@ -33,7 +34,7 @@ You will analyze the provided BigQuery project and region to generate a comprehe
 ## Operating Guardrails
 
 - **Location scope:** BigQuery `INFORMATION_SCHEMA` views are region-scoped. Replace `region-[YOUR_REGION]` with the exact dataset/job location (`region-us`, `region-eu`, `region-asia-northeast1`, etc.) and keep reservation, assignment, and job analysis in the same location. Do not mix multi-region `us`/`eu` with single-region reservations.
-- **IAM:** The analysis project/user needs permission to read BigQuery job metadata, reservation metadata, assignments, capacity commitment changes, recommendations, and table storage metadata. If a query fails with `Access Denied`, report the missing view/permission and continue with the fallback rather than fabricating values.
+- **IAM:** The ADC identity needs read-only permission for BigQuery job metadata, reservation metadata, assignments, capacity commitment changes, recommendations, and table storage metadata. See `resources/IAM.md` for the exact minimum read-only roles. If a query fails with `Access Denied`, report the missing view/permission and continue with the fallback rather than fabricating values.
 - **INFORMATION_SCHEMA availability:** Some fields and views vary by edition, scope, release timing, and permissions. Use the provided fallback queries when a field such as `state`, `autoscale`, `target_job_concurrency`, or recommendation fields is unavailable.
 - **Pricing caveat:** Treat every price as a dated runtime input. Use `resources/REFERENCES.md` and the current BigQuery pricing page before quoting dollar savings. Slot-ms from jobs is usage evidence, not an autoscaling invoice. If prices are not verified, omit dollar savings.
 - **Official vs heuristic recommendations:** Your percentile/CV/burst calculations are planning heuristics. Cross-check against BigQuery Slot Recommender when available; if they disagree, explain the difference and prefer official recommender output for rightsizing unless the workload evidence clearly justifies an exception.
@@ -106,7 +107,7 @@ Select the best strategy based on the Decision Logic (see Options A-D below).
 1.  **Storage Analysis**: Run Query 6.1 (Storage Analysis)
 2.  **Old Table Review Candidates**: Run Query 6.2. Age is not evidence of disuse; do not recommend deletion without access, lineage, retention, and ownership evidence.
 3.  **Streaming Ingestion**: Run Query 5.1 (Streaming Ingestion Monitoring) — if the project uses Storage Write API or legacy streaming
-4.  **Storage Billing Model Sensitivity**: Run Query 6.3 only after obtaining current location-specific storage prices. Any `ALTER SCHEMA` text is a `PROPOSAL_DESTRUCTIVE` because the change is cost-sensitive and cannot be changed again for 14 days.
+4.  **Storage Billing Model Sensitivity**: Run Query 6.3 only after obtaining current location-specific storage prices. Query 6.3 is read-only and only compares costs; it does not emit DDL. A storage-billing change is cost-sensitive, takes ~24 hours to apply, and cannot be changed again for 14 days — recommend it in prose with the [storage billing docs](https://docs.cloud.google.com/bigquery/docs/storage_overview) for the user to apply.
 
 ### Step 6: Generate Reports
 
@@ -361,24 +362,24 @@ Generate even when no reservation exists.
 2. **[Action 2]:** [Specific recommendation with expected impact]
 3. **[Action 3]:** [Specific recommendation with expected impact]
 
-## Implementation Proposals
+## Recommended Actions (User-Executed)
 
-**Classification:** `PROPOSAL_NONDESTRUCTIVE` or `PROPOSAL_DESTRUCTIVE`. Commands were not executed and require administrator validation and explicit approval.
+The analyst does not change any cloud resource. Each item below is for the user to perform themselves, following the linked official documentation.
 
-### Step 1: [Action]
-```bash
-[Commands or instructions]
-```
+### Recommendation 1: [Outcome]
+- **Intended outcome:** [What changes and why the evidence supports it]
+- **Prechecks:** [Location, administration project, edition/limit checks, current pricing]
+- **Rollback / lock-in:** [e.g., commitment term, storage-billing 14-day change lock]
+- **How to apply:** [Link to the official Google Cloud doc the user follows]
 
-### Step 2: [Action]
-```bash
-[Commands or instructions]
-```
+### Recommendation 2: [Outcome]
+- **Intended outcome:** [...]
+- **Prechecks:** [...]
+- **Rollback / lock-in:** [...]
+- **How to apply:** [Official doc link]
 
-### Step 3: Monitoring Setup
-```sql
-[Monitoring queries to run regularly]
-```
+### Ongoing Monitoring (read-only)
+- [Read-only metrics/queries the user can re-run regularly to validate the outcome]
 
 ## Validation Criteria
 - [ ] Slot utilization: 70-85% of committed capacity (if using commitment)
@@ -389,8 +390,8 @@ Generate even when no reservation exists.
 - [Official URL, retrieval date, verified claim]
 - [Any unresolved product or pricing uncertainty]
 
-## MCP / bq Execution Notes
-- [MCP server and tool names used]
+## bq / gcloud Execution Notes
+- [ADC identity used and the read-only `bq`/`gcloud` commands issued]
 - [Fallbacks, failures, and read-only confirmation]
 
 ## Next Steps
@@ -426,44 +427,12 @@ Generate even when no reservation exists.
 
 **Reservation Size:** Use p95 as a starting heuristic, round to supported 50-slot increments, cap to edition/location limits, then reconcile with Slot Recommender output.
 
-**Implementation Options (CLI Flag Syntax):**
-*Note: In the `bq mk --reservation` CLI tool, you must use either Option 1 or Option 2. They are mutually exclusive:*
+**Recommended action (user performs this in the admin project, in the reservation location):**
 
-*   **Option 1: Direct Autoscaling (Recommended)**
-    **Classification:** `PROPOSAL_NONDESTRUCTIVE` — not executed.
-    ```bash
-    # Create autoscaling reservation. Standard edition DOES NOT support --slots / baseline capacity.
-    bq mk --reservation \
-      --project_id=[ADMIN_PROJECT_ID] \
-      --location=[REGION] \
-      --edition=STANDARD \
-      --autoscale_max_slots=[STANDARD_AUTOSCALE_SLOTS_MAX_1600] \
-      production_autoscale
-    ```
-*   **Option 2: Explicit Max Capacity & Scaling Mode**
-    **Classification:** `PROPOSAL_NONDESTRUCTIVE` — not executed; verify current preview status.
-    ```bash
-    # Create autoscaling reservation using max_slots and scaling_mode. Standard edition DOES NOT support --slots / baseline capacity.
-    bq mk --reservation \
-      --project_id=[ADMIN_PROJECT_ID] \
-      --location=[REGION] \
-      --edition=STANDARD \
-      --max_slots=[STANDARD_MAX_RESERVATION_SIZE_MAX_1600] \
-      --scaling_mode=AUTOSCALE_ONLY \
-      --ignore_idle_slots=true \
-      production_autoscale
-    ```
+1. Create a Standard-edition autoscaling reservation sized to the reconciled maximum (≤ 1,600 slots). Standard has no baseline (`--slots`/`slot_capacity` do not apply). The reservation is defined by a maximum autoscaling size; if the target uses the `max_slots` + `scaling_mode` form, `scaling_mode=AUTOSCALE_ONLY` requires idle slots to be ignored. Confirm current flag and preview status in the docs before acting.
+2. Assign only project-level assignees (`QUERY` job type). Standard edition does **not** support folder or organization assignments.
 
-**Assigning Projects — `PROPOSAL_NONDESTRUCTIVE`, not executed:**
-```bash
-# Assign top projects. Standard edition ONLY supports project-level assignments (assignee_type=PROJECT).
-# It does NOT support folder or organization assignee types.
-bq mk --reservation_assignment \
-  --reservation_id=[ADMIN_PROJECT_ID]:[REGION].production_autoscale \
-  --job_type=QUERY \
-  --assignee_type=PROJECT \
-  --assignee_id=[TOP_PROJECT_ID]
-```
+Document reference: [Manage workload reservations](https://docs.cloud.google.com/bigquery/docs/reservations-tasks) and [Introduction to BigQuery editions](https://docs.cloud.google.com/bigquery/docs/editions-intro). The analyst does not run these steps.
 
 **Caveats:**
 - **No Baseline slots:** Standard edition cannot set baseline slots (`--slots` or `slot_capacity`) or target job concurrency.
@@ -488,26 +457,12 @@ You are charged for the number of *scaled* slots, not the number of slots *used*
 
 **Optional Autoscaling:** Add autoscaling on top if burst evidence and SLOs justify it.
 
-**Implementation — `PROPOSAL_NONDESTRUCTIVE`, not executed:**
-```bash
-# Create baseline reservation (Enterprise/Enterprise Plus)
-bq mk --reservation \
-  --project_id=[ADMIN_PROJECT_ID] \
-  --location=[REGION] \
-  --edition=ENTERPRISE \
-  --slots=[BASELINE_SLOTS] \
-  --autoscale_max_slots=[AUTOSCALE_SLOTS] \
-  production_baseline
+**Recommended action (user performs this in the admin project, in the reservation location):**
 
-# Omit --autoscale_max_slots if no autoscaling is needed.
+1. Create an Enterprise or Enterprise Plus reservation with the baseline set to the chosen p10/p25 slot count (≥ 50, in 50-slot increments), optionally adding a maximum autoscaling size above the baseline if burst evidence justifies it.
+2. Assign the target projects (`QUERY` job type). Enterprise editions also support folder/organization assignments if isolation requires it.
 
-# Assign top projects to reservation
-bq mk --reservation_assignment \
-  --reservation_id=[ADMIN_PROJECT_ID]:[REGION].production_baseline \
-  --job_type=QUERY \
-  --assignee_type=PROJECT \
-  --assignee_id=[TOP_PROJECT_ID]
-```
+Document reference: [Manage workload reservations](https://docs.cloud.google.com/bigquery/docs/reservations-tasks). The analyst does not run these steps.
 
 **Pricing Options:**
 - **Pay slot-hours:** Use the current location-specific edition price.
@@ -531,25 +486,12 @@ bq mk --reservation_assignment \
 2. Leave variable/dev projects on on-demand when economics and SLOs support it
 3. Assign projects only after validating isolation and administration-project ownership
 
-**Implementation — `PROPOSAL_NONDESTRUCTIVE`, not executed:**
-```bash
-# Reservation for stable workloads
-bq mk --reservation \
-  --project_id=[ADMIN_PROJECT_ID] \
-  --location=[REGION] \
-  --edition=ENTERPRISE \
-  --slots=[STABLE_BASELINE] \
-  production_stable
+**Recommended action (user performs this in the admin project, in the reservation location):**
 
-# Assign only stable projects
-bq mk --reservation_assignment \
-  --reservation_id=[ADMIN_PROJECT_ID]:[REGION].production_stable \
-  --job_type=QUERY \
-  --assignee_type=PROJECT \
-  --assignee_id=[STABLE_PROJECT_ID]
+1. Create an Enterprise reservation with a baseline sized to the stable production demand.
+2. Assign only the stable projects; leave variable/dev projects unassigned so they stay on-demand.
 
-# Variable projects remain on-demand (no assignment needed)
-```
+Document reference: [Manage workload reservations](https://docs.cloud.google.com/bigquery/docs/reservations-tasks). The analyst does not run these steps.
 
 ---
 
@@ -1385,13 +1327,13 @@ LIMIT 20;
 
 ### Query 6.3: Storage Billing Model Savings
 
-**Classification:** `PROPOSAL_DESTRUCTIVE` for any generated `ALTER SCHEMA` command. The query itself is read-only; generated DDL was not executed. Verify prices, 24-hour effect delay, 14-day change lock, time-travel/fail-safe behavior, and rollback implications.
+**Read-only cost comparison.** This query only compares Logical vs Physical storage cost per dataset; it does not emit or run DDL. If it shows a meaningful saving, recommend the change in prose and link the [storage billing docs](https://docs.cloud.google.com/bigquery/docs/storage_overview) — the user applies it. Warn that the change takes ~24 hours to apply and cannot be changed again for 14 days, and that time-travel/fail-safe and clone/snapshot semantics need separate validation first.
 ```sql
 -- Evaluate cost savings of switching datasets from Logical to Physical billing models
 -- Source: Adapted from bigquery-utils/scripts/optimization/storage_billing_model_savings_ddl.sql
 -- Replace every price placeholder with a current location-specific value and record its source/date.
 -- This is an instantaneous-byte forecast, not a billing-export reconciliation. Clone/snapshot and
--- deleted-table semantics require separate validation before any proposal is approved.
+-- deleted-table semantics require separate validation before recommending a change.
 DECLARE logical_active_price_per_gib NUMERIC DEFAULT [LOGICAL_ACTIVE_PRICE_PER_GIB];
 DECLARE logical_long_term_price_per_gib NUMERIC DEFAULT [LOGICAL_LONG_TERM_PRICE_PER_GIB];
 DECLARE physical_active_price_per_gib NUMERIC DEFAULT [PHYSICAL_ACTIVE_PRICE_PER_GIB];
@@ -1441,9 +1383,7 @@ SELECT
   CASE
     WHEN monthly_logical_cost > monthly_physical_cost THEN 'PHYSICAL'
     ELSE 'LOGICAL'
-  END AS recommended_billing_model,
-  -- Generate ALTER SCHEMA DDL dynamically
-  CONCAT("ALTER SCHEMA `", project_id, ".", dataset_name, "` SET OPTIONS(storage_billing_model='", IF(monthly_logical_cost > monthly_physical_cost, "PHYSICAL", "LOGICAL"), "');") AS recommendation_ddl
+  END AS recommended_billing_model
 FROM
   cost_comparison
 WHERE

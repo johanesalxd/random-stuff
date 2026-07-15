@@ -35,14 +35,15 @@ This progressive-disclosure order is mandatory for Gemini 3.5 Flash context disc
 ## Non-negotiable guardrails
 
 - **Read-only cloud execution:** Never create, update, resize, assign, purchase, or delete cloud resources.
-- **MCP first:** Use connected BigQuery MCP tools for SQL and metadata. Use `bq` only for read-only fallback inspection.
+- **CLI only, read verbs only:** Use `bq` and `gcloud` authenticated with Application Default Credentials (ADC). Only run read commands — `bq query` (SELECT), `bq show`, `bq ls`, `gcloud ... describe`, `gcloud ... list`. Never run `bq mk`, `bq rm`, `bq update`, `bq insert`, `bq cp`, any DDL/DML, or any `gcloud ... create/update/delete`.
+- **Never emit executable mutations:** Recommendations are written as prose plus links to official documentation. Do not put runnable resource-changing commands in reports; the user performs any change themselves.
 - **Location integrity:** Keep every query and reservation resource in its exact location. Never mix a multi-region and single region.
 - **Admin/workload separation:** Reservation metadata often belongs to the administration project; workload jobs belong to workload projects. Record both.
 - **No silent gaps:** Missing IAM, unavailable views/fields, empty history, or failed fallbacks must appear in the report.
 - **No stale pricing:** If current location-specific prices are not verified, omit dollar savings and mark them `NOT VERIFIED`.
 - **No raw query text:** Do not include raw query SQL in reports by default.
 - **Identity minimization:** Pseudonymize user emails and job IDs unless the user explicitly authorizes identifiable output.
-- **Proposal-only mutations:** Generated changes are text proposals and require human validation. Never execute them.
+- **Recommendations, not mutations:** The analysis only produces evidence and recommendations. Any capacity, reservation, assignment, commitment, or storage-billing change is the user's own action, executed outside this skill by following the linked official documentation.
 
 ## Evidence labels
 
@@ -53,7 +54,7 @@ Use these labels in every report:
 - `OFFICIAL` — current Google Cloud constraint/recommendation
 - `HEURISTIC` — cookbook planning rule
 - `ASSUMPTION` — price, date, workload, or incomplete evidence
-- `PROPOSED` — unexecuted human-reviewed action
+- `RECOMMENDATION` — a documented action for the user to perform themselves; never executed by this skill
 
 ## Subagent orchestration
 
@@ -66,8 +67,7 @@ Antigravity CLI can automatically delegate background research and validation. F
 Rules:
 
 - The main agent owns inputs, evidence reconciliation, and the final answer; subagent summaries are not accepted unverified.
-- Give subagents only the tools they need. Do not grant cloud-write, reservation mutation, commitment purchase, assignment, deletion, or raw-principal output permissions.
-- BigQuery MCP access, if delegated, remains read-only and uses the explicit workload/admin project and location.
+- Give subagents only the tools they need. They run the same read-only `bq`/`gcloud` commands under ADC; never grant or imply cloud-write, reservation mutation, commitment purchase, assignment, deletion, or raw-principal output.
 - Use `/agents` to monitor background subagents and inspect pending approvals; use `/tasks` for non-agentic background commands.
 - A failed or unavailable subagent is an evidence gap, not permission to guess.
 
@@ -77,9 +77,9 @@ Rules:
 
 - Confirm the selected runtime is Gemini 3.5 Flash with thinking set to **High**; do not run this workflow at a lower thinking level for now.
 - Confirm `/skills` discovers this skill.
-- Confirm `/mcp` shows a connected BigQuery server and record actual tool names.
+- Confirm ADC is active and record the identity (`gcloud auth application-default print-access-token` succeeds; `gcloud config list account`).
 - Validate project/location strings.
-- Confirm read-only scope.
+- Confirm only read-only `bq`/`gcloud` commands will be issued for the whole run.
 - Record documentation retrieval date.
 
 ### 2. Current configuration
@@ -109,7 +109,7 @@ Run applicable `5.1` and `6.x` queries. Keep logical and physical bytes separate
 
 ### 6. Decision guardrail
 
-Before finalizing, map observations into the contract used by `scripts/decision_contract.py` or apply the same rules manually:
+Before finalizing, apply these deterministic rules (see the Decision Logic section of `resources/finops_agent.md`):
 
 - Insufficient evidence => `INSUFFICIENT_EVIDENCE`
 - Standard limit exceeded => never recommend invalid Standard capacity
@@ -137,19 +137,21 @@ The final report must contain, in order:
 3. Recommended Strategy
 4. Alternative Analysis
 5. Optimization Actions
-6. Implementation Proposals
+6. Recommended Actions (User-Executed)
 7. Validation Criteria
 8. Documentation Checks
-9. MCP / bq Execution Notes
+9. bq / gcloud Execution Notes
 10. Next Steps
 
-## Command classifications
+## Recommended actions, not commands
 
-- `READ_ONLY`: may be executed during the approved analysis.
-- `PROPOSAL_NONDESTRUCTIVE`: creates or changes capacity/configuration; text only.
-- `PROPOSAL_DESTRUCTIVE`: deletes resources or creates a lock-in/rollback-sensitive change; text only and prominently warned.
+The analysis never changes cloud resources. Every capacity, reservation, assignment, commitment, or storage-billing recommendation is written as:
 
-Every proposal must include placeholders, prechecks, rollback considerations, location, administration project, and an explicit statement that it was not executed.
+- the intended outcome and why the evidence supports it;
+- the prechecks, location, administration project, and rollback/lock-in considerations to weigh;
+- a link to the official Google Cloud documentation the user follows to perform it.
+
+Do not include runnable resource-changing `bq`/`gcloud` commands or DDL. A storage-billing change is especially sensitive (takes ~24 hours to apply and cannot be changed again for 14 days) and must carry that warning in prose.
 
 ## Completion gate
 
@@ -159,5 +161,5 @@ Do not declare the analysis complete unless:
 - reports agree on metrics and assumptions;
 - official constraints are dated and cited;
 - pricing is verified or dollar savings are omitted;
-- no invalid edition configuration is proposed;
-- no GCP mutation occurred.
+- no invalid edition configuration is recommended;
+- only read-only `bq`/`gcloud` commands were issued and no GCP resource was changed.
