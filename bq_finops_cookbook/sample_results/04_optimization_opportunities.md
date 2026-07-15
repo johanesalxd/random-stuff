@@ -28,10 +28,10 @@ Error reasons are diagnostic categories, not proof of capacity pressure or one r
 
 | Scenario | Avg Job Slot Threshold | Total Jobs | Jobs Above | % Jobs Above | Slot-Hours Above |
 |----------|------------------------|------------|------------|--------------|------------------|
-| P50 | 0.1 | 169 | 60 | 35.5% | 0.2 |
-| Average | 2.6 | 169 | 24 | 14.2% | 0.2 |
-| P90 | 4.7 | 169 | 13 | 7.7% | 0.1 |
-| P95 | 7.0 | 169 | 6 | 3.6% | 0.1 |
+| P50 | 0.1 | 160 | 60 | 37.5% | 0.2 |
+| Average | 2.6 | 160 | 24 | 15.0% | 0.2 |
+| P90 | 4.7 | 160 | 13 | 8.1% | 0.1 |
+| P95 | 7.0 | 160 | 6 | 3.8% | 0.1 |
 
 **Interpretation:** This describes historical per-job averages only. It does not model concurrency, reservation demand, queueing, autoscaling, or the number of jobs affected by a reservation size.
 

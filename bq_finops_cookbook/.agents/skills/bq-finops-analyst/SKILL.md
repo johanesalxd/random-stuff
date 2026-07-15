@@ -77,7 +77,7 @@ Rules:
 
 - Confirm the selected runtime is Gemini 3.5 Flash with thinking set to **High**; do not run this workflow at a lower thinking level for now.
 - Confirm `/skills` discovers this skill.
-- Confirm ADC is active and record the identity (`gcloud auth application-default print-access-token` succeeds; `gcloud config list account`).
+- Confirm ADC is active and record the identity (`gcloud auth application-default print-access-token` succeeds; `gcloud config list` shows the expected account).
 - Validate project/location strings.
 - Confirm only read-only `bq`/`gcloud` commands will be issued for the whole run.
 - Record documentation retrieval date.

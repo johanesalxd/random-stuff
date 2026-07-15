@@ -114,10 +114,31 @@ Select the best strategy based on the Decision Logic (see Options A-D below).
 Generate the following files in `analysis_results/`. Use the templates below as a strict guide.
 
 #### File 0: `analysis_results/00_current_configuration.md` (Required)
-Generate even when no reservation exists.
+Generate even when no reservation exists; record `OBSERVED: no reservation found` rather than omitting the file.
 ```markdown
 # Current Configuration Analysis
-...
+
+## Existing Reservations
+- **Reservation Name:** [name or "None found"]
+- **Edition:** [Standard / Enterprise / Enterprise Plus / N/A]
+- **Baseline Slots:** [X] (Standard edition does not support baseline capacity)
+- **Autoscale Max Slots:** [X]
+- **Ignore Idle Slots:** [True/False]
+
+## Reservation Assignments
+- **Assignments:** [List or "None"]
+- **Impact:** [e.g., all workloads on On-Demand billing]
+
+## Historical Commitments
+- **Commitments:** [List or "None"] (deleted commitment records are retained for at most 41 days)
+
+## Current Utilization and Idle Slots
+- [Active-hour utilization and baseline headroom, or "No reservation usage recorded"]
+
+## On-Demand / Unassigned Workloads
+- **Total Queries (30 days):** [X]
+- **On-Demand Queries:** [X] ([X]%)
+- **Reservation Queries:** [X] ([X]%)
 ```
 
 #### File 1: `analysis_results/01_slot_metrics.md`
@@ -242,9 +263,9 @@ Generate even when no reservation exists.
 ## Slow Queries
 [Table of slowest queries]
 
-| Job Fingerprint | Principal Fingerprint | Duration (s) | GiB Processed |
-|-----------------|-----------------------|--------------|---------------|
-| [fingerprint] | [fingerprint] | [X] | [X] |
+| Job Fingerprint | Principal Fingerprint | Duration (s) | GiB Processed | Slot-Hours |
+|-----------------|-----------------------|--------------|---------------|------------|
+| [fingerprint] | [fingerprint] | [X] | [X] | [X] |
 
 ## Historical Demand Sensitivity
 [Table showing utilization at different slot levels]
@@ -1331,6 +1352,7 @@ LIMIT 20;
 ```sql
 -- Evaluate cost savings of switching datasets from Logical to Physical billing models
 -- Source: Adapted from bigquery-utils/scripts/optimization/storage_billing_model_savings_ddl.sql
+-- (cost-comparison only; the upstream DDL-generation step is intentionally removed to stay read-only)
 -- Replace every price placeholder with a current location-specific value and record its source/date.
 -- This is an instantaneous-byte forecast, not a billing-export reconciliation. Clone/snapshot and
 -- deleted-table semantics require separate validation before recommending a change.
