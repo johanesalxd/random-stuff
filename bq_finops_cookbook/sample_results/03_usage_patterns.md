@@ -1,6 +1,11 @@
-# Usage Patterns (30-Day Analysis)
+# Usage Patterns
 
 > **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
+- **Analysis Window:** [2026-05-05T00:00:00Z, 2026-06-04T00:00:00Z)
+
+Unless labelled otherwise, fixture query rows are OBSERVED, calculations are
+DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 ## Peak Usage Hours
 
@@ -30,3 +35,16 @@
 
 - **Non-critical workloads:** Can run anytime, but preferably during Hour 16:00 to 22:00 UTC when ad-hoc user query activity is absent.
 - **Peak Capacity Planning:** Peak hourly slot usage remains well below 1 slot, meaning no capacity reservation or planning is required.
+
+## Query Status
+
+| Query | Status | Evidence / Fallback | Scope or Blocking Note |
+|---|---|---|---|
+| 1.3 | PASS | Synthetic primary result | Pseudonymized project-local patterns |
+| 4.5 | PASS | Synthetic primary result | Weekly rows sum to 0.305 slot-hours |
+
+## Documentation Checks
+
+| Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
+|---|---|---|---|---|---|
+| JOBS_TIMELINE scope and retention | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-15 | Synthetic workload location | PASS | Region and project remain explicit |

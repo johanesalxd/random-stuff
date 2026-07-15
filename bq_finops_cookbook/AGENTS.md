@@ -5,9 +5,10 @@ This directory is a prompt, SQL, and evidence project for the `bq-finops-analyst
 ## Runtime target
 
 - Antigravity CLI
-- Gemini 3.5 Flash with thinking set to **High**
+- Gemini 3.5 Flash selected through `/model`
 - Workspace skill discovery from `.agents/skills/bq-finops-analyst/SKILL.md`
-- `bq`/`gcloud` CLI authenticated with Application Default Credentials (ADC); read-only commands only
+- `bq`/`gcloud` CLI with active or impersonated gcloud credentials for live
+  data; read-only operations only
 
 Do not optimize this project for another runtime at the expense of Antigravity/Flash behavior.
 
@@ -22,17 +23,28 @@ Do not optimize this project for another runtime at the expense of Antigravity/F
 | `resources/claim_matrix.json` | Dated volatile product/price claims |
 | `resources/REFERENCES.md` | Official source catalogue |
 | `resources/IAM.md` | Staged access and privacy model |
+| `resources/HISTORICAL_PARITY.md` | Disposition of historical queries and retired behavior |
 | `sample_results/` | Synthetic example reports, never current truth |
 
 Do not duplicate detailed product rules across surfaces. Link to the canonical owner.
 
 ## Safety
 
-1. All live GCP access is read-only: only `bq query` (SELECT), `bq show`, `bq ls`, `gcloud ... describe/list`.
-2. Never run reservation, assignment, commitment, or dataset billing-model changes, and never emit runnable mutation commands or DDL.
-3. Capacity/reservation/storage changes are written as recommendations with links to official docs, for the user to perform themselves.
-4. Do not commit credentials, tokens, project secrets, raw customer query text, or identifiable user emails.
-5. Missing evidence must remain visible; do not fabricate or silently omit it.
+1. Repository maintenance grounds changed claims with Google Developer
+   Knowledge MCP, Context7, or first-party web retrieval. This is a review
+   requirement, not a runtime dependency of the skill. Live GCP data access
+   uses only read-only `bq`/`gcloud`, never BigQuery MCP.
+2. Bind every query job to the explicit query project, BigQuery location, and
+   GoogleSQL mode. Prohibit DDL, DML, destinations, append/replace options, and
+   write dispositions.
+3. Never run reservation, assignment, commitment, or dataset billing-model
+   changes, and never emit runnable mutation commands or DDL.
+4. Capacity/reservation/storage changes are recommendations with official-doc
+   links for the user to perform.
+5. Do not commit credentials, tokens, project secrets, raw customer query text,
+   or identifiable user emails.
+6. Missing evidence remains `GAP` or `BLOCKED`; never fabricate or silently omit
+   it.
 
 ## SQL conventions
 
@@ -55,9 +67,25 @@ Do not duplicate detailed product rules across surfaces. Link to the canonical o
 
 ## Review gate
 
-Before commit:
+Before commit, run three independent read-only reviewer lanes. Each returns:
 
-- Verify the named queries remain present and unique.
-- Review every product-rule change against current official docs.
-- Confirm no runtime file references MCP, and no mutation command or DDL is emitted.
-- Treat a live BigQuery smoke as a separate approved gate; static review is not live proof.
+| Lane | PASS/GAP | Evidence reviewed | Findings | Blocking impact |
+|---|---|---|---|---|
+
+- **Product-rule lane:** Retrieve every changed or used volatile claim from
+  first-party Google Cloud or Antigravity pages, preferring Google Developer
+  Knowledge MCP, then Context7 or official-web retrieval. Confirm claim value,
+  retrieval date, location/edition/CLI/preview scope, and `claim_matrix.json`
+  reconciliation.
+- **SQL lane:** Confirm all 25 query IDs are unique and manifest-aligned. Check
+  official view schemas, fields, IAM, retention, project/location qualification,
+  fallbacks, null/zero guards, units, privacy, and read-only SQL/flags.
+- **Report lane:** Confirm seven outputs, required query statuses, final heading
+  order, evidence labels, metric/assumption consistency, synthetic marking, and
+  the absence of raw principals or executable mutations.
+
+The main agent reconciles all lanes. An unresolved safety, source, query-contract,
+or strategy-changing `GAP` blocks completion. Repository reviews refresh touched
+claims plus cross-file contracts; every live analysis refreshes every volatile
+claim it uses. A live BigQuery smoke remains a separate approved gate; static
+review is not live proof.
