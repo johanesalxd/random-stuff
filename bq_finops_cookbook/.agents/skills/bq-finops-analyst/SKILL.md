@@ -5,22 +5,34 @@ description: Performs a source-grounded, read-only BigQuery FinOps analysis cove
 
 # BigQuery FinOps Analyst
 
-Target runtime: **Antigravity CLI with Gemini 3.5 Flash with thinking set to High**.
+Target runtime: **Antigravity CLI with Gemini 3.5 Flash selected through `/model`**.
+
+Launch `agy` from the `bq_finops_cookbook` directory. Antigravity discovers this
+workspace skill from `<workspace-root>/.agents/skills/bq-finops-analyst/SKILL.md`.
 
 ## Inputs
 
 Collect these before querying:
 
 - Workload project ID
+- Query project ID that executes and bills the metadata queries
 - Exact BigQuery location
 - Reservation administration project ID, if different
-- Analysis window (default: 30 complete days)
-- Dataset IDs to inspect for dataset-scoped `INFORMATION_SCHEMA.COLUMNS` audits; do not invent or region-qualify this view
-- Whether user identities may be displayed; default is pseudonymized
-- Current, dated pricing inputs if dollar estimates are requested
+- Inclusive `analysis_start_ts` and exclusive `analysis_end_ts`; supply both or
+  neither. When omitted, set start to UTC midnight 30 days ago and end to the
+  current UTC midnight.
+- Dataset IDs only when dataset-scoped `INFORMATION_SCHEMA.COLUMNS` auditing is requested
+- Confirmation that workload identities, job IDs, workload-derived table
+  references, query text, and error messages remain pseudonymized in reports
+- Current, dated pricing inputs and a nonnegative materiality threshold if dollar estimates or storage billing sensitivity are requested
 - Confirmation that the target is approved for read-only metadata analysis
+- Evidence that the active or impersonated analysis principal lacks BigQuery
+  data and resource mutation permissions
 
-Do not infer project, location, administration project, or prices.
+Do not infer project IDs, location, administration project, or prices.
+One invocation analyzes exactly one workload project. A user can orchestrate
+parallel invocations for other projects, but this skill does not combine their
+evidence or make a cross-project Hybrid recommendation.
 
 ## Load order
 
@@ -28,109 +40,217 @@ Do not infer project, location, administration project, or prices.
 2. Read `resources/claim_matrix.json`.
 3. Read `resources/IAM.md` and confirm available evidence surfaces.
 4. Load only the needed query sections from `resources/finops_agent.md`.
-5. Use `resources/REFERENCES.md` to refresh volatile claims from official docs.
+5. Use `resources/REFERENCES.md` to refresh every used volatile claim.
 
-This progressive-disclosure order is mandatory for Gemini 3.5 Flash context discipline.
+This progressive-disclosure order is a context-discipline requirement for this
+skill, not an Antigravity platform requirement.
 
 ## Non-negotiable guardrails
 
-- **Read-only cloud execution:** Never create, update, resize, assign, purchase, or delete cloud resources.
-- **CLI only, read verbs only:** Use `bq` and `gcloud` authenticated with Application Default Credentials (ADC). Only run read commands — `bq query` (SELECT), `bq show`, `bq ls`, `gcloud ... describe`, `gcloud ... list`. Never run `bq mk`, `bq rm`, `bq update`, `bq insert`, `bq cp`, any DDL/DML, or any `gcloud ... create/update/delete`.
-- **Never emit executable mutations:** Recommendations are written as prose plus links to official documentation. Do not put runnable resource-changing commands in reports; the user performs any change themselves.
-- **Location integrity:** Keep every query and reservation resource in its exact location. Never mix a multi-region and single region.
-- **Admin/workload separation:** Reservation metadata often belongs to the administration project; workload jobs belong to workload projects. Record both.
-- **No silent gaps:** Missing IAM, unavailable views/fields, empty history, or failed fallbacks must appear in the report.
-- **No stale pricing:** If current location-specific prices are not verified, omit dollar savings and mark them `NOT VERIFIED`.
-- **No raw query text:** Do not include raw query SQL in reports by default.
-- **Identity minimization:** Pseudonymize user emails and job IDs unless the user explicitly authorizes identifiable output.
-- **Recommendations, not mutations:** The analysis only produces evidence and recommendations. Any capacity, reservation, assignment, commitment, or storage-billing change is the user's own action, executed outside this skill by following the linked official documentation.
+- **Separate documentation from data access:** Retrieve current first-party
+  documentation with any available read-only documentation or web capability.
+  MCP is optional. Use `bq`/`gcloud` CLI, never BigQuery MCP, for live project
+  data.
+- **Construct current syntax from official references:** Before execution, read
+  the current [`bq` CLI reference](https://docs.cloud.google.com/bigquery/docs/reference/bq-cli-reference),
+  [query guide](https://docs.cloud.google.com/bigquery/docs/running-queries), and
+  [gcloud authentication guide](https://docs.cloud.google.com/sdk/docs/authorizing).
+  Do not treat command examples in this repository as durable syntax.
+- **Read-only cloud execution:** Run only operations whose current official
+  documentation establishes that they inspect metadata or execute read-only
+  GoogleSQL. Never use DDL, DML, destination writes, or resource mutations.
+- **Never emit executable mutations:** Write recommendations as prose with
+  official documentation links. Do not put runnable resource-changing commands
+  or DDL in reports.
+- **Location integrity:** Keep queries and reservation resources in their exact
+  location. Never mix a multi-region and a single region.
+- **Admin/workload separation:** Reservation metadata belongs to the
+  administration project; workload jobs belong to workload projects; query jobs
+  are created and billed in the query project. Record all three.
+- **No silent gaps:** Missing required documentation access, IAM, views, fields,
+  history, APIs, or fallbacks must appear as `GAP` or `BLOCKED`.
+- **No stale pricing:** If current location-specific prices are not verified
+  through official documentation, omit dollar savings and mark them
+  `NOT VERIFIED`.
+- **Privacy:** Never include raw workload query SQL, user emails, job IDs, error
+  messages, or Query 4.2 table identifiers in reports. Explicit approval permits
+  ephemeral diagnosis only, not persistence.
+- **Fingerprint integrity:** Generate a new ephemeral salt for each run and use
+  it for principal, job, and workload-derived table fingerprints. Never print or
+  persist the salt. Label Google-provided normalized query hashes separately.
+  Approved project/reservation/assignment identifiers and storage-inventory or
+  dataset-audit resource names may remain visible when needed for configuration
+  scope or an actionable metadata recommendation. Fingerprint generic
+  recommendation targets and Write API dataset/table identifiers; omit
+  free-form recommendation descriptions.
+
+Prompt guardrails are behavioral policy. Antigravity permissions are the
+enforceable boundary. Following the current [Antigravity permissions
+documentation](https://www.antigravity.google/docs/cli-permissions), use
+`/permissions` to select `strict` or `request-review`. Configure fine-grained
+allow/ask/deny rules in Antigravity settings or permission prompts, with deny
+rules for operations that current official documentation classifies as
+mutating. Do not rely on a finite command or prefix list in this skill. Because
+terminal rules might not inspect the SQL payload supplied to a query, live query
+execution also requires a dedicated least-privilege principal limited to the
+roles in `resources/IAM.md` and verified to lack BigQuery data/resource mutation
+permissions. If either the deny policy or effective IAM cannot be verified,
+stop; do not claim an enforced read-only run.
+
+## Source grounding
+
+Before using an `OFFICIAL` claim, the product-rule verifier must retrieve the
+supporting first-party page using an available read-only documentation or web
+capability. Allowed authorities are
+`cloud.google.com`, `docs.cloud.google.com`, and `antigravity.google`.
+Repository links and model memory are discovery aids, not verification.
+
+Record each used claim as:
+
+| Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
+|---|---|---|---|---|---|
+
+- `PASS`: the page supports the exact value or qualified behavior for the
+  target location, edition, CLI version, and preview status.
+- `GAP`: the page is unavailable, ambiguous, mismatched, stale, or does not
+  support the target scope.
+- A strategy-changing `GAP` forces `REVIEW_REQUIRED`.
+- A pricing `GAP` prohibits dollar estimates.
+- A `GAP` is never relabelled `OFFICIAL`.
 
 ## Evidence labels
 
-Use these labels in every report:
-
 - `OBSERVED` — returned by a read-only metadata query
 - `DERIVED` — deterministic calculation from observations
-- `OFFICIAL` — current Google Cloud constraint/recommendation
+- `OFFICIAL` — a claim with a current source-grounding `PASS`
 - `HEURISTIC` — cookbook planning rule
 - `ASSUMPTION` — price, date, workload, or incomplete evidence
-- `RECOMMENDATION` — a documented action for the user to perform themselves; never executed by this skill
+- `RECOMMENDATION` — user-executed action; never executed by this skill
 
 ## Subagent orchestration
 
-Antigravity CLI can automatically delegate background research and validation. For a broad audit, the main agent may fan out these independent read-only lanes:
+For every broad audit, define and invoke three runtime read-only subagents:
 
-1. **Product-rule verifier** — refresh volatile BigQuery claims from first-party Google Cloud documentation.
-2. **SQL reviewer** — inspect query scope, fields, units, null/zero handling, and retention limits without running mutations.
-3. **Report reviewer** — reconcile evidence labels, sample/report consistency, privacy, and recommendation guardrails.
+1. **Product-rule verifier** — documentation retrieval enabled; retrieve
+   first-party GCP and Antigravity pages; no write tools or cloud terminal access.
+2. **SQL reviewer** — documentation retrieval enabled for current schema
+   checks; read-only terminal inspection only; no write tools or cloud mutations.
+3. **Report reviewer** — documentation access only when a citation needs
+   rechecking; no write tools or cloud terminal access.
 
-Rules:
+Set write tools off for all three and instruct reviewers not to delegate. If
+the current runtime exposes a separate delegation control, disable it; do not
+claim platform enforcement when it does not. The main agent owns inputs,
+reconciles evidence, and writes reports. Define and invoke reviewers as runtime
+subagents; use `/agents` to monitor them. Use `/tasks` to monitor active
+background shell processes.
 
-- The main agent owns inputs, evidence reconciliation, and the final answer; subagent summaries are not accepted unverified.
-- Give subagents only the tools they need. They run the same read-only `bq`/`gcloud` commands under ADC; never grant or imply cloud-write, reservation mutation, commitment purchase, assignment, deletion, or raw-principal output.
-- Use `/agents` to monitor background subagents and inspect pending approvals; use `/tasks` for non-agentic background commands.
-- A failed or unavailable subagent is an evidence gap, not permission to guess.
+Each reviewer returns:
+
+| Lane | PASS/GAP | Evidence reviewed | Findings | Blocking impact |
+|---|---|---|---|---|
 
 ## Execution workflow
 
 ### 1. Preflight
 
-- Confirm the selected runtime is Gemini 3.5 Flash with thinking set to **High**; do not run this workflow at a lower thinking level for now.
-- Confirm `/skills` discovers this skill.
-- Confirm ADC is active and record the identity (`gcloud auth application-default print-access-token` succeeds; `gcloud config list` shows the expected account).
-- Validate project/location strings.
-- Confirm only read-only `bq`/`gcloud` commands will be issued for the whole run.
-- Record documentation retrieval date.
+- Confirm `agy` was launched from `bq_finops_cookbook` and `/skills` discovers
+  `bq-finops-analyst`.
+- Select Gemini 3.5 Flash with `/model`. Do not require an undocumented separate
+  thinking-level control.
+- Retrieve the official pages needed for this run through any available
+  read-only documentation or web capability. `/mcp` is relevant only when the
+  user has configured an MCP server; it is not a skill prerequisite.
+- Inspect `/permissions` and select `strict` or `request-review`. Verify the
+  separate fine-grained settings/permission-prompt rules deny operations that
+  current official CLI documentation identifies as mutating.
+- Identify the active gcloud CLI account and any configured service-account
+  impersonation using the current [gcloud authorization](https://docs.cloud.google.com/sdk/docs/authorizing)
+  and [`bq` authentication](https://docs.cloud.google.com/bigquery/docs/authentication)
+  references. Do not print access tokens.
+- Verify that the effective analysis principal has only the required
+  least-privilege roles and no BigQuery data/resource mutation permissions.
+  Broader inherited or custom access blocks live execution unless the run is
+  moved to a dedicated restricted principal.
+- Validate the workload, query, and administration project IDs and location.
+- Require both analysis bounds or neither and validate
+  `analysis_start_ts < analysis_end_ts`. If omitted, bind
+  `TIMESTAMP(DATE_SUB(CURRENT_DATE('UTC'), INTERVAL 30 DAY))` as start and
+  `TIMESTAMP(CURRENT_DATE('UTC'))` as end. Use the same inclusive start and exclusive end for all
+  comparable workload queries. Require hour-aligned bounds for hourly slot
+  metrics; ask for corrected bounds rather than rounding them silently. If a
+  requested interval exceeds a source's
+  documented retention, mark the affected query `BLOCKED` rather than silently
+  shortening it.
+- Generate the per-run fingerprint salt in memory; never record it in terminal
+  output, reports, or repository files.
+- Record the documentation retrieval date.
+- Classify readiness as `READY`, `READY_WITH_OPTIONAL_GAPS`,
+  `BLOCKED_LIVE_EXECUTION`, `INSUFFICIENT_EVIDENCE`, or `REVIEW_REQUIRED`.
+  Authentication, IAM, permission, project, or location uncertainty blocks
+  live execution; strategy-changing scope, documentation, recommender, or
+  economic gaps require review.
 
-### 2. Current configuration
+### 2. Read-only query execution
 
-Run manifest queries `0.1` through `0.5` as applicable. Always produce `00_current_configuration.md`, including when no reservation exists.
+Construct the current invocation from the official [`bq` CLI
+reference](https://docs.cloud.google.com/bigquery/docs/reference/bq-cli-reference)
+and [query guide](https://docs.cloud.google.com/bigquery/docs/running-queries).
+The resulting query job must explicitly bind the query/billing project, exact
+BigQuery location, and GoogleSQL mode, must not configure a destination or other
+write behavior, and must pass the corpus SQL without unsafe shell interpolation.
 
-### 3. Workload metrics
+The SQL may contain `SELECT`, CTEs, and local `DECLARE` statements used only by
+read-only `SELECT` logic. Use typed named GoogleSQL parameters
+`@analysis_start_ts`, `@analysis_end_ts`, and `@run_fingerprint_salt`. Construct
+their current CLI binding syntax from the official `bq` reference; never insert
+the salt into query text or a logged shell command, and disable shell tracing
+for the invocation. It must not contain DDL or DML.
 
-Run `1.1` through `1.3`. Compute:
+### 3. Analysis
 
-- CV with a zero guard
-- Burst ratio with a zero-median guard
-- Active-hour and all-hour distributions separately when relevant
-- p50, p95, p99, maximum, and zero-usage share
+- Run required configuration queries `0.1`, `0.2`, `0.2a`, and `0.5` first.
+  Zero commitment rows from a valid Query 0.2a execution is `PASS`. Then
+  evaluate optional `0.3` and `0.4` using their manifest triggers and
+  prerequisites.
+  Always produce `00_current_configuration.md`.
+- Run `1.1` through `1.3`; compute CV with a zero guard, burst ratio with a
+  zero-median guard, active/all-hour distributions, p50, p95, p99, maximum, and
+  zero-usage share.
+- Run applicable `4.x` queries. Reconcile heuristics with Slot
+  Recommender/Estimator only when the relevant APIs, IAM, and supported scenario
+  are verified.
+- Run applicable `5.1` and `6.x` queries. Keep logical and physical bytes
+  separate; table age alone is never deletion evidence. Query 6.3 is a neutral
+  forecast sensitivity, not a recommendation. Do not recommend changing a
+  storage billing model until dated prices, observed Billing evidence,
+  clone/snapshot semantics, time travel, fail-safe storage, and the user's
+  materiality threshold are reconciled.
+- For every optional query, apply this precedence: absent trigger => `NOT
+  APPLICABLE`; present trigger plus any missing execution prerequisite =>
+  `BLOCKED`; successful execution with zero rows => `PASS`.
 
-CV and burst thresholds are `HEURISTIC`, never `OFFICIAL`.
+### 4. Decision guardrail
 
-### 4. Optimization evidence
+Apply these scenarios before finalizing:
 
-Run applicable `4.x` queries. Treat errors as diagnostic categories, not proof of one root cause. Reconcile the cookbook heuristic with Slot Recommender/Slot Estimator when available.
+- Incomplete or invalid required metrics => `INSUFFICIENT_EVIDENCE`.
+- Zero median => burst ratio `UNDEFINED`; never divide by zero.
+- Negligible absolute use or spend => burstiness alone never justifies a
+  reservation.
+- Standard limit exceeded => never recommend invalid Standard capacity.
+- Recommender disagreement => `REVIEW_REQUIRED` with both positions shown.
+- `p25 >= 50` alone => insufficient evidence for a commitment.
+- Hybrid => `INELIGIBLE`. This version analyzes one workload project and never
+  combines parallel runs into a cross-project decision.
+- Missing verified billed bytes, dated regional pricing, or actual capacity
+  Billing/Slot Recommender evidence => economic comparison `REVIEW_REQUIRED`;
+  never claim dollar superiority.
 
-If official and heuristic guidance disagree, return `REVIEW_REQUIRED` and explain both.
+### 5. Reports
 
-### 5. Storage and ingestion
-
-Run applicable `5.1` and `6.x` queries. Keep logical and physical bytes separate. Table age alone is never deletion evidence. Storage Write API exactly-once semantics are conditional on application-created streams with correctly managed offsets.
-
-### 6. Decision guardrail
-
-Before finalizing, apply these deterministic rules (see the Decision Logic section of `resources/finops_agent.md`):
-
-- Insufficient evidence => `INSUFFICIENT_EVIDENCE`
-- Standard limit exceeded => never recommend invalid Standard capacity
-- Zero median => burst ratio `UNDEFINED`
-- Recommender disagreement => `REVIEW_REQUIRED`
-- Small absolute use/spend => do not recommend reservations merely because burst ratio is high
-- `p25 >= 50` alone => never sufficient for commitment
-
-### 7. Reports
-
-Write:
-
-- `analysis_results/00_current_configuration.md`
-- `analysis_results/01_slot_metrics.md`
-- `analysis_results/02_top_consumers.md`
-- `analysis_results/03_usage_patterns.md`
-- `analysis_results/04_optimization_opportunities.md`
-- `analysis_results/05_storage_and_cost.md`
-- `analysis_results/06_final_recommendation.md`
-
-The final report must contain, in order:
+Write the seven manifest reports. Every report includes a `Documentation Checks`
+section using the source-grounding table. The final report contains, in order:
 
 1. Current State Summary
 2. Evidence Quality
@@ -143,23 +263,22 @@ The final report must contain, in order:
 9. bq / gcloud Execution Notes
 10. Next Steps
 
-## Recommended actions, not commands
-
-The analysis never changes cloud resources. Every capacity, reservation, assignment, commitment, or storage-billing recommendation is written as:
-
-- the intended outcome and why the evidence supports it;
-- the prechecks, location, administration project, and rollback/lock-in considerations to weigh;
-- a link to the official Google Cloud documentation the user follows to perform it.
-
-Do not include runnable resource-changing `bq`/`gcloud` commands or DDL. A storage-billing change is especially sensitive (takes ~24 hours to apply and cannot be changed again for 14 days) and must carry that warning in prose.
+`Documentation Checks` must contain the claim table. `bq / gcloud Execution
+Notes` records the active/impersonated gcloud principal, official CLI references
+consulted, resolved read-only invocation shape, permission posture, fallbacks,
+failures, and confirmation that no cloud
+resource changed.
 
 ## Completion gate
 
 Do not declare the analysis complete unless:
 
-- every required manifest query is `PASS`, `FALLBACK`, `BLOCKED`, or `NOT APPLICABLE`;
-- reports agree on metrics and assumptions;
-- official constraints are dated and cited;
+- every manifest query is `PASS`, `FALLBACK`, `BLOCKED`, or
+  `NOT APPLICABLE`;
+- every used volatile claim is `PASS` or an explicit `GAP` with its blocking
+  impact propagated;
+- product-rule, SQL, and report reviewers returned and were reconciled;
+- reports agree on metrics, assumptions, and evidence labels;
 - pricing is verified or dollar savings are omitted;
 - no invalid edition configuration is recommended;
-- only read-only `bq`/`gcloud` commands were issued and no GCP resource was changed.
+- only read-only `bq`/`gcloud` operations were issued and no resource changed.

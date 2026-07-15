@@ -1,56 +1,93 @@
 # IAM and Privacy Matrix
 
-The analyst authenticates with Application Default Credentials (ADC) and issues only read-only `bq`/`gcloud` commands. This skill never mutates cloud resources, so it only ever needs read access. The roles below are the minimum for the analysis to run; the running user brings their own ADC identity. Verify effective permissions in the target organization and record any gaps.
+The analyst uses the active gcloud CLI account or configured service-account
+impersonation for `bq` and `gcloud`. These credentials are distinct from
+Application Default Credentials. Verify the effective principal and role scope;
+never print an access token.
 
-## Minimum read-only roles
+The skill issues only read-only operations. A principal having broader IAM does
+not authorize the skill to mutate resources. For live execution, use a dedicated
+analysis principal and verify its effective inherited and custom permissions do
+not include BigQuery data or resource mutations. This is required because
+terminal rules might not inspect the complete query payload. If that
+effective-IAM check is unavailable or broader mutation access exists, stop
+rather than claim an enforced read-only boundary.
 
-All roles verified against Google Cloud documentation on 2026-07-15.
+## Minimum roles and binding scope
 
-| Role | Grants | Evidence surfaces it unlocks |
+| Role | Required scope | Key permissions | Evidence surfaces |
+|---|---|---|---|
+| `roles/bigquery.jobUser` | Query project | `bigquery.jobs.create` | Creates the read-only metadata query jobs and determines their billing project |
+| `roles/bigquery.resourceViewer` | Workload project | `bigquery.jobs.listAll` | Project-wide `JOBS_BY_PROJECT` and `JOBS_TIMELINE_BY_PROJECT` evidence |
+| `roles/bigquery.resourceViewer` | Reservation administration project | Reservation, assignment, and capacity-commitment list permissions | `RESERVATIONS*`, `ASSIGNMENTS*`, and `CAPACITY_COMMITMENT_CHANGES*` |
+| `roles/bigquery.metadataViewer` | Workload project | `tables.get`, `tables.list` | Project-level `TABLE_STORAGE_BY_PROJECT` and `WRITE_API_TIMELINE_BY_PROJECT` evidence |
+| `roles/bigquery.metadataViewer` | Each required workload dataset | `tables.get`, `tables.list` | Dataset-scoped `TABLES` and `COLUMNS` audits only |
+
+`bigquery.jobs.create` and `bigquery.jobs.listAll` are both required for the
+project-wide jobs views used by this cookbook. If `jobs.listAll` is unavailable,
+mark those surfaces `BLOCKED` or explicitly partial. Do not claim that a
+project-wide aggregate remains available.
+
+## Optional roles and APIs
+
+| Role or service | Required scope | Purpose |
 |---|---|---|
-| `roles/bigquery.jobUser` | `bigquery.jobs.create` | Running the read-only SELECT queries (minimal job-run role) |
-| `roles/bigquery.resourceViewer` | `jobs.listAll`, `reservations.list`, `reservationAssignments.list`, `capacityCommitments.list` | `JOBS_BY_PROJECT`, `JOBS_TIMELINE_BY_PROJECT`, `RESERVATIONS*`, `ASSIGNMENTS*`, `CAPACITY_COMMITMENT_CHANGES*` |
-| `roles/bigquery.metadataViewer` | `tables.get`, `tables.list` | `TABLES`, `COLUMNS`, `TABLE_STORAGE_BY_PROJECT`, `WRITE_API_TIMELINE_BY_PROJECT` |
+| Permissions for the recommender named by a generic `RECOMMENDATIONS_BY_PROJECT` row | Workload project | Generic active BigQuery recommendations; availability depends on each recommender's IAM |
+| `roles/bigquery.slotRecommenderViewer` | Workload or reservation administration project required by the recommendation | Cost-optimized Slot Recommender/Estimator evidence for supported Enterprise/Enterprise Plus and on-demand-to-Enterprise scenarios |
+| Recommender API and BigQuery Reservation API | Relevant project | Required for Slot Recommender console/API access |
+| `roles/billing.viewer` | Billing account | Reveals otherwise hidden cost values when dollar analysis is requested |
 
-Grant `roles/bigquery.resourceViewer` in the **reservation administration project** as well when reservations live in a separate project.
+Generic `INFORMATION_SCHEMA.RECOMMENDATIONS_BY_PROJECT` rows are not guaranteed
+to include capacity guidance. Do not treat absence from that view as evidence
+that Slot Recommender has no recommendation.
 
-**Optional (only if official Slot Recommender output or dollar figures are requested):**
+## Never grant for this analysis
 
-| Role | Grants | Purpose |
-|---|---|---|
-| `roles/bigquery.slotRecommenderViewer` | `recommender.bigqueryCapacityCommitmentsRecommendations.get/list` | `RECOMMENDATIONS_BY_PROJECT` + Slot Recommender/Estimator |
-| `roles/billing.viewer` | `billing.accounts.getPricing` | Reveal hidden monthly cost values in recommendations |
+Do not attach `roles/owner`, `roles/editor`, `roles/bigquery.admin`,
+`roles/bigquery.resourceAdmin`, `roles/bigquery.resourceEditor`,
+`roles/bigquery.dataEditor`, or `roles/bigquery.dataOwner` merely to make this
+analysis run. Do not request custom roles containing reservation, assignment,
+commitment, dataset, or table mutation permissions.
 
-## Never grant
+## Evidence gaps
 
-These carry mutation permissions and must not be attached to the analysis identity: `roles/owner`, `roles/editor`, `roles/bigquery.admin`, `roles/bigquery.resourceAdmin`, `roles/bigquery.resourceEditor`, `roles/bigquery.dataEditor`, `roles/bigquery.dataOwner`, and any custom role containing `reservations.create/update/delete`, `reservationAssignments.create/delete`, `capacityCommitments.*`, or `tables.update/delete`.
+- Project-wide jobs denied => mark job evidence `BLOCKED` or partial; do not
+  invent an aggregate fallback.
+- Reservation/commitment metadata denied => mark current configuration
+  unavailable and omit unsupported historical analysis.
+- Slot Recommender denied or APIs disabled => record the precise gap and keep
+  generic recommendations separate.
+- Storage or Write API metadata denied => analyze only accessible datasets and
+  state the visibility boundary.
 
-## Evidence fallbacks
-
-- Jobs unavailable → aggregate project-level evidence only.
-- Reservation/commitment metadata denied → mark configuration unavailable; omit historical commitment analysis.
-- Recommender denied → use Slot Estimator UI evidence supplied by the administrator.
-- Storage/Write API denied → aggregate only accessible datasets; use Cloud Monitoring evidence supplied by the administrator.
-
-## Privacy defaults
-
-- Do not emit raw query SQL.
-- Pseudonymize `user_email` and `job_id` in generated reports.
-- Retain project, reservation, dataset, and table names only when needed for an actionable recommendation.
-- Do not copy raw metadata rows into Markdown; aggregate first.
-- State the analysis window and visibility scope so partial IAM is not mistaken for completeness.
-
-## Evidence-gap format
+Use this format:
 
 ```text
 Status: BLOCKED
 Surface: RESERVATIONS_BY_PROJECT
 Scope: admin-project / us
 Reason: Access denied
-Impact: Current reservation baseline and autoscaling configuration not verified
-Fallback: None available without administrator-supplied evidence
+Impact: Current reservation maximum and scaling mode not verified
+Fallback: None without administrator-supplied evidence
 ```
+
+## Privacy defaults
+
+- Do not emit raw query SQL.
+- Pseudonymize `user_email`, `job_id`, and workload-derived table references
+  with a fresh per-run salt that is never printed or persisted. Keep
+  Google-provided normalized query hashes labelled separately.
+- Retain approved project, reservation, and assignment identifiers when needed
+  to describe configuration scope. Retain dataset/table names only for approved
+  storage-inventory or dataset-audit recommendations. Query 4.2 references,
+  Query 4.11 target resources, and Query 5.1 dataset/table identifiers remain
+  fingerprinted; free-form recommendation descriptions are not persisted.
+- Aggregate metadata before writing Markdown.
+- State the analysis window and visibility scope so partial IAM is not mistaken
+  for completeness.
 
 ## Mutation boundary
 
-The skill only issues read-only `bq`/`gcloud` commands. Even when the ADC principal happens to hold broader (write) permissions, the analyst must never run a resource-changing command. Reservation, assignment, commitment, and dataset storage-billing changes are recommendations the user performs themselves by following the linked official documentation.
+Only read-only `bq`/`gcloud` operations are permitted. Reservation, assignment,
+commitment, and dataset storage-billing changes are recommendations the user
+performs outside this skill by following official documentation.
