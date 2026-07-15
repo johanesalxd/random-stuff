@@ -77,6 +77,8 @@ class CookbookContractTests(unittest.TestCase):
 
     def test_execution_manifest_matches_query_inventory(self) -> None:
         manifest = json.loads(MANIFEST.read_text())
+        self.assertIn("Gemini 3.5 Flash", manifest["runtime"])
+        self.assertIn("thinking: High", manifest["runtime"])
         ids = [item["id"] for item in manifest["queries"]]
         self.assertEqual(EXPECTED_QUERY_IDS, set(ids))
         self.assertEqual(len(ids), len(set(ids)))

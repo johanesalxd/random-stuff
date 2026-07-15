@@ -73,6 +73,27 @@ def run_checks(root: Path) -> List[str]:
             failures.append(label)
     if "COUNT(DISTINCT IF(state = 'PENDING' AND priority = 'INTERACTIVE'" not in agent_text:
         failures.append("queue pressure must count distinct pending interactive jobs per second")
+    required_runtime_contracts = {
+        "performance insights must be filtered, not only projected": (
+            agent_text.count("WHERE insights.input_data_change.records_read_diff_percentage IS NOT NULL") >= 2
+            and agent_text.count("WHERE insights.slot_contention") >= 2
+        ),
+        "Storage Write API grouping must preserve project/dataset/table/stream identity":
+            "GROUP BY start_timestamp, project_id, dataset_id, table_id, stream_type" in agent_text,
+        "logical storage forecast must exclude deleted logical bytes":
+            "SUM(IF(deleted = FALSE, active_logical_bytes, 0))" in agent_text
+            and "SUM(IF(deleted = FALSE, long_term_logical_bytes, 0))" in agent_text,
+        "storage forecast must restrict supported base tables":
+            "table_type = 'BASE TABLE'" in agent_text
+            and "total_physical_bytes + fail_safe_physical_bytes > 0" in agent_text,
+        "partition triage must rank primarily by distinct referencing jobs":
+            "ORDER BY\n  r.referencing_jobs DESC," in agent_text,
+        "current configuration report must be unconditional":
+            "Always generate `analysis_results/00_current_configuration.md`" in agent_text,
+    }
+    for label, satisfied in required_runtime_contracts.items():
+        if not satisfied:
+            failures.append(label)
     for block in re.findall(r"```(?:bash|shell)\n(.*?)```", agent_text, re.DOTALL):
         if "--scaling_mode=AUTOSCALE_ONLY" in block and "--ignore_idle_slots=true" not in block:
             failures.append("AUTOSCALE_ONLY proposal requires ignore_idle_slots=true")
@@ -85,6 +106,16 @@ def run_checks(root: Path) -> List[str]:
             failures.append(f"synthetic sample embeds unverified dollar amount: {path.relative_to(root)}")
         if re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.IGNORECASE):
             failures.append(f"synthetic sample embeds email-like principal: {path.relative_to(root)}")
+        misleading_sample_patterns = {
+            "reservation simulation wording": r"^## Reservation Simulation\s*$",
+            "per-job averages presented as capacity absorption": r"absorb 100%|would comfortably absorb",
+            "general recommendations absence presented as Slot Recommender evidence":
+                r"absence of recommendations is consistent|Slot Recommender has no basis or need",
+            "default cross-project ranking from project-scoped evidence": r"## Project Rankings|\*\*Top 3 Projects:\*\*",
+        }
+        for label, pattern in misleading_sample_patterns.items():
+            if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+                failures.append(f"{label}: {path.relative_to(root)}")
         if path.name == "06_final_recommendation.md":
             headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
             missing = [heading for heading in FINAL_HEADINGS if heading not in headings]

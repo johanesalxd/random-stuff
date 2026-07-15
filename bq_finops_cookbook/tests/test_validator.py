@@ -88,6 +88,63 @@ class ValidatorTests(unittest.TestCase):
                     new,
                 )
                 self.assertIn(expected, failures)
+    def test_mutations_reject_review_blockers(self) -> None:
+        runtime_cases = [
+            (
+                "performance insights must be filtered, not only projected",
+                "WHERE insights.input_data_change.records_read_diff_percentage IS NOT NULL",
+                "WHERE TRUE",
+            ),
+            (
+                "Storage Write API grouping must preserve project/dataset/table/stream identity",
+                "GROUP BY start_timestamp, project_id, dataset_id, table_id, stream_type",
+                "GROUP BY start_timestamp, table_id",
+            ),
+            (
+                "logical storage forecast must exclude deleted logical bytes",
+                "SUM(IF(deleted = FALSE, active_logical_bytes, 0))",
+                "SUM(active_logical_bytes)",
+            ),
+            (
+                "partition triage must rank primarily by distinct referencing jobs",
+                "ORDER BY\n  r.referencing_jobs DESC,",
+                "ORDER BY\n  r.referencing_job_slot_hours_nonadditive DESC,",
+            ),
+            (
+                "current configuration report must be unconditional",
+                "Always generate `analysis_results/00_current_configuration.md`",
+                "Generate `analysis_results/00_current_configuration.md` only when reservations exist",
+            ),
+        ]
+        for expected, old, new in runtime_cases:
+            with self.subTest(expected=expected):
+                failures = self.mutated_failures(
+                    ".agents/skills/bq-finops-analyst/resources/finops_agent.md",
+                    old,
+                    new,
+                )
+                self.assertIn(expected, failures)
+
+    def test_mutations_reject_misleading_samples(self) -> None:
+        cases = [
+            ("reservation simulation wording", "Historical Demand Sensitivity", "Reservation Simulation"),
+            (
+                "per-job averages presented as capacity absorption",
+                "This describes historical per-job averages only.",
+                "A 50-slot reservation would comfortably absorb 100% of workloads.",
+            ),
+            (
+                "general recommendations absence presented as Slot Recommender evidence",
+                "Absence from the general recommendations view is not evidence",
+                "The absence of recommendations is consistent and the Slot Recommender has no basis or need",
+            ),
+        ]
+        for expected, old, new in cases:
+            with self.subTest(expected=expected):
+                failures = self.mutated_failures(
+                    "sample_results/04_optimization_opportunities.md", old, new
+                )
+                self.assertTrue(any(item.startswith(expected) for item in failures), failures)
 
 
 if __name__ == "__main__":

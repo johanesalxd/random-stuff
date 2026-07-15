@@ -1,6 +1,6 @@
 # BigQuery FinOps Analyst for Antigravity
 
-A read-only BigQuery capacity, workload, storage, and cost-analysis skill designed for **Antigravity CLI with Gemini 3.5 Flash Medium**.
+A read-only BigQuery capacity, workload, storage, and cost-analysis skill designed for **Antigravity CLI with Gemini 3.5 Flash with thinking set to High**.
 
 The cookbook uses BigQuery MCP tools first, falls back to read-only `bq query`/metadata inspection when necessary, and writes seven structured Markdown reports. It never changes reservations, assignments, commitments, or dataset billing configuration.
 
@@ -40,7 +40,7 @@ Pricing is **not embedded as timeless truth**. Supply and cite current location-
 
 ## Requirements
 
-- Antigravity CLI with Gemini 3.5 Flash Medium
+- Antigravity CLI with Gemini 3.5 Flash with thinking set to High
 - A connected BigQuery MCP server
 - Google Cloud authentication appropriate to that MCP server
 - Target workload project ID

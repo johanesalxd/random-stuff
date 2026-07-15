@@ -2,17 +2,14 @@
 
 > **Synthetic sample:** illustrative fixture only; not current project data or pricing.
 
-## Explicit Multi-Project Scope
+## Workload Project
 
-> `ASSUMPTION`: This synthetic ranking assumes an approved explicit union or organization-scope collection. Query 1.2 alone cannot produce it.
-
-| Rank | Project ID | Slot-Hours | Job Count |
-|------|-----------|------------|-----------|
-| 1 | ecommerce-prod | 25,400 | 850,000 |
-| 2 | ecommerce-staging | 4,200 | 120,000 |
-| 3 | marketing-analytics | 1,100 | 5,000 |
+| Project ID | Slot-Hours | Job Count |
+|------------|------------|-----------|
+| ecommerce-prod | 25,400 | 850,000 |
 
 ## Analysis
-- **Top Consumer:** `ecommerce-prod` accounts for 82% of total usage.
-- **Concentration:** Usage is heavily concentrated in production.
-- **Recommendation:** Prioritize optimization for the production project. Consider moving staging to a separate reservation or keeping it on-demand to avoid impacting production.
+
+- **Scope:** `OBSERVED` values represent the one explicitly qualified synthetic workload project.
+- **Cross-project concentration:** `NOT AVAILABLE` from Query 1.2.
+- **Recommendation:** Optimize this project locally. Do not propose cross-project assignments without an approved organization-scope query or explicit union of workload projects.

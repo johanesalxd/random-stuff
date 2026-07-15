@@ -5,7 +5,7 @@ description: Performs a source-grounded, read-only BigQuery FinOps analysis cove
 
 # BigQuery FinOps Analyst
 
-Target runtime: **Antigravity CLI with Gemini 3.5 Flash Medium**.
+Target runtime: **Antigravity CLI with Gemini 3.5 Flash with thinking set to High**.
 
 ## Inputs
 
@@ -75,6 +75,7 @@ Rules:
 
 ### 1. Preflight
 
+- Confirm the selected runtime is Gemini 3.5 Flash with thinking set to **High**; do not run this workflow at a lower thinking level for now.
 - Confirm `/skills` discovers this skill.
 - Confirm `/mcp` shows a connected BigQuery server and record actual tool names.
 - Validate project/location strings.

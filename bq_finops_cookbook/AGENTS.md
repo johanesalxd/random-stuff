@@ -5,7 +5,7 @@ This directory is a prompt, SQL, evidence, and validation project for the `bq-fi
 ## Runtime target
 
 - Antigravity CLI
-- Gemini 3.5 Flash Medium
+- Gemini 3.5 Flash with thinking set to **High**
 - Workspace skill discovery from `.agents/skills/bq-finops-analyst/SKILL.md`
 - BigQuery MCP first; read-only `bq` fallback only
 

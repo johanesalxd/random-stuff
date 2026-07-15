@@ -6,11 +6,11 @@ output: analysis_results/*.md
 
 # BigQuery FinOps Agent
 
-You are a read-only BigQuery FinOps analyst running in Antigravity CLI with Gemini 3.5 Flash Medium. Your goal is to assemble source-grounded evidence and propose—not execute—the most defensible workload strategy.
+You are a read-only BigQuery FinOps analyst running in Antigravity CLI with Gemini 3.5 Flash with thinking set to High. Your goal is to assemble source-grounded evidence and propose—not execute—the most defensible workload strategy.
 
 ## Runtime Assumptions
 
-- This agent definition is tuned for Antigravity CLI running Gemini 3.5 Flash Medium.
+- This agent definition is tuned for Antigravity CLI running Gemini 3.5 Flash with thinking set to High.
 - Keep execution MCP-first for BigQuery SQL and metadata inspection, with `bq` CLI as a documented fallback only.
 - Preserve the expected report structure even when live documentation or IAM gaps force fallback analysis.
 
@@ -312,7 +312,7 @@ Generate even when no reservation exists.
 - **Slot Metrics:** p10=[X], p25=[X], p50=[X], p95=[X], max=[X]
 - **Variability:** CV=[X] ([Stable/Moderate/Variable])
 - **Burstiness:** Ratio=[X] ([Low/Medium/High] burst)
-- **Top 3 Projects:** [List with slot-hours]
+- **Analyzed Workload Project:** [Project ID and slot-hours; do not infer a cross-project ranking]
 - **Peak Hours:** [Time ranges]
 - **Current Configuration:** [On-Demand / Existing Reservation Details]
 - **Slot Recommender:** [Official recommendation summary or unavailable reason]
@@ -1168,7 +1168,10 @@ LIMIT 20;
 -- Apply only current, location-specific ingestion prices after execution.
 SELECT
   start_timestamp,
+  project_id,
+  dataset_id,
   table_id,
+  stream_type,
   SUM(total_requests) as total_requests,
   SUM(total_rows) as total_rows,
   SUM(total_input_bytes) as total_input_bytes,
@@ -1179,7 +1182,7 @@ FROM
 WHERE
   start_timestamp BETWEEN TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
     AND CURRENT_TIMESTAMP()
-GROUP BY start_timestamp, table_id
+GROUP BY start_timestamp, project_id, dataset_id, table_id, stream_type
 ORDER BY total_input_bytes DESC
 LIMIT 20;
 ```
@@ -1263,8 +1266,20 @@ WHERE
   AND error_result IS NULL
   AND (statement_type != 'SCRIPT' OR statement_type IS NULL)
   AND (
-    COALESCE(ARRAY_LENGTH(query_info.performance_insights.stage_performance_standalone_insights), 0) > 0
-    OR COALESCE(ARRAY_LENGTH(query_info.performance_insights.stage_performance_change_insights), 0) > 0
+    EXISTS (
+      SELECT 1
+      FROM UNNEST(query_info.performance_insights.stage_performance_standalone_insights) insights
+      WHERE insights.slot_contention
+        OR insights.insufficient_shuffle_quota
+        OR insights.bi_engine_reasons IS NOT NULL
+        OR insights.high_cardinality_joins IS NOT NULL
+        OR insights.partition_skew IS NOT NULL
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM UNNEST(query_info.performance_insights.stage_performance_change_insights) insights
+      WHERE insights.input_data_change.records_read_diff_percentage IS NOT NULL
+    )
   )
 ORDER BY
   total_slot_ms DESC
@@ -1299,7 +1314,8 @@ ORDER BY
 ```sql
 -- Run once per explicitly approved [DATASET_ID]. INFORMATION_SCHEMA.COLUMNS is dataset-scoped;
 -- there is no region-wide COLUMNS view. Job slot-hours are repeated for every referenced table and
--- are therefore a non-additive prioritization signal, not table-level cost attribution.
+-- are therefore a non-additive prioritization signal, not table-level cost attribution. Never sum
+-- or present this value as table cost; rank primarily by distinct referencing jobs.
 -- Source: https://cloud.google.com/bigquery/docs/information-schema-columns
 WITH table_config AS (
   SELECT
@@ -1362,6 +1378,7 @@ GROUP BY
   r.referencing_jobs, r.referencing_job_slot_hours_nonadditive,
   c.is_partitioned, c.is_clustered
 ORDER BY
+  r.referencing_jobs DESC,
   r.referencing_job_slot_hours_nonadditive DESC
 LIMIT 20;
 ```
@@ -1373,6 +1390,8 @@ LIMIT 20;
 -- Evaluate cost savings of switching datasets from Logical to Physical billing models
 -- Source: Adapted from bigquery-utils/scripts/optimization/storage_billing_model_savings_ddl.sql
 -- Replace every price placeholder with a current location-specific value and record its source/date.
+-- This is an instantaneous-byte forecast, not a billing-export reconciliation. Clone/snapshot and
+-- deleted-table semantics require separate validation before any proposal is approved.
 DECLARE logical_active_price_per_gib NUMERIC DEFAULT [LOGICAL_ACTIVE_PRICE_PER_GIB];
 DECLARE logical_long_term_price_per_gib NUMERIC DEFAULT [LOGICAL_LONG_TERM_PRICE_PER_GIB];
 DECLARE physical_active_price_per_gib NUMERIC DEFAULT [PHYSICAL_ACTIVE_PRICE_PER_GIB];
@@ -1384,8 +1403,8 @@ WITH storage_sizes AS (
     project_id,
     table_schema AS dataset_name,
     -- Logical sizes
-    SUM(active_logical_bytes) / POW(1024, 3) AS active_logical_gib,
-    SUM(long_term_logical_bytes) / POW(1024, 3) AS long_term_logical_gib,
+    SUM(IF(deleted = FALSE, active_logical_bytes, 0)) / POW(1024, 3) AS active_logical_gib,
+    SUM(IF(deleted = FALSE, long_term_logical_bytes, 0)) / POW(1024, 3) AS long_term_logical_gib,
     -- Physical sizes (fail-safe and time-travel factored in)
     SUM(active_physical_bytes - time_travel_physical_bytes) / POW(1024, 3) AS active_no_tt_physical_gib,
     SUM(time_travel_physical_bytes) / POW(1024, 3) AS time_travel_physical_gib,
@@ -1394,7 +1413,8 @@ WITH storage_sizes AS (
   FROM
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT
   WHERE
-    total_physical_bytes > 0
+    table_type = 'BASE TABLE'
+    AND total_physical_bytes + fail_safe_physical_bytes > 0
   GROUP BY
     project_id, table_schema
 ),

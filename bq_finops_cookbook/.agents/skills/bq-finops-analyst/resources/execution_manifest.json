@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "runtime": "Antigravity CLI / Gemini 3.5 Flash Medium",
+  "runtime": "Antigravity CLI / Gemini 3.5 Flash / thinking: High",
   "rules": [
     "Read this manifest before loading detailed SQL.",
     "Run required queries in order; run optional queries only when applicable.",
