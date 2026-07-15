@@ -1,5 +1,7 @@
 # Slot Usage Metrics (30-Day Analysis)
 
+> **Synthetic sample:** illustrative fixture only; not current project data or pricing.
+
 ## Percentile Distribution
 - **p10:** 150 slots
 - **p25:** 280 slots
