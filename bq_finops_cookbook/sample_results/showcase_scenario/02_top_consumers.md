@@ -31,4 +31,4 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 | Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
 |---|---|---|---|---|---|
-| Project-wide JOBS visibility | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs | 2026-07-15 | Synthetic workload project | PASS | Project scope is explicit |
+| Project-wide timeline visibility and overlap | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic workload project | PASS | Project scope is explicit and the derived creation bound retains observable overlapping timeslices |

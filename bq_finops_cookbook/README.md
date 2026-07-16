@@ -69,6 +69,10 @@ Pricing is **not embedded as timeless truth**. Supply and cite current location-
 - Query project ID that executes and bills the metadata queries
 - Both an inclusive analysis start and exclusive analysis end timestamp, or
   neither to accept UTC midnight 30 days ago through the current UTC midnight
+- Approved evidence or user confirmation that the workload project did not move
+  into or between organizations during the requested interval; unresolved or
+  in-window migration coverage blocks timeline metrics because retained history
+  can be truncated
 - Exact BigQuery location (`us`, `eu`, `asia-northeast1`, and so on)
 - Reservation administration project ID when different from the workload project
 - The minimum read-only IAM roles at the correct scope:
@@ -100,7 +104,7 @@ those runs and always marks Hybrid `INELIGIBLE`.
 | Permissions | User | Select `strict` or `request-review` through `/permissions`; configure fine-grained allow/ask/deny rules separately in Antigravity settings or prompts | Live execution `BLOCKED` when read-only enforcement is uncertain |
 | Required run inputs | User | Workload project, query project, exact location, administration project or explicit same-project, analysis window, and read-only authorization | Preflight `BLOCKED` before cloud access |
 | Documentation | Agent | Retrieve first-party pages through an available read-only web/documentation capability and record retrieval dates | Documentation `GAP`; strategy-changing gaps require `REVIEW_REQUIRED` |
-| Automatic preflight | Agent | Identify active/impersonated principal without tokens; validate IAM, APIs/views, project/location bindings, and all 25 applicability outcomes | `BLOCKED_LIVE_EXECUTION` or `INSUFFICIENT_EVIDENCE` |
+| Automatic preflight | Agent | Identify active/impersonated principal without tokens; validate IAM, APIs/views, project/location bindings, derive the earliest observable job overlapping the analysis window for timeline partition pruning, and classify all 25 applicability outcomes | `BLOCKED_LIVE_EXECUTION` or `INSUFFICIENT_EVIDENCE` |
 | Optional evidence | Both | Supply conditional inputs only for requested optional analyses | `READY_WITH_OPTIONAL_GAPS`, `NOT APPLICABLE`, or scoped `BLOCKED` |
 
 Terminal states are `READY`, `READY_WITH_OPTIONAL_GAPS`,
@@ -126,6 +130,10 @@ not place this skill under the active workspace root.
 Inside Antigravity CLI:
 
 1. Run `/skills` and verify `bq-finops-analyst` is listed.
+   This cookbook uses the nested Agent Skills package format documented by the
+   Agent Skills guide. It is not the separate flat Markdown blueprint that the
+   CLI plugins guide compiles directly into a slash command, so invoke it by
+   name in the analysis prompt rather than assuming `/bq-finops-analyst` exists.
 2. Use `/model` to select Gemini 3.5 Flash.
 3. Use `/permissions` to select `strict` or `request-review`. Configure
    fine-grained deny/ask/allow rules separately through Antigravity settings or
@@ -174,9 +182,14 @@ If the workload has no separate administration project, say so explicitly.
 6. From the linked current official references, construct the current CLI
    syntax that satisfies the semantic contract: explicit query project,
    location, GoogleSQL, read-only SQL, and metadata-only inspection.
-7. Record every failed/unavailable query and fallback.
-8. Generate reports.
-9. Apply the deterministic decision rules (see the Decision Logic section of `finops_agent.md`) before presenting the final strategy.
+7. Before timeline analysis, verify retention and organization-migration
+   coverage, then run the internal read-only overlap-bound probe and bind its
+   result as `timeline_creation_start_ts`; this timestamp is derived
+   automatically and is not an additional user input. Unresolved history
+   coverage blocks dependent timeline evidence.
+8. Record every failed/unavailable query and fallback.
+9. Generate reports.
+10. Apply the deterministic decision rules (see the Decision Logic section of `finops_agent.md`) before presenting the final strategy.
 
 An inability to retrieve a required first-party page is a documentation `GAP`,
 regardless of retrieval mechanism. A strategy-changing gap returns

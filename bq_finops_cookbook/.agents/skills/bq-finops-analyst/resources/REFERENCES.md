@@ -1,6 +1,6 @@
 # Official Reference Library
 
-**Last reviewed:** 2026-07-15
+**Last reviewed:** 2026-07-16
 **Authority:** Current Google Cloud and Antigravity documentation.
 **Policy:** Open the linked first-party pages and re-check volatile pricing,
 quotas, limits, schemas, CLI behavior, and preview features before every
@@ -33,12 +33,18 @@ Use this output contract in every final report:
 ## Antigravity runtime
 
 - [Agent Skills](https://antigravity.google/docs/skills)
+- [CLI plugins and flat skill blueprints](https://antigravity.google/docs/cli-plugins)
 - [Antigravity CLI reference](https://antigravity.google/docs/cli-reference)
 - [CLI features](https://antigravity.google/docs/cli-features)
 - [Subagents and background tasks](https://antigravity.google/docs/cli-subagents)
 - [CLI permissions](https://www.antigravity.google/docs/cli-permissions)
 - [Model Context Protocol](https://antigravity.google/docs/mcp)
 - [Antigravity models](https://antigravity.google/docs/models)
+
+This cookbook uses the nested Agent Skills package documented by the Agent
+Skills guide. The CLI plugins guide separately documents flat Markdown skill
+blueprints that compile into slash commands; do not conflate the two discovery
+shapes.
 
 ## Authentication and IAM
 
@@ -89,6 +95,15 @@ Exactly-once support requires application-created streams plus correctly managed
 - [Introduction to BigQuery `INFORMATION_SCHEMA`](https://docs.cloud.google.com/bigquery/docs/information-schema-intro)
 - [JOBS views](https://docs.cloud.google.com/bigquery/docs/information-schema-jobs)
 - [JOBS_TIMELINE views](https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline)
+
+For timeline windows, `period_start` defines the evidence interval while
+`job_creation_time` is the partition key. Derive the earliest observable
+overlapping job through `JOBS_BY_PROJECT`; the fixed lookback in an official
+example is not a general completeness guarantee. Current JOBS and
+JOBS_TIMELINE documentation also warns that history before a project
+organization migration can be unavailable; unresolved coverage blocks
+full-window timeline conclusions.
+
 - [Reservations](https://docs.cloud.google.com/bigquery/docs/information-schema-reservations)
 - [Reservation timeline](https://docs.cloud.google.com/bigquery/docs/information-schema-reservation-timeline)
 - [Current capacity commitments](https://docs.cloud.google.com/bigquery/docs/information-schema-capacity-commitments)

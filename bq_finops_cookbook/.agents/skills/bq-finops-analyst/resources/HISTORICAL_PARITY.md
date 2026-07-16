@@ -2,10 +2,9 @@
 
 Baseline: repository tree at commit `6a6cefeeccb38ec6378204ead31dee76168503fa`.
 
-Current-main integration baseline: `origin/main` at
-`6ca432384603bd0ef1ea4b16da7ace798421f4fc`, fetched and reviewed on
-2026-07-15. The working branch `HEAD` matched that commit exactly, so this
-hardening pass is a direct working-tree delta with no divergent branch commits.
+Merged-main anchor: `origin/main` at
+`af410541704830c258c79aaa8c7dfaec479b41db`, reviewed on 2026-07-16 after
+PR #19 merged. Its cookbook tree matches the reviewed PR commit `975e650`.
 
 This ledger records disposition, not current product authority. Retrieve the
 first-party URLs in `REFERENCES.md` and each query section before relying on a
@@ -18,7 +17,11 @@ product claim.
 | 25 query IDs and six analytical report mappings | Preserved one-for-one |
 | Seven ordered reports and 14 synthetic fixtures | Preserved and reconciled |
 | Single-project workload analysis | Made explicit; parallel project runs remain independent |
+| Historical Hybrid recommendation | Retained as a documented strategy family but always `INELIGIBLE`; the single-project corpus cannot support cross-project evidence |
+| Project-and-region-only inputs | Replaced with explicit workload, query, and administration projects, a parameterized window, and conditional dataset/economic inputs |
+| Optional current-configuration report | Replaced with an always-produced evidence report, including a valid observed absence of reservations or commitments |
 | Fixed 30-day workload SQL | Replaced with one inclusive/exclusive window, defaulting to 30 complete UTC days |
+| Timeline job-creation boundary | Replaced with a derived overlap bound so observable jobs created before the window retain their in-window timeslices |
 | Optional-query applicability | Split into a business trigger and execution prerequisites with deterministic terminal status |
 | Generic recommendations and Slot Recommender | Separated into Query 4.11 status and an independent report substatus |
 | Unsalted diagnostic hashes | Replaced with per-run salted fingerprints; normalized query hashes remain separately labelled |
@@ -41,8 +44,8 @@ product claim.
 | Query 4.3 slow queries | Query 4.3 | Preserved and privacy-hardened | Uses fingerprints and correct GiB units. |
 | Query 4.4 reservation simulation | Query 4.4 | Safely replaced | Labels output historical demand sensitivity, not queueing, runtime, billing, or reservation simulation. |
 | Query 4.5 weekly trend | Query 4.5 | Preserved | Retains slot-hour trend evidence. |
-| Query 4.8 raw errors | Query 4.8 | Safely replaced | Keeps taxonomy/counts and hashed handles; raw messages require private ephemeral inspection. |
-| Query 4.9 average slots | Query 4.9 | Preserved and relabelled | Treats per-job averages as a distribution, not concurrent capacity. |
+| Query 4.8 raw errors | Query 4.8 | Safely replaced | Keeps taxonomy, positive-compute failure counts/slot-hours, and hashed handles; raw messages require private ephemeral inspection. |
+| Query 4.9 average slots | Query 4.9 | Preserved and relabelled | Treats successful, non-cached, positive-compute per-job averages as a distribution, not concurrent capacity. |
 | Query 4.10 queue pressure | Query 4.10 | Safely replaced | Counts distinct queued interactive jobs per second before comparison with the project/region limit. |
 | Query 4.11 recommendations | Query 4.11 | Safely replaced | Separates generic recommendations from supported Slot Recommender evidence. |
 | Query 4.12 performance insights | Query 4.12 | Preserved with first-party authority | Retains BigQuery Utils lineage while grounding schema in official JOBS documentation. |

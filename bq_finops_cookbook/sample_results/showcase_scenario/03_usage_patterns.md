@@ -33,4 +33,4 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 | Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
 |---|---|---|---|---|---|
-| JOBS_TIMELINE regional scope | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-15 | Synthetic workload location | PASS | Location remains explicit |
+| JOBS_TIMELINE regional scope and overlap | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic workload location | PASS | Location remains explicit and the derived creation bound retains observable overlapping timeslices |

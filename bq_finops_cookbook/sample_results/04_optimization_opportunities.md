@@ -23,10 +23,10 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 ## Job Error Analysis
 
-| Error Reason | Error Count | Error % | Recent Hashed Handles | Diagnosis Status |
-|--------------|-------------|---------|-----------------------|------------------|
-| invalidQuery | 2 | 66.7% | jobs `3a0c…`, `8b16…` | REQUIRES_DIAGNOSIS |
-| stopped | 1 | 33.3% | job `19de…` | REQUIRES_DIAGNOSIS |
+| Error Reason | Error Count | Error % | Positive-Compute Failures | Failed Slot-Hours | Recent Hashed Handles | Diagnosis Status |
+|--------------|-------------|---------|---------------------------|-------------------|-----------------------|------------------|
+| invalidQuery | 2 | 66.7% | 2 | 0.03 | jobs `3a0c…`, `8b16…` | REQUIRES_DIAGNOSIS |
+| stopped | 1 | 33.3% | 1 | 0.01 | job `19de…` | REQUIRES_DIAGNOSIS |
 
 Error reasons are diagnostic categories, not proof of capacity pressure or one root cause.
 
@@ -35,18 +35,22 @@ Error reasons are diagnostic categories, not proof of capacity pressure or one r
 | Scenario | Avg Job Slot Threshold | Total Jobs | Jobs Above | % Jobs Above | Slot-Hours Above |
 |----------|------------------------|------------|------------|--------------|------------------|
 | P50 | 0.1 | 160 | 60 | 37.5% | 0.2 |
-| Average | 2.6 | 160 | 24 | 15.0% | 0.2 |
-| P90 | 4.7 | 160 | 13 | 8.1% | 0.1 |
-| P95 | 7.0 | 160 | 6 | 3.8% | 0.1 |
+| Average | 2.6 | 157 | 24 | 15.3% | 0.2 |
+| P90 | 4.7 | 157 | 13 | 8.3% | 0.1 |
+| P95 | 7.0 | 157 | 6 | 3.8% | 0.1 |
 
-**Interpretation:** This describes historical per-job averages only. It does not model concurrency, reservation demand, queueing, autoscaling, or the number of jobs affected by a reservation size.
+**Interpretation:** This describes the 157 successful, non-cached,
+positive-compute jobs with valid duration. The three failed positive-compute
+jobs remain in the error evidence above. The distribution does not model
+concurrency, reservation demand, queueing, autoscaling, or the number of jobs
+affected by a reservation size.
 
 ## Expensive Queries
 
 | Principal Fingerprint | Workload Fingerprint | Type | Query Count | TiB Processed | TiB Billed | Table Fingerprints |
 |-----------------------|----------------------|------|-------------|---------------|------------|--------------------|
-| `9d5e…` | `2a81…` | normalized query | 146 | 0.0003 | 0.0003 | `a031…` |
-| `04f8…` | `JOB:71b4…` | job fingerprint | 14 | 0.0000 | 0.0000 | `c29f…` |
+| `9d5e…` | `2a81…` | Google-provided normalized query hash | 146 | 0.0003 | 0.0003 | `a031…` |
+| `04f8…` | `JOB:71b4…` | salted job fingerprint | 14 | 0.0000 | 0.0000 | `c29f…` |
 
 Economic comparison remains `REVIEW_REQUIRED` because the regional price and capacity billing comparison are unavailable.
 
@@ -109,8 +113,8 @@ This is all-hour historical threshold sensitivity, not a reservation simulation 
 | 4.2 | PASS | Synthetic primary result | Null-reservation billed-byte evidence; pricing unavailable |
 | 4.3 | PASS | Synthetic primary result | Privacy-safe slow-job handles |
 | 4.4 | PASS | Synthetic primary result | Historical sensitivity only |
-| 4.8 | PASS | Synthetic primary result | Aggregate reasons plus hashed handles |
-| 4.9 | PASS | Synthetic primary result | Per-job distribution only |
+| 4.8 | PASS | Synthetic primary result | Aggregate reasons, failed compute, and hashed handles |
+| 4.9 | PASS | Synthetic primary result | Successful non-cached positive-compute distribution only |
 | 4.10 | PASS | Synthetic primary result | Brief queue rows, far below limit |
 | 4.11 | PASS | Synthetic primary result | Generic recommendation view returned zero applicable rows |
 | 4.12 | PASS | Synthetic primary result | Zero qualifying insights observed |
@@ -123,3 +127,4 @@ This is all-hour historical threshold sensitivity, not a reservation simulation 
 |---|---|---|---|---|---|
 | Generic recommendations | https://docs.cloud.google.com/bigquery/docs/information-schema-recommendations | 2026-07-15 | Synthetic workload project | PASS | Empty generic rows do not prove no slot recommendation |
 | Slot Recommender applicability | https://docs.cloud.google.com/bigquery/docs/slot-recommender | 2026-07-15 | Synthetic negligible workload | PASS | Capacity recommendation analysis was not applicable; generic rows remain separate |
+| JOBS_TIMELINE overlap partitioning | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic sensitivity and queue evidence | PASS | Fixture assumes the derived creation bound includes all observable in-window timeslices |
