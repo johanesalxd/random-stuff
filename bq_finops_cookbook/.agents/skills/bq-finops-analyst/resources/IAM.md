@@ -52,7 +52,8 @@ commitment, dataset, or table mutation permissions.
 ## Evidence gaps
 
 - Project-wide jobs denied => mark job evidence `BLOCKED` or partial; do not
-  invent an aggregate fallback.
+  invent an aggregate fallback. This also blocks the internal timeline-overlap
+  bound probe and every dependent `JOBS_TIMELINE` query.
 - Reservation/commitment metadata denied => mark current configuration
   unavailable and omit unsupported historical analysis.
 - Slot Recommender denied or APIs disabled => record the precise gap and keep

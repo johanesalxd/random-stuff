@@ -52,6 +52,9 @@ Do not duplicate detailed product rules across surfaces. Link to the canonical o
 - Uppercase keywords; two-space indentation.
 - Keep project/location placeholders explicit.
 - Use `(statement_type != 'SCRIPT' OR statement_type IS NULL)` where script-parent double counting applies.
+- For `JOBS_TIMELINE` evidence, derive the earliest observable overlapping job
+  creation time with the internal `JOBS_BY_PROJECT` preflight, use it for
+  partition pruning, and keep `period_start` inside the exact declared window.
 - Use `SAFE_DIVIDE` or an equivalent zero guard.
 - Keep slot-seconds, slot-hours, average slots, baseline slots, scaled slots, and billed slots distinct.
 - Add an official source URL above each complex query.

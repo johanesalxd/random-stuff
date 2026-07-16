@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "runtime": "Antigravity CLI / Gemini 3.5 Flash selected through /model",
   "rules": [
     "Read this manifest before loading detailed SQL.",
@@ -11,8 +11,24 @@
     "Assign every query exactly one terminal status: PASS, FALLBACK, BLOCKED, or NOT APPLICABLE. An absent optional trigger is NOT APPLICABLE; a present trigger with a missing execution prerequisite is BLOCKED; zero rows after valid execution is PASS evidence of absence.",
     "GAP is a documentation-check status, not a query terminal status.",
     "Use one inclusive analysis_start_ts and exclusive analysis_end_ts for comparable workload evidence; default to the previous 30 complete UTC days and label specialized horizons separately.",
+    "Before any JOBS_TIMELINE query, run the required timeline-overlap preflight and bind its derived timeline_creation_start_ts so observable jobs created before the analysis start are retained.",
     "Evaluate dependencies before numeric ordering: run required 0.1, 0.2, 0.2a, and 0.5 before optional 0.3 and 0.4.",
     "Load only the relevant Query section from resources/finops_agent.md."
+  ],
+  "preflight_probes": [
+    {
+      "id": "timeline-overlap-bound",
+      "required_when": "Any applicable query reads JOBS_TIMELINE_BY_PROJECT.",
+      "source": "JOBS_BY_PROJECT",
+      "result_parameter": "timeline_creation_start_ts",
+      "history_coverage_prerequisites": [
+        "Current documented retention covers analysis_start_ts.",
+        "Approved evidence or user confirmation establishes that no project organization migration truncates the requested interval."
+      ],
+      "zero_rows_behavior": "Bind analysis_start_ts; downstream successful zero-row timeline results are PASS.",
+      "unavailable_behavior": "Mark every dependent JOBS_TIMELINE query BLOCKED.",
+      "retention_behavior": "If documented retention cannot cover the requested start, or organization-migration coverage is unknown or truncates the requested interval, mark every dependent timeline query BLOCKED; never silently truncate."
+    }
   ],
   "reports": [
     {"file":"00_current_configuration.md","required":true,"purpose":"reservation, assignment, commitment, and compute-billing baseline"},
@@ -38,8 +54,8 @@
     {"id":"4.3","required":true,"report":"04_optimization_opportunities.md","evidence_type":"slow_jobs","fallback":null},
     {"id":"4.4","required":true,"report":"04_optimization_opportunities.md","evidence_type":"historical_query_capacity_sensitivity","fallback":null},
     {"id":"4.5","required":true,"report":"03_usage_patterns.md","evidence_type":"weekly_query_trend","fallback":null},
-    {"id":"4.8","required":true,"report":"04_optimization_opportunities.md","evidence_type":"error_taxonomy","fallback":null},
-    {"id":"4.9","required":true,"report":"04_optimization_opportunities.md","evidence_type":"per_job_slot_distribution","fallback":null},
+    {"id":"4.8","required":true,"report":"04_optimization_opportunities.md","evidence_type":"error_taxonomy_and_failed_compute","fallback":null},
+    {"id":"4.9","required":true,"report":"04_optimization_opportunities.md","evidence_type":"successful_noncached_positive_compute_per_job_slot_distribution","fallback":null},
     {"id":"4.10","required":true,"report":"04_optimization_opportunities.md","evidence_type":"queue_pressure","fallback":null},
     {"id":"4.11","required":false,"report":"04_optimization_opportunities.md","evidence_type":"generic_bigquery_cost_recommendations","applicability_trigger":"General BigQuery cost-recommendation analysis is requested.","execution_prerequisites":["The regional RECOMMENDATIONS_BY_PROJECT view is accessible."],"fallback":null,"unavailable_status":"BLOCKED"},
     {"id":"4.12","required":false,"report":"04_optimization_opportunities.md","evidence_type":"query_performance_insights","applicability_trigger":"Query performance diagnostics are included in the requested audit.","execution_prerequisites":["Project-wide JOBS metadata and query_info.performance_insights fields are accessible."],"fallback":null,"unavailable_status":"BLOCKED"},
