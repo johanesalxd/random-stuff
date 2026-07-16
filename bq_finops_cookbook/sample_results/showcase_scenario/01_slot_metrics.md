@@ -51,4 +51,4 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 
 | Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
 |---|---|---|---|---|---|
-| JOBS_TIMELINE slot usage | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-15 | Declared synthetic analysis window | PASS | Slot usage is not billed scaled capacity |
+| JOBS_TIMELINE slot usage and overlap | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Declared synthetic analysis window | PASS | Derived creation bound retains observable overlapping timeslices; slot usage is not billed scaled capacity |

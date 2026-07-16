@@ -19,6 +19,8 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 - **Confidence:** MEDIUM
 - **Decision status:** PASS (remain on-demand; no purchase or migration proposed)
 - **Query status:** 20 PASS, 0 BLOCKED, 5 NOT APPLICABLE; synthetic fixture with no live bq/gcloud execution
+- **Timeline overlap preflight:** NOT RUN; the synthetic fixture assumes all observable overlapping timeslices are represented
+- **Timeline history coverage:** SYNTHETIC ASSUMPTION; a live run must confirm retention and no in-window organization migration
 - **IAM / visibility gaps:** recommender and billing export unavailable
 - **Pricing verification:** NOT VERIFIED; no dollar savings claimed
 - **Economic comparison:** REVIEW_REQUIRED; billed-byte fixture exists but regional pricing and capacity billing evidence do not
@@ -40,8 +42,8 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 | 4.3 | PASS | Primary fixture | Hashed slow jobs |
 | 4.4 | PASS | Primary fixture | Sensitivity only |
 | 4.5 | PASS | Primary fixture | Weekly totals reconcile |
-| 4.8 | PASS | Primary fixture | Hashed diagnostics |
-| 4.9 | PASS | Primary fixture | Per-job distribution |
+| 4.8 | PASS | Primary fixture | Hashed diagnostics plus failed compute |
+| 4.9 | PASS | Primary fixture | Successful non-cached positive-compute distribution |
 | 4.10 | PASS | Primary fixture | Brief queue rows |
 | 4.11 | PASS | Primary fixture | Generic recommendation view returned zero rows; Slot Recommender was not applicable |
 | 4.12 | PASS | Primary fixture | Observed zero insights |
@@ -87,6 +89,7 @@ No reservation changes are recommended. No GCP resource was changed.
 | Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
 |---|---|---|---|---|---|
 | Numeric BigQuery pricing | https://cloud.google.com/bigquery/pricing | 2026-07-15 | Synthetic location unspecified | GAP | No dollar estimate is permitted |
+| JOBS_TIMELINE overlap and history coverage | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic workload window | PASS | Fixture assumes the derived overlap bound, retained history, and no in-window organization migration; no live probe ran |
 
 ## bq / gcloud Execution Notes
 

@@ -19,6 +19,8 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 - **Confidence:** MEDIUM
 - **Decision status:** REVIEW_REQUIRED
 - **Query status:** 18 PASS, 3 BLOCKED, 4 NOT APPLICABLE; synthetic fixture with no live bq/gcloud execution
+- **Timeline overlap preflight:** NOT RUN; the synthetic fixture assumes all observable overlapping timeslices are represented
+- **Timeline history coverage:** SYNTHETIC ASSUMPTION; a live run must confirm retention and no in-window organization migration
 - **IAM / visibility gaps:** current Slot Recommender output unavailable
 - **Pricing verification:** NOT VERIFIED; no dollar savings claimed
 - **Economic comparison:** REVIEW_REQUIRED; current pricing and actual capacity billing evidence are unavailable
@@ -40,8 +42,8 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 | 4.3 | PASS | Primary fixture | Hashed slow jobs |
 | 4.4 | PASS | Primary fixture | Sensitivity only |
 | 4.5 | PASS | Primary fixture | Weekly trend |
-| 4.8 | PASS | Primary fixture | Hashed diagnostics |
-| 4.9 | PASS | Primary fixture | Per-job distribution |
+| 4.8 | PASS | Primary fixture | Hashed diagnostics plus failed compute |
+| 4.9 | PASS | Primary fixture | Successful non-cached positive-compute distribution |
 | 4.10 | BLOCKED | Per-second rows absent | Contention is not queue evidence |
 | 4.11 | PASS | Primary fixture | Generic recommendation view returned zero rows; Slot Recommender remains separately BLOCKED |
 | 4.12 | PASS | Primary fixture | Contention insight present |
@@ -99,6 +101,7 @@ No assignment or commitment is recommended until project ownership and pricing a
 | Standard maximum reservation size | https://docs.cloud.google.com/bigquery/docs/editions-intro | 2026-07-15 | Standard edition | PASS | Dated synthetic fixture; refresh before live use |
 | Reservation flags and increments | https://docs.cloud.google.com/bigquery/docs/reservations-tasks | 2026-07-15 | User-executed Enterprise recommendation | PASS | Recheck preview and location support before implementation |
 | Numeric pricing | https://cloud.google.com/bigquery/pricing | 2026-07-15 | Synthetic location unspecified | GAP | No dollar savings claimed |
+| JOBS_TIMELINE overlap and history coverage | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic workload window | PASS | Fixture assumes the derived overlap bound, retained history, and no in-window organization migration; no live probe ran |
 
 ## bq / gcloud Execution Notes
 

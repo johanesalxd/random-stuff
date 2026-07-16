@@ -83,11 +83,13 @@ independent evidence sets and are never aggregated into a Hybrid recommendation.
 - **Time-window integrity:** Use `[ANALYSIS_START_TS, ANALYSIS_END_TS)` for all
   comparable workload queries. The default is the previous 30 complete UTC
   days. For JOBS_TIMELINE capacity metrics, filter both the documented
-  `job_creation_time` partition key and `period_start`; this produces
-  timeslice-clipped evidence for the in-window job-creation cohort. JOBS-based
-  diagnostics use the same creation cohort but their job-total fields cover the
-  whole job. Never reconcile whole-job totals numerically with timeslice-clipped
-  slot metrics. Label specialized Write API and table-age horizons separately.
+  `job_creation_time` partition key and `period_start`. Derive the partition
+  lower bound with the internal overlap probe so the result includes all
+  observable timeslices inside the declared window, including jobs created
+  earlier. JOBS-based diagnostics remain creation-window cohorts whose
+  job-total fields cover whole jobs. Never reconcile whole-job totals
+  numerically with timeslice-clipped slot metrics. Label specialized Write API
+  and table-age horizons separately.
 - **Fingerprint integrity:** Bind a fresh ephemeral `[RUN_FINGERPRINT_SALT]` for
   each invocation. Salt principal, job, and workload-derived table handles;
   never print or persist the salt. Label Google-provided normalized query hashes
@@ -355,16 +357,18 @@ best-effort. Report `ignore_idle_slots` beside the limit.
 ## Job Error Analysis
 [Table of common error patterns]
 
-| Error Reason | Error Count | Error % | Recent Hashed Handles | Diagnosis Status |
-|--------------|-------------|---------|-----------------------|------------------|
-| [reason] | [X] | [X]% | [job/principal fingerprints] | REQUIRES_DIAGNOSIS |
+| Error Reason | Error Count | Error % | Positive-Compute Failures | Failed Slot-Hours | Recent Hashed Handles | Diagnosis Status |
+|--------------|-------------|---------|---------------------------|-------------------|-----------------------|------------------|
+| [reason] | [X] | [X]% | [X] | [X] | [job/principal fingerprints] | REQUIRES_DIAGNOSIS |
 
 **Diagnostic follow-up:**
 - Inspect affected quota, API method, and raw job metadata only in an explicitly approved ephemeral follow-up. Do not persist messages, raw job IDs, principals, or SQL.
 - Do not map `rateLimitExceeded`, `resourcesExceeded`, or `quotaExceeded` to a single fix from the reason alone.
 
 ## Per-job Average Slot Distribution
-[Diagnostic distribution only; per-job averages are not reservation concurrency or capacity impact.]
+[Successful, non-cached, positive-compute jobs with valid duration only;
+per-job averages are not reservation concurrency or capacity impact. Failed
+compute remains visible in Job Error Analysis.]
 
 | Scenario | Avg Job Slot Threshold | Total Jobs | Jobs Above | % Jobs Above | Slot-Hours Above |
 |----------|-----------------|------------|----------------|------------------|---------------------|
@@ -380,7 +384,7 @@ best-effort. Report `ignore_idle_slots` beside the limit.
 
 | Principal Fingerprint | Workload Fingerprint | Type | Query Count | TiB Processed | TiB Billed | Referenced Table Fingerprints |
 |-----------------------|----------------------|------|-------------|---------------|------------|-------------------------------|
-| [fingerprint] | [fingerprint] | [normalized query/job] | [X] | [X] | [X or GAP] | [fingerprints] |
+| [fingerprint] | [fingerprint] | [Google-provided normalized query hash / salted job fingerprint] | [X] | [X] | [X or GAP] | [fingerprints] |
 
 - **Project On-Demand Bytes Billed:** [X TiB / GAP]
 - **Economic Evidence:** [VERIFIED / REVIEW_REQUIRED]
@@ -510,6 +514,8 @@ best-effort. Report `ignore_idle_slots` beside the limit.
 - **Confidence:** [HIGH / MEDIUM / LOW]
 - **Decision status:** [PASS / REVIEW_REQUIRED / INSUFFICIENT_EVIDENCE]
 - **Query status:** [PASS / FALLBACK / BLOCKED / NOT APPLICABLE counts]
+- **Timeline overlap preflight:** [PASS with derived partition lower bound / BLOCKED / NOT REQUIRED]
+- **Timeline history coverage:** [CONFIRMED / BLOCKED; document retention and organization-migration evidence]
 - **IAM / visibility gaps:** [List or None]
 - **Pricing verification:** [Verified source, location and date / NOT VERIFIED]
 - **Economic comparison:** [VERIFIED / REVIEW_REQUIRED; identify missing billed-byte, Billing export, capacity invoice, pricing, or recommender evidence]
@@ -590,7 +596,7 @@ The analyst does not change any cloud resource. Each item below is for the user 
 
 ## bq / gcloud Execution Notes
 - [Active gcloud account and configured service-account impersonation]
-- [Query project, location, GoogleSQL mode, permission posture, and read-only commands issued]
+- [Query project, location, GoogleSQL mode, permission posture, derived timeline overlap bound, and read-only commands issued]
 - [Fallbacks, failures, prohibited write flags absent, and no-resource-change confirmation]
 
 ## Next Steps
@@ -731,6 +737,34 @@ from `[QUERY_PROJECT_ID]`. Use the same location for `JOBS_*`, `RESERVATIONS_*`,
   reference](https://docs.cloud.google.com/bigquery/docs/reference/bq-cli-reference)
   so the query job explicitly binds the query project, location, and GoogleSQL
   mode without any destination or write behavior.
+
+### Internal preflight: Timeline overlap partition bound
+
+Run this read-only probe once before any applicable `JOBS_TIMELINE_BY_PROJECT`
+query. It is not a numbered analysis and does not change the 25-query contract.
+Bind the returned value as `@timeline_creation_start_ts` for every downstream
+timeline query. A `NULL` minimum means no observable overlapping job; the
+`COALESCE` result then equals `@analysis_start_ts`, and a valid empty timeline
+result is `PASS`. If this probe is inaccessible, every dependent timeline query
+is `BLOCKED`. Before using the result, confirm current documented retention
+covers the requested start and record whether the project moved into or between
+organizations during the interval. Insufficient retention, a known in-window
+migration, or unresolved migration coverage makes every dependent timeline
+query `BLOCKED`; never silently truncate the window or return a partial result
+as `PASS`.
+
+```sql
+-- Derive the earliest observable non-script job that overlaps the declared window.
+-- Source: https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline
+SELECT
+  COALESCE(MIN(creation_time), @analysis_start_ts) AS timeline_creation_start_ts
+FROM
+  `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+WHERE
+  creation_time < @analysis_end_ts
+  AND (end_time IS NULL OR end_time > @analysis_start_ts)
+  AND (statement_type != 'SCRIPT' OR statement_type IS NULL);
+```
 
 ### Query 0.1: List Reservations
 ```sql
@@ -899,7 +933,7 @@ scoped_timeslices AS (
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT,
     bounds
   WHERE
-    job_creation_time >= start_hour
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < end_hour
     AND period_start >= start_hour
     AND period_start < end_hour
@@ -1034,7 +1068,7 @@ scoped_timeslices AS (
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT,
     bounds
   WHERE
-    job_creation_time >= start_hour
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < end_hour
     AND period_start >= start_hour
     AND period_start < end_hour
@@ -1102,7 +1136,7 @@ scoped_timeslices AS (
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT,
     bounds
   WHERE
-    job_creation_time >= start_hour
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < end_hour
     AND period_start >= start_hour
     AND period_start < end_hour
@@ -1216,7 +1250,7 @@ active_usage AS (
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT,
     bounds
   WHERE
-    job_creation_time >= start_hour
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < end_hour
     AND period_start >= start_hour
     AND period_start < end_hour
@@ -1296,7 +1330,7 @@ SELECT
 FROM
   `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
 WHERE
-  job_creation_time >= @analysis_start_ts
+  job_creation_time >= @timeline_creation_start_ts
   AND job_creation_time < @analysis_end_ts
   AND period_start >= @analysis_start_ts
   AND period_start < @analysis_end_ts
@@ -1326,7 +1360,7 @@ SELECT
 FROM
   `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
 WHERE
-  job_creation_time >= @analysis_start_ts
+  job_creation_time >= @timeline_creation_start_ts
   AND job_creation_time < @analysis_end_ts
   AND period_start >= @analysis_start_ts
   AND period_start < @analysis_end_ts
@@ -1372,7 +1406,7 @@ WITH per_second AS (
   FROM
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
   WHERE
-    job_creation_time >= @analysis_start_ts
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < @analysis_end_ts
     AND period_start >= @analysis_start_ts
     AND period_start < @analysis_end_ts
@@ -1568,7 +1602,7 @@ active_usage AS (
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT,
     bounds
   WHERE
-    job_creation_time >= start_hour
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < end_hour
     AND period_start >= start_hour
     AND period_start < end_hour
@@ -1608,7 +1642,7 @@ SELECT
 FROM
   `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
 WHERE
-  job_creation_time >= @analysis_start_ts
+  job_creation_time >= @timeline_creation_start_ts
   AND job_creation_time < @analysis_end_ts
   AND period_start >= @analysis_start_ts
   AND period_start < @analysis_end_ts
@@ -1630,6 +1664,8 @@ WITH failed_jobs AS (
   SELECT
     creation_time,
     error_result.reason AS error_reason,
+    cache_hit,
+    COALESCE(total_slot_ms, 0) AS total_slot_ms,
     TO_HEX(SHA256(CONCAT(@run_fingerprint_salt, COALESCE(job_id, 'UNKNOWN')))) AS job_fingerprint,
     TO_HEX(SHA256(CONCAT(@run_fingerprint_salt, COALESCE(user_email, 'UNKNOWN')))) AS principal_fingerprint
   FROM
@@ -1645,6 +1681,12 @@ SELECT
   error_reason,
   COUNT(*) AS error_count,
   ROUND(SAFE_DIVIDE(COUNT(*), SUM(COUNT(*)) OVER ()) * 100, 1) AS error_pct,
+  COUNTIF(cache_hit IS NOT TRUE AND total_slot_ms > 0) AS positive_compute_failure_count,
+  ROUND(
+    SUM(IF(cache_hit IS NOT TRUE AND total_slot_ms > 0, total_slot_ms, 0)) /
+      (1000 * 60 * 60),
+    2
+  ) AS failed_slot_hours,
   ARRAY_AGG(
     STRUCT(creation_time, job_fingerprint, principal_fingerprint)
     ORDER BY creation_time DESC
@@ -1662,7 +1704,8 @@ LIMIT 10;
 
 ### Query 4.9: Per-job Average Slot Distribution
 ```sql
--- Describe historical per-job average slot distribution. This does not model concurrent reservation demand,
+-- Describe historical per-job average slot distribution for successful, non-cached,
+-- positive-compute jobs. This does not model concurrent reservation demand,
 -- queueing, idle sharing, autoscaling, or jobs affected by a capacity threshold.
 -- Source: https://cloud.google.com/bigquery/docs/information-schema-jobs
 WITH job_slot_usage AS (
@@ -1678,6 +1721,9 @@ WITH job_slot_usage AS (
     AND creation_time < @analysis_end_ts
     AND job_type = 'QUERY'
     AND state = 'DONE'
+    AND error_result IS NULL
+    AND cache_hit IS NOT TRUE
+    AND COALESCE(total_slot_ms, 0) > 0
     AND (statement_type != 'SCRIPT' OR statement_type IS NULL)
     AND end_time > start_time
 ),
@@ -1756,7 +1802,7 @@ WITH per_second AS (
   FROM
     `[WORKLOAD_PROJECT_ID].region-[YOUR_REGION]`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT
   WHERE
-    job_creation_time >= @analysis_start_ts
+    job_creation_time >= @timeline_creation_start_ts
     AND job_creation_time < @analysis_end_ts
     AND period_start >= @analysis_start_ts
     AND period_start < @analysis_end_ts

@@ -45,6 +45,9 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 | 2026-01-14 | 39,250 | 350 | 38,900 | 0 | 38,900 | 0 | 100% |
 | ... | ... | ... | ... | ... | ... | ... | ... |
 
+- **Failed Positive-Compute Queries:** 17 queries (overlapping diagnostic
+  subset; their 10.50 slot-hours are grouped by reason in Query 4.8)
+
 ## Query Status
 
 | Query | Status | Evidence / Fallback | Scope or Blocking Note |
@@ -61,3 +64,4 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 | Claim | Source URL | Retrieved | Scope | PASS/GAP | Note |
 |---|---|---|---|---|---|
 | Cached query and reservation behavior | https://docs.cloud.google.com/bigquery/docs/reservations-workload-management | 2026-07-15 | Synthetic on-demand workload | PASS | Cached jobs are separated from compute jobs |
+| Timeline overlap partitioning | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Declared synthetic analysis window | PASS | Fixture assumes the derived overlap bound retains pre-window jobs with in-window timeslices |

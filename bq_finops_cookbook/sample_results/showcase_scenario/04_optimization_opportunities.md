@@ -12,10 +12,10 @@ DERIVED, interpretations are HEURISTIC, and proposed actions are RECOMMENDATION.
 - **Impact:** Separate synthetic runtime evidence shows morning reports delayed by up to 15 minutes; contention is correlated evidence, not proof of a single cause.
 
 ## Job Error Analysis
-| Error Reason | Count | % | Recent Hashed Handles | Diagnosis Status |
-|--------------|-------|---|-----------------------|------------------|
-| rateLimitExceeded | 12 | 70.6% | jobs `51af…`, `a034…` | REQUIRES_DIAGNOSIS |
-| resourcesExceeded | 5 | 29.4% | job `fa82…` | REQUIRES_DIAGNOSIS |
+| Error Reason | Count | % | Positive-Compute Failures | Failed Slot-Hours | Recent Hashed Handles | Diagnosis Status |
+|--------------|-------|---|---------------------------|-------------------|-----------------------|------------------|
+| rateLimitExceeded | 12 | 70.6% | 12 | 2.40 | jobs `51af…`, `a034…` | REQUIRES_DIAGNOSIS |
+| resourcesExceeded | 5 | 29.4% | 5 | 8.10 | job `fa82…` | REQUIRES_DIAGNOSIS |
 
 ## Queue Pressure
 
@@ -44,7 +44,10 @@ Economic comparison is `REVIEW_REQUIRED`: billed-byte evidence is present, but c
 ## Per-job Average Slot Distribution
 
 - **Status:** PASS
-- **Finding:** 35% of synthetic jobs exceeded the 520-slot per-job average threshold; this is not concurrent reservation demand.
+- **Finding:** 35% of successful, non-cached, positive-compute synthetic jobs
+  with valid duration exceeded the 520-slot per-job average threshold; failed
+  compute remains in the error evidence and this is not concurrent reservation
+  demand.
 
 ## Slow Queries
 
@@ -89,8 +92,8 @@ Economic comparison is `REVIEW_REQUIRED`: billed-byte evidence is present, but c
 | 4.2 | PASS | Synthetic primary result | Bytes only; economics require review |
 | 4.3 | PASS | Synthetic primary result | Hashed slow-job handles |
 | 4.4 | PASS | Synthetic primary result | Historical sensitivity only |
-| 4.8 | PASS | Synthetic primary result | Reasons plus hashed handles |
-| 4.9 | PASS | Synthetic primary result | Per-job distribution only |
+| 4.8 | PASS | Synthetic primary result | Reasons, failed compute, and hashed handles |
+| 4.9 | PASS | Synthetic primary result | Successful non-cached positive-compute distribution only |
 | 4.10 | BLOCKED | No per-second queue evidence | Contention is not a fallback |
 | 4.11 | PASS | Synthetic primary result | Generic recommendation view returned zero applicable rows; external Slot Recommender remains separately BLOCKED |
 | 4.12 | PASS | Synthetic primary result | Contention insight present |
@@ -103,3 +106,4 @@ Economic comparison is `REVIEW_REQUIRED`: billed-byte evidence is present, but c
 |---|---|---|---|---|---|
 | Slot Recommender scenarios | https://docs.cloud.google.com/bigquery/docs/slot-recommender | 2026-07-15 | Synthetic Enterprise evaluation | GAP | Current dedicated recommendation was unavailable |
 | Query performance insights | https://docs.cloud.google.com/bigquery/docs/query-insights | 2026-07-15 | Synthetic query jobs | PASS | Insights remain diagnostic evidence |
+| JOBS_TIMELINE overlap partitioning | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Synthetic sensitivity and queue evidence | PASS | Fixture assumes the derived creation bound includes all observable in-window timeslices |

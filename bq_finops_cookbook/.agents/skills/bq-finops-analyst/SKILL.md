@@ -21,6 +21,9 @@ Collect these before querying:
 - Inclusive `analysis_start_ts` and exclusive `analysis_end_ts`; supply both or
   neither. When omitted, set start to UTC midnight 30 days ago and end to the
   current UTC midnight.
+- Approved evidence or user confirmation of whether the workload project moved
+  into or between organizations during the requested interval. Unknown or
+  in-window migration coverage blocks full-window timeline evidence.
 - Dataset IDs only when dataset-scoped `INFORMATION_SCHEMA.COLUMNS` auditing is requested
 - Confirmation that workload identities, job IDs, workload-derived table
   references, query text, and error messages remain pseudonymized in reports
@@ -181,9 +184,20 @@ Each reviewer returns:
   metrics; ask for corrected bounds rather than rounding them silently. If a
   requested interval exceeds a source's
   documented retention, mark the affected query `BLOCKED` rather than silently
-  shortening it.
+  shortening it. Also record organization-migration coverage because current
+  JOBS/JOBS_TIMELINE documentation says history before a project migration can
+  be unavailable. A known migration inside the requested interval, or unknown
+  migration coverage that cannot be resolved from approved evidence or user
+  confirmation, blocks dependent full-window timeline metrics.
 - Generate the per-run fingerprint salt in memory; never record it in terminal
   output, reports, or repository files.
+- Before any `JOBS_TIMELINE_BY_PROJECT` query, run the internal read-only
+  timeline-overlap probe in `resources/finops_agent.md`. Bind its result as
+  `timeline_creation_start_ts`. This is a derived execution parameter, not a
+  user input or a numbered analysis. If the probe returns no overlapping jobs,
+  bind `analysis_start_ts`. If the probe is inaccessible, mark every dependent
+  timeline query `BLOCKED`; do not fall back to the analysis start or a fixed
+  lookback.
 - Record the documentation retrieval date.
 - Classify readiness as `READY`, `READY_WITH_OPTIONAL_GAPS`,
   `BLOCKED_LIVE_EXECUTION`, `INSUFFICIENT_EVIDENCE`, or `REVIEW_REQUIRED`.
@@ -202,7 +216,8 @@ write behavior, and must pass the corpus SQL without unsafe shell interpolation.
 
 The SQL may contain `SELECT`, CTEs, and local `DECLARE` statements used only by
 read-only `SELECT` logic. Use typed named GoogleSQL parameters
-`@analysis_start_ts`, `@analysis_end_ts`, and `@run_fingerprint_salt`. Construct
+`@analysis_start_ts`, `@analysis_end_ts`, `@timeline_creation_start_ts`, and
+`@run_fingerprint_salt`. Construct
 their current CLI binding syntax from the official `bq` reference; never insert
 the salt into query text or a logged shell command, and disable shell tracing
 for the invocation. It must not contain DDL or DML.
@@ -216,10 +231,14 @@ for the invocation. It must not contain DDL or DML.
   Always produce `00_current_configuration.md`.
 - Run `1.1` through `1.3`; compute CV with a zero guard, burst ratio with a
   zero-median guard, active/all-hour distributions, p50, p95, p99, maximum, and
-  zero-usage share.
+  zero-usage share. Timeline evidence covers all observable timeslices that
+  overlap the declared window, including jobs created before its start.
 - Run applicable `4.x` queries. Reconcile heuristics with Slot
   Recommender/Estimator only when the relevant APIs, IAM, and supported scenario
-  are verified.
+  are verified. Query 4.9 percentiles include only successful, non-cached,
+  positive-compute jobs with valid duration. Preserve failed positive-compute
+  evidence in Queries 0.5 and 4.8 instead of mixing failures into those
+  percentiles.
 - Run applicable `5.1` and `6.x` queries. Keep logical and physical bytes
   separate; table age alone is never deletion evidence. Query 6.3 is a neutral
   forecast sensitivity, not a recommendation. Do not recommend changing a

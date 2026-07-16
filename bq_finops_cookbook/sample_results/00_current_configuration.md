@@ -48,7 +48,8 @@ Since there are no active reservation assignments and all queries are billed via
 - **Cached Queries:** 0 queries
 - **Positive-Slot Compute Queries:** 160 queries
 - **Zero/Unknown-Compute Queries:** 0 queries
-- **Failed Positive-Slot Queries:** 3 queries (overlapping diagnostic subset)
+- **Failed Positive-Slot Queries:** 3 queries (overlapping diagnostic subset;
+  0.04 slot-hours grouped by reason in Query 4.8)
 - **Null-Reservation Positive-Slot Queries:** 160 queries (100%)
 - **Reservation Positive-Slot Queries:** 0 queries (0%)
 
@@ -69,3 +70,4 @@ Since there are no active reservation assignments and all queries are billed via
 |---|---|---|---|---|---|
 | Reservation configuration fields | https://docs.cloud.google.com/bigquery/docs/information-schema-reservations | 2026-07-15 | Synthetic Standard reservation | PASS | Includes legacy autoscale and predictability fields |
 | Cached query classification | https://docs.cloud.google.com/bigquery/docs/reservations-workload-management | 2026-07-15 | Synthetic query jobs | PASS | Cached jobs are reported separately |
+| Timeline overlap partitioning | https://docs.cloud.google.com/bigquery/docs/information-schema-jobs-timeline | 2026-07-16 | Declared synthetic analysis window | PASS | Fixture assumes the derived overlap bound retains pre-window jobs with in-window timeslices |
