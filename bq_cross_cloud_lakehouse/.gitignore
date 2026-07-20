@@ -1,0 +1,15 @@
+# ---- Local secrets / real values: NEVER commit ----
+.env
+config.local.env
+
+# Re-include the safe template (root .gitignore's *.env rule would otherwise hide it)
+!config.example.env
+
+# Rendered artifacts that may contain account IDs or the BigLake service-account ID
+.generated/
+*trust_policy_comprehensive*.json
+*.local.json
+
+# AWS CLI stray files (creds should live in ~/.aws, not here)
+credentials
+aws_credentials*
