@@ -9,8 +9,10 @@ the `bq_cross_cloud_lakehouse/` directory and have created `config.local.env`.
 - `./aws/01_verify.sh` → confirms account + region.
 - AWS guardrails (console, as root): root MFA, a **Zero-spend** budget, a **$1**
   monthly budget with email alerts, and **Cost Anomaly Detection** enabled.
-- GCP guardrails: a budget + alert on the billing account; confirm Preview access
-  with `gcloud alpha biglake iceberg catalogs list --project=<PROJECT>`.
+- GCP guardrails: a budget + alert on the billing account; enable the required
+  APIs with `gcloud services enable biglake.googleapis.com bigquery.googleapis.com`;
+  confirm Preview access with
+  `gcloud alpha biglake iceberg catalogs list --project=<PROJECT>`.
 
 ## Phase 2 — AWS Iceberg dataset
 
