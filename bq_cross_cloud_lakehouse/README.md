@@ -41,12 +41,16 @@ Tear everything down with the `90_teardown.sh` scripts afterward.
 
 - `gcloud` (with `alpha` component), `bq`, and AWS CLI v2.
 - A GCP project allowlisted for the cross-cloud Lakehouse Preview, with
-  `roles/biglake.admin` (+ `bigquery.jobUser`, `biglake.viewer` to query).
+  `roles/biglake.admin` (+ `roles/bigquery.jobUser`, `roles/bigquery.dataViewer`,
+  `roles/biglake.viewer` to query).
 - An AWS account + an IAM identity with rights to create S3/Glue/Athena/IAM.
 
 ## Setup
 
 ```bash
+# Enable the required Google Cloud APIs (once per project).
+gcloud services enable biglake.googleapis.com bigquery.googleapis.com
+
 cp config.example.env config.local.env   # then edit with your real values
 aws configure                            # stores keys in ~/.aws, region us-east-1
 ```

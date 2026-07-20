@@ -17,6 +17,9 @@ echo "== Delete IAM role policy + role =="
 aws iam delete-role-policy --role-name "${AWS_ROLE_NAME}" --policy-name "${AWS_POLICY_NAME}" 2>/dev/null || true
 aws iam delete-role --role-name "${AWS_ROLE_NAME}" 2>/dev/null || true
 
+echo "== Remove locally-rendered policy/trust artifacts =="
+rm -rf .generated 2>/dev/null || true
+
 echo
 echo "OPTIONAL (removes the demo CLI identity entirely = rotates the leaked key):"
 echo "  # list + delete access keys, then the user:"
