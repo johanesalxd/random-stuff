@@ -3,7 +3,29 @@
 End-to-end steps, timing, and the demo talk-track. All commands assume you are in
 the `bq_cross_cloud_lakehouse/` directory and have created `config.local.env`.
 
-## Phase 1 — Tooling + guardrails (done during prep)
+## How the setup works (OIDC bootstrap)
+
+There's a deliberate ordering: the AWS role must trust a GCP service account that
+**doesn't exist until the catalog is created**. So we create the role with a
+placeholder trust, create the catalog to mint the service-account ID, then finalize
+the trust — and only then enable metadata refresh.
+
+```mermaid
+sequenceDiagram
+    participant U as You (CLI)
+    participant A as AWS IAM
+    participant G as GCP BigLake
+    U->>A: create role w/ PLACEHOLDER trust + Glue/S3 policy
+    U->>G: create federated catalog (glue warehouse = AWS acct id)
+    G-->>U: biglake-service-account-id
+    U->>A: finalize trust policy (aud + sub = SA id)
+    U->>G: enable refresh (300s)
+    G->>A: AssumeRoleWithWebIdentity (OIDC)
+    G->>A: read Glue metadata -> sync namespaces
+    Note over U,G: bq query -> reads S3 with vended creds
+```
+
+## Phase 1 — Tooling + guardrails (prep)
 
 - Install AWS CLI v2, `aws configure` (region `us-east-1`, output `json`).
 - `./aws/01_verify.sh` → confirms account + region.
@@ -27,10 +49,13 @@ the `bq_cross_cloud_lakehouse/` directory and have created `config.local.env`.
 ```bash
 ./gcp/10_create_federated_catalog.sh          # note the printed BigLake SA ID
 ./aws/30_update_trust_policy.sh <BIGLAKE_SA_ID>
-sleep 120                                      # let IAM propagate
+sleep 120                                      # let AWS IAM trust propagate
 ./gcp/20_enable_refresh.sh
 ./gcp/30_verify.sh                             # expect namespace: demo_db
 ```
+
+The first metadata refresh can take a minute or two after you enable it — re-run
+`./gcp/30_verify.sh` until `demo_db` appears.
 
 ## Phase 4 — Query + talk-track
 
@@ -46,9 +71,10 @@ sleep 120                                      # let IAM propagate
 3. Run `gcp/40_query.sh` — "Standard BigQuery SQL, 4-part path
    `project.catalog.namespace.table`, querying AWS data live, **no copy**."
 4. Show the aggregate query — "Metadata is cached and refreshed every 5 minutes;
-   queries read S3 directly with short-lived vended credentials."
+   queries read S3 directly with short-lived vended credentials, and results are
+   cached in Google Cloud to avoid repeated egress."
 
-## Phase 5 — Teardown (right after the demo)
+## Phase 5 — Teardown (optional; only when you want to stop spend)
 
 ```bash
 ./gcp/90_teardown.sh
@@ -69,3 +95,11 @@ Then, to fully stop spend / rotate the demo credential:
 - **No namespaces listed** — confirm the Glue database/table exist in the same
   `AWS_REGION` and that `--glue-warehouse` is the 12-digit account ID.
 - Preview support: biglake-help@google.com
+
+## References
+
+- [About cross-cloud Lakehouse](https://docs.cloud.google.com/lakehouse/docs/about-cross-cloud-lakehouse)
+- [Set up cross-cloud Lakehouse for AWS Glue](https://docs.cloud.google.com/lakehouse/docs/set-up-cross-cloud-lakehouse-aws-glue)
+- [Use cross-cloud Lakehouse (query)](https://docs.cloud.google.com/lakehouse/docs/use-cross-cloud-lakehouse)
+- [Supported regions & capabilities](https://docs.cloud.google.com/lakehouse/docs/regions-capabilities-cross-cloud-lakehouse)
+- [Credential vending](https://docs.cloud.google.com/lakehouse/docs/credential-vending)
