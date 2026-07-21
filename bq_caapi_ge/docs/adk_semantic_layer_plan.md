@@ -456,6 +456,21 @@ Phase 1 status:
 - Test contract validation and byte-stable SQL compilation.
 - No Knowledge Catalog dependency yet; use contract-only intent selection.
 
+Phase 2 status:
+
+- `config/semantic_contracts/thelook_orders.yaml` defines the first certified
+  metrics: completed order count, completed revenue, average order value, and
+  top users by completed revenue.
+- `semantic.registry` loads and validates metric, dimension, table, join,
+  allowed-filter, and reachability references.
+- `semantic.compiler` emits deterministic BigQuery SQL with required filters,
+  declared joins, grouping, ordering, limits, and user filters as query
+  parameters.
+- Tests cover stable SQL, required filters, parameterization, unsupported
+  metrics, unsupported dimensions, unsupported filter operators, IN filters, and
+  unreachable dimensions.
+- The compiler is not wired into the ADK graph yet.
+
 ### Phase 3: Local certified query execution
 
 - Add `semantic/executor.py`.

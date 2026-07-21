@@ -1,0 +1,131 @@
+version: 1
+dataset: thelook_ecommerce
+owner: analytics-platform
+certified: true
+
+tables:
+  users:
+    primary_key: id
+    grain: user
+  orders:
+    primary_key: order_id
+    grain: order
+    foreign_keys:
+      user_id: users.id
+  order_items:
+    primary_key: id
+    grain: order_item
+    foreign_keys:
+      order_id: orders.order_id
+      user_id: users.id
+
+joins:
+  users__orders:
+    left: users
+    right: orders
+    "on": users.id = orders.user_id
+    relationship: one_to_many
+  orders__order_items:
+    left: orders
+    right: order_items
+    "on": orders.order_id = order_items.order_id
+    relationship: one_to_many
+
+dimensions:
+  user_id:
+    label: User ID
+    description: Unique user identifier.
+    table: users
+    sql: users.id
+    synonyms: [customer id]
+  order_status:
+    label: Order status
+    description: Current lifecycle status for an order.
+    table: orders
+    sql: orders.status
+    synonyms: [status]
+  country:
+    label: User country
+    description: Country associated with the user profile.
+    table: users
+    sql: users.country
+    synonyms: [market, geography]
+
+metrics:
+  completed_order_count:
+    label: Completed orders
+    description: Number of distinct orders with completed status.
+    synonyms: [finished orders, complete orders]
+    type: count_distinct
+    base_table: orders
+    sql: orders.order_id
+    required_filters:
+      - orders.status = 'Complete'
+    allowed_dimensions:
+      - order_status
+      - country
+    join_path:
+      - users__orders
+    allowed_filters:
+      order_status: ["=", "IN"]
+      country: ["=", "IN"]
+
+  completed_revenue:
+    label: Completed revenue
+    description: Total sale price for completed order items.
+    synonyms: [revenue, sales, completed sales]
+    type: sum
+    base_table: order_items
+    sql: order_items.sale_price
+    required_filters:
+      - order_items.status = 'Complete'
+    allowed_dimensions:
+      - user_id
+      - country
+    join_path:
+      - orders__order_items
+      - users__orders
+    allowed_filters:
+      user_id: ["=", "IN"]
+      country: ["=", "IN"]
+
+  average_order_value:
+    label: Average order value
+    description: Completed revenue divided by completed order count.
+    synonyms: [aov, average completed order value]
+    type: ratio
+    base_table: order_items
+    numerator_sql: SUM(order_items.sale_price)
+    denominator_sql: COUNT(DISTINCT order_items.order_id)
+    required_filters:
+      - order_items.status = 'Complete'
+    allowed_dimensions:
+      - country
+    join_path:
+      - orders__order_items
+      - users__orders
+    allowed_filters:
+      country: ["=", "IN"]
+
+  top_users_by_completed_revenue:
+    label: Top users by completed revenue
+    description: Completed revenue grouped by user.
+    synonyms: [best users, top customers, top spenders]
+    type: sum
+    base_table: order_items
+    sql: order_items.sale_price
+    required_filters:
+      - order_items.status = 'Complete'
+    required_dimensions:
+      - user_id
+    allowed_dimensions:
+      - user_id
+      - country
+    join_path:
+      - orders__order_items
+      - users__orders
+    allowed_filters:
+      user_id: ["=", "IN"]
+      country: ["=", "IN"]
+    default_order_by: metric_desc
+    default_limit: 10
