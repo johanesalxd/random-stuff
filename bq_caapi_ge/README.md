@@ -29,8 +29,11 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 
 ```text
 ├── scripts/
-│   ├── admin_tools.py            # Create/update CA API data agents
-│   └── register_ge_agents.py     # Fetch A2A card and register in GE
+│   ├── enrich_bigquery_metadata.py # Run Dataplex profile and docs scans
+│   ├── admin_tools.py              # Create/update CA API data agents
+│   └── register_ge_agents.py       # Fetch A2A card and register in GE
+├── config/
+│   └── agent_definitions.py      # Minimal agent table grouping
 ├── advanced/                     # Custom ADK runtime (see advanced/README.md)
 │   ├── app/                      # ADK agent packages
 │   ├── scripts/                  # Deploy, auth, and registration scripts
@@ -50,6 +53,8 @@ reads it directly via `external_access_token_key` on every tool call — no cust
    - Conversational Analytics API (`geminidataanalytics.googleapis.com`)
    - Discovery Engine API (`discoveryengine.googleapis.com`)
    - BigQuery API (`bigquery.googleapis.com`)
+   - Dataplex API (`dataplex.googleapis.com`)
+   - Gemini for Google Cloud API (`cloudaicompanion.googleapis.com`)
 3. OAuth 2.0 client credentials (Client ID + Secret) with redirect URIs:
    - `https://vertexaisearch.cloud.google.com/oauth-redirect`
    - `https://vertexaisearch.cloud.google.com/static/oauth/oauth.html`
@@ -77,14 +82,50 @@ Edit `.env` with your project details:
 
 ```bash
 GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_PROJECT_NUMBER=your-project-number
+BIGQUERY_LOCATION=us
+DATAPLEX_LOCATION=us
 BIGQUERY_DATASET_ID=your-dataset-id
-AGENT_ORDERS_ID=your-agent-id
+AGENT_ORDERS_ID=order_user_agent
+AGENT_INVENTORY_ID=inventory_product_agent
 GEMINI_APP_ID=your-gemini-app-id
 OAUTH_CLIENT_ID=your-oauth-client-id
 OAUTH_CLIENT_SECRET=your-oauth-client-secret
+AUTH_RESOURCE_ORDERS=bq-caapi-oauth-orders
+AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
 ```
 
-### 3. Create Data Agents
+### 3. Enrich BigQuery Metadata
+
+Run Dataplex scans to automate the same metadata generation you can trigger from
+BigQuery Studio. Publishing is enabled by default so generated descriptions,
+queries, profiles, and relationships are persisted to Dataplex Catalog and
+Knowledge Catalog for the selected dataset and tables.
+
+By default, data profile scans use `STANDARD` mode with `10%` sampling. Change
+`DATA_PROFILE_MODE` and `DATA_PROFILE_SAMPLING_PERCENT` in `.env` if you need a
+different profiling setup.
+
+```bash
+# Preview the Dataplex payloads without creating scans.
+uv run python scripts/enrich_bigquery_metadata.py --dry-run
+
+# Create and run scans asynchronously. Publishing is enabled by default.
+uv run python scripts/enrich_bigquery_metadata.py
+
+# Optional: wait for scan jobs to complete for admin/debugging workflows.
+uv run python scripts/enrich_bigquery_metadata.py --wait
+```
+
+Use `--no-publish` only when you want ad hoc scan results that are not persisted
+to the catalog.
+
+After asynchronous scans finish, review the generated descriptions, suggested
+queries, profiles, and relationships in BigQuery or Knowledge Catalog. Add or
+adjust verified queries in the agent later if you need deterministic business
+logic.
+
+### 4. Create Data Agents
 
 Create the CA API data agents in your project:
 
@@ -92,10 +133,12 @@ Create the CA API data agents in your project:
 uv run python scripts/admin_tools.py
 ```
 
-This creates (or updates) the backend data agents with BigQuery table
-references and system instructions.
+This creates or updates backend data agents with the minimal table lists from
+`config/agent_definitions.py` and short scope instructions. Table descriptions,
+column descriptions, data profiles, and dataset relationships are managed in
+BigQuery and Knowledge Catalog, not in local agent config.
 
-### 4. Register in Gemini Enterprise
+### 5. Register in Gemini Enterprise
 
 Fetch the A2A agent cards from the CA API and register them in GE:
 
@@ -103,7 +146,7 @@ Fetch the A2A agent cards from the CA API and register them in GE:
 # Register specific agents with an OAuth authorization resource
 uv run python scripts/register_ge_agents.py \
   --agents order_user_agent inventory_product_agent \
-  --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inv
+  --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inventory
 
 # List agents registered in the GE app
 uv run python scripts/register_ge_agents.py --list
@@ -114,12 +157,50 @@ The script:
 2. Creates an OAuth authorization resource in GE (if `--auth-id` is provided)
 3. Registers each agent in GE via the Discovery Engine API
 
-### 5. Use in Gemini Enterprise
+If you changed `AGENT_ORDERS_ID`, `AGENT_INVENTORY_ID`, `AUTH_RESOURCE_ORDERS`,
+or `AUTH_RESOURCE_INVENTORY`, pass those values to `--agents` and `--auth-ids`.
+
+### 6. Use in Gemini Enterprise
 
 Open your Gemini Enterprise app in the Google Cloud console. The registered
 agents appear as available data agents for users to query.
 
 ## Script Reference
+
+### `scripts/enrich_bigquery_metadata.py`
+
+Run Dataplex data profile and data documentation scans for the configured
+dataset and agent tables.
+
+```bash
+# Run default metadata enrichment scans asynchronously and publish results.
+uv run python scripts/enrich_bigquery_metadata.py
+
+# Generate only table and column descriptions.
+uv run python scripts/enrich_bigquery_metadata.py \
+  --skip-profile \
+  --skip-dataset-docs \
+  --generation-scope TABLE_AND_COLUMN_DESCRIPTIONS
+
+# Override standard profiling settings and export profile results.
+uv run python scripts/enrich_bigquery_metadata.py \
+  --profile-mode STANDARD \
+  --sampling-percent 10 \
+  --profile-results-table your-project.metadata.profile_results \
+  --wait
+```
+
+The script runs these scan types:
+
+- Dataset `DATA_DOCUMENTATION` scans for dataset descriptions, relationship
+  insights, and cross-table query suggestions.
+- Table `DATA_PROFILE` scans for null percentages, cardinality, value
+  distributions, min/max/mean, quartiles, and other profile statistics.
+- Table `DATA_DOCUMENTATION` scans for table descriptions, column descriptions,
+  and SQL query suggestions.
+
+The script logs Dataplex scan job IDs and returns immediately by default. Use
+`--wait` when you want the command to poll until scan jobs finish.
 
 ### `scripts/admin_tools.py`
 
@@ -129,6 +210,10 @@ updates existing agents on subsequent runs.
 ```bash
 uv run python scripts/admin_tools.py
 ```
+
+The script intentionally does not read Dataplex scan results or write local
+semantic metadata. The agent references BigQuery tables, and generated metadata
+is managed by BigQuery, Dataplex, and Knowledge Catalog.
 
 ### `scripts/register_ge_agents.py`
 
