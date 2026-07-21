@@ -69,6 +69,9 @@ Current dependency state:
 - Verified the current `DataAgentToolset` imports still load under ADK 2.5.0,
   so the existing advanced baseline can remain while the certified path is
   built.
+- Phase 1 uses the installed ADK 2.5 route behavior: functions emit
+  `Event(route=...)`, ADK maps that to `event.actions.route`, and routed
+  workflow edges use a route-to-node mapping.
 
 ## Agents CLI Findings
 
@@ -99,27 +102,35 @@ Observed local prerequisite status:
 - Google Cloud SDK 567.0.0 is available.
 - Terraform is not installed. This is not blocking until generated
   infrastructure workflows are needed.
+- Agents CLI 1.1.0 is installed globally.
+- OpenCode can load the Agents CLI skills from `~/.agents/skills` after restart.
 
 Safe verification commands:
 
 ```bash
 uv sync --extra advanced
-uv run adk --version
-uv run adk --help
-uv run adk api_server --help
+uv run --extra advanced adk --version
+uv run --extra advanced adk --help
+uv run --extra advanced adk api_server --help
 uvx google-agents-cli --help
 uvx google-agents-cli setup --workspace --skip-auth --dry-run
 ```
 
-Do not run real Agents CLI setup automatically in this repo. The real command
-can install tools and skills into global or workspace coding-agent
-configuration:
+Do not run real Agents CLI setup automatically. The real command can install
+tools and skills into global or workspace coding-agent configuration:
 
 ```bash
 uvx google-agents-cli setup --workspace --skip-auth
 ```
 
-Run it only when explicitly approved. The dry run showed it would execute:
+Run it only when explicitly approved. In this environment, global OpenCode skill
+installation was approved and run with:
+
+```bash
+uvx google-agents-cli setup --skip-auth --agent opencode
+```
+
+The dry run showed workspace setup would execute:
 
 ```text
 uv tool install google-agents-cli
@@ -129,9 +140,15 @@ npx -y skills@1.4.8 add https://github.com/google/agents-cli -y
 Local ADK development should prefer:
 
 ```bash
-uv run adk web advanced/app --port 8080 --reload_agents
-uv run adk api_server advanced/app --port 8000 --auto_create_session --reload_agents
+uv run --extra advanced adk web advanced/app --port 8080 --reload_agents
+uv run --extra advanced adk api_server advanced/app --port 8000 --auto_create_session --reload_agents
 ```
+
+`agents-cli info` currently reports that this directory is not an Agents CLI
+project. Do not apply `agents-cli scaffold enhance .` in Phase 1. This repo
+already has a demo-specific structure, so preserve it until the local certified
+path is working. Revisit Agents CLI enhancement later when deployment,
+evaluation, or observability assets are needed.
 
 Deployment should remain deferred until the local certified path and evaluations
 pass. When deployment starts, prefer Agents CLI for deployment skeletons and
@@ -407,18 +424,29 @@ Initial graph nodes:
 
 - Add this plan document.
 - Do not modify runtime code yet.
+- Status: complete.
 
 ### Phase 1: ADK 2 local skeleton
 
 - Update advanced dependency to ADK 2.x.
 - Verify local CLI commands:
   - `uv sync --extra advanced`
-  - `uv run adk --help`
-  - `uv run adk api_server advanced/app --port 8000`
+  - `uv run --extra advanced adk --help`
+  - `uv run --extra advanced adk api_server advanced/app --port 8000`
 - Add `advanced/app/certified_analytics/agent.py` with a minimal graph that
   returns a static certified/refusal response.
 - Update `advanced/test_web/` to call local ADK API endpoints instead of Agent
   Engine when `ADK_LOCAL_BASE_URL` is set.
+
+Phase 1 status:
+
+- Dependency and CLI verification are complete.
+- `advanced/app/certified_analytics/agent.py` exists as a function-only ADK 2
+  workflow skeleton.
+- `adk run` verifies both static certified and static refusal routes.
+- `adk api_server advanced/app` starts successfully with the existing agents and
+  the new `certified_analytics` agent discoverable.
+- `advanced/test_web/` local API server integration is still pending.
 
 ### Phase 2: Contract registry and compiler
 
@@ -486,7 +514,6 @@ Minimum tests before deployment:
 
 ## Open Questions
 
-- Which exact ADK 2.x version should be pinned after local verification?
 - Should local execution default to ADC or require OAuth token mode from day one?
 - What is the minimum useful Knowledge Catalog lookup for Phase 4: glossary terms,
   table descriptions, column descriptions, profile summaries, or all of them?
