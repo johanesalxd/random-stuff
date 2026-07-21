@@ -67,9 +67,6 @@ Current dependency state:
   verify `uv run adk --help`, `uv run adk run ...`, and
   `uv run adk api_server ...` locally.
 
-No OpenCode skill is required for this task. The work is application design and
-implementation, not OpenCode configuration.
-
 ## Target Architecture
 
 ```mermaid
@@ -156,11 +153,18 @@ Minimum fields:
 ```yaml
 version: 1
 dataset: thelook_ecommerce
+owner: analytics-platform
+certified: true
 
 tables:
+  users:
+    primary_key: id
+    grain: user
   orders:
     primary_key: order_id
     grain: order
+    foreign_keys:
+      user_id: users.id
 
 joins:
   users__orders:
@@ -171,15 +175,23 @@ joins:
 
 dimensions:
   order_status:
+    label: Order status
+    description: Current lifecycle status for an order.
     table: orders
     sql: orders.status
+    synonyms: [status]
   country:
+    label: User country
+    description: Country associated with the user profile.
     table: users
     sql: users.country
+    synonyms: [market, geography]
 
 metrics:
   completed_order_count:
     label: Completed orders
+    description: Number of distinct orders with completed status.
+    synonyms: [finished orders, complete orders]
     type: count_distinct
     base_table: orders
     sql: orders.order_id
@@ -190,6 +202,9 @@ metrics:
       - country
     join_path:
       - users__orders
+    allowed_filters:
+      order_status: ["=", "IN"]
+      country: ["=", "IN"]
 ```
 
 The first contract should include only a few high-risk metrics:
@@ -201,6 +216,24 @@ The first contract should include only a few high-risk metrics:
 
 These cover common failure modes: missing status filters, wrong count grain,
 join fan-out, and ambiguous business wording.
+
+The contract is the source of truth. Later phases can generate other artifacts
+from it, such as CA API verified-query templates, Knowledge Catalog glossary or
+aspect payloads, LookML, or a native BigQuery semantic model when available.
+
+Validation rules should be strict:
+
+- Every metric, dimension, table, and join reference must exist.
+- Every requested dimension table must be reachable from the metric base table
+  through the declared join graph.
+- Join traversal can be bidirectional for compilation, but the compiler must
+  derive the SQL joins from declared relationships, not from model output.
+- Every user-provided filter must target an allowed dimension and operator.
+- Required filters must always be injected by the compiler.
+- Metrics that can fan out must declare grain and use distinct or measure-safe
+  expressions.
+- The same validated intent must compile to byte-stable SQL, except for
+  parameter names or deterministic formatting changes.
 
 ## Knowledge Catalog Role
 
@@ -333,20 +366,24 @@ Initial graph nodes:
 - Feed compact grounding context to `select_intent` only.
 - Keep contract as the source of truth for SQL.
 
-### Phase 5: CA API fallback comparison
+### Phase 5: CA API fallback and verified-query outputs
 
 - Add an explicit exploratory branch that can call the existing CA API agent.
 - Label fallback responses as `certified=false`.
 - Do not invoke fallback for certified-looking questions that fail validation.
+- Generate CA API verified-query templates from certified contract metrics where
+  practical. This helps project curated contract logic back into the out-of-the-
+  box BQ CA path without making BQ CA the source of truth.
 
 ### Phase 6: Evaluation harness
 
-- Port the internal DBS rung idea into this project:
+- Port the three-rung evaluation pattern into this project:
   - Rung 1: BQ CA baseline.
   - Rung 2: BQ CA + Knowledge Catalog metadata.
   - Rung 3: ADK graph + semantic contract.
 - Add covered and out-of-coverage question YAML files.
-- Track consistency, correctness, refusal correctness, and coverage gaps.
+- Track consistency, correctness, refusal correctness, coverage gaps, intent
+  confusion, and certified-vs-exploratory routing behavior.
 
 ### Phase 7: Deployment and GE registration
 
@@ -365,9 +402,11 @@ Minimum tests before deployment:
 - Compiler rejects unsupported metrics, dimensions, filters, and operators.
 - Compiler produces stable SQL for the same intent.
 - Compiler uses query parameters for user-provided values.
+- Compiler validates dimension reachability from the metric base table.
 - Covered golden questions return expected results.
 - Out-of-coverage questions refuse.
 - Exploratory fallback is never marked certified.
+- Certified-looking failures never silently fall back to CA API.
 - Test web displays certification metadata.
 
 ## Open Questions
@@ -376,14 +415,14 @@ Minimum tests before deployment:
 - Should local execution default to ADC or require OAuth token mode from day one?
 - What is the minimum useful Knowledge Catalog lookup for Phase 4: glossary terms,
   table descriptions, column descriptions, profile summaries, or all of them?
-- Should the contract generate CA API verified queries as an output later?
 - Should BigQuery Graph be introduced only for relationship/path questions, or
   should it be part of the first compiler prototype?
 
 ## Position on BigQuery Graph
 
-BigQuery Graph can help with relationship and traversal questions, but it should
-not replace the metric contract.
+BigQuery Graph can help with relationship and traversal questions, and graph
+measures can help with fan-out-safe aggregation. It should not replace the first
+metric contract.
 
 Use it later for:
 
@@ -394,3 +433,13 @@ Use it later for:
 
 Do not depend on it for the first certified BI slice. The first slice should
 focus on metric formulas, joins, filters, and aggregation grain.
+
+Important limitations to account for when evaluating BigQuery Graph:
+
+- Graph measures are a Preview feature.
+- Conversational analytics can use at most one graph data source per agent or
+  conversation.
+- Conversational analytics cannot combine graph and table sources in the same
+  agent or conversation.
+- `GRAPH_EXPAND` has modeling constraints, including root-node requirements, and
+  cached-result behavior must be handled carefully for correctness.
