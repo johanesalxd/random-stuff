@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from semantic.types import (  # noqa: E402
     ContractError,
     Dimension,
     IntentFilter,
+    Join,
     QueryIntent,
     SemanticContract,
 )
@@ -63,7 +65,7 @@ def test_compile_query_completed_orders_by_country_is_stable():
             "ORDER BY country",
         ]
     )
-    assert first.certified is True
+    assert first.contract_certified is True
     assert first.parameters == ()
 
 
@@ -115,6 +117,16 @@ def test_compile_query_average_order_value_uses_safe_divide():
     assert "order_items.status = 'Complete'" in compiled.sql
 
 
+def test_compile_query_base_table_only_does_not_emit_unused_join():
+    """Tests metrics without dimensions query only their base table."""
+    contract = load_contract()
+
+    compiled = compile_query(contract, QueryIntent(metric="completed_revenue"))
+
+    assert "FROM `thelook_ecommerce.order_items` AS order_items" in compiled.sql
+    assert "JOIN" not in compiled.sql
+
+
 def test_compile_query_top_users_applies_required_dimension_and_limit():
     """Tests top-user metric injects grouping, ordering, and default limit."""
     contract = load_contract()
@@ -127,6 +139,17 @@ def test_compile_query_top_users_applies_required_dimension_and_limit():
     assert "ORDER BY top_users_by_completed_revenue DESC" in compiled.sql
     assert compiled.sql.endswith("LIMIT 10")
     assert compiled.dimensions == ("user_id",)
+
+
+def test_compile_query_rejects_excessive_limit():
+    """Tests structured intents cannot request unbounded result limits."""
+    contract = load_contract()
+
+    with pytest.raises(CompileError, match="must not exceed 1000"):
+        compile_query(
+            contract,
+            QueryIntent(metric="top_users_by_completed_revenue", limit=1001),
+        )
 
 
 def test_compile_query_rejects_unsupported_metric():
@@ -158,6 +181,50 @@ def test_compile_query_rejects_unsupported_filter_operator():
             QueryIntent(
                 metric="completed_order_count",
                 filters=(IntentFilter("country", "!=", "US"),),
+            ),
+        )
+
+
+def test_compile_query_rejects_unsupported_filter_dimension():
+    """Tests filters outside metric coverage do not compile."""
+    contract = load_contract()
+
+    with pytest.raises(CompileError, match="filter user_id is not allowed"):
+        compile_query(
+            contract,
+            QueryIntent(
+                metric="completed_order_count",
+                filters=(IntentFilter("user_id", "=", 1),),
+            ),
+        )
+
+
+@pytest.mark.parametrize("value", [[], ["US", 1]])
+def test_compile_query_rejects_unsafe_in_filter_values(value):
+    """Tests IN filters require non-empty values of one type."""
+    contract = load_contract()
+
+    with pytest.raises(CompileError, match="requires"):
+        compile_query(
+            contract,
+            QueryIntent(
+                metric="completed_revenue",
+                filters=(IntentFilter("country", "IN", value),),
+            ),
+        )
+
+
+@pytest.mark.parametrize("value", [None, {"country": "US"}])
+def test_compile_query_rejects_unsupported_scalar_filter_values(value):
+    """Tests scalar filters use only supported BigQuery parameter types."""
+    contract = load_contract()
+
+    with pytest.raises(CompileError, match="unsupported filter value type"):
+        compile_query(
+            contract,
+            QueryIntent(
+                metric="completed_revenue",
+                filters=(IntentFilter("country", "=", value),),
             ),
         )
 
@@ -195,4 +262,156 @@ def test_validate_contract_rejects_unreachable_dimension():
     )
 
     with pytest.raises(ContractError, match="not reachable"):
+        validate_contract(bad_contract)
+
+
+def test_validate_contract_rejects_unknown_join_relationship():
+    """Tests join cardinality metadata uses a supported relationship."""
+    contract = load_contract()
+    join = contract.joins["users__orders"]
+    bad_contract = replace(
+        contract,
+        joins={
+            **contract.joins,
+            join.name: replace(join, relationship="sometimes_many"),
+        },
+    )
+
+    with pytest.raises(ContractError, match="unsupported relationship"):
+        validate_contract(bad_contract)
+
+
+def test_validate_contract_requires_foreign_key_to_primary_key():
+    """Tests declared foreign keys target the registered primary key."""
+    contract = load_contract()
+    orders = contract.tables["orders"]
+    bad_contract = replace(
+        contract,
+        tables={
+            **contract.tables,
+            orders.name: replace(
+                orders,
+                foreign_keys={"user_id": "users.legacy_id"},
+            ),
+        },
+    )
+
+    with pytest.raises(ContractError, match="must reference the primary key"):
+        validate_contract(bad_contract)
+
+
+def test_validate_contract_rejects_sum_dimension_with_join_fan_out():
+    """Tests additive metrics cannot traverse a fan-out join."""
+    contract = load_contract()
+    metric = contract.metrics["completed_revenue"]
+    bad_contract = replace(
+        contract,
+        metrics={
+            **contract.metrics,
+            metric.name: replace(
+                metric,
+                base_table="users",
+                sql="users.id",
+                allowed_dimensions=("order_status",),
+                allowed_filters={},
+                join_path=("users__orders",),
+            ),
+        },
+    )
+
+    with pytest.raises(ContractError, match="introduces fan-out"):
+        validate_contract(bad_contract)
+
+
+def test_validate_contract_uses_compiler_join_order_for_fan_out():
+    """Tests a later safe route cannot hide the compiler's earlier fan-out path."""
+    contract = load_contract()
+    metric = contract.metrics["completed_revenue"]
+    item_dimension = Dimension(
+        name="item_id",
+        label="Item ID",
+        description="Order item identifier.",
+        table="order_items",
+        sql="order_items.id",
+    )
+    safe_join = Join(
+        name="users__items_safe",
+        left="users",
+        right="order_items",
+        on="users.id = order_items.user_id",
+        relationship="one_to_one",
+    )
+    bad_contract = replace(
+        contract,
+        joins={**contract.joins, safe_join.name: safe_join},
+        dimensions={**contract.dimensions, item_dimension.name: item_dimension},
+        metrics={
+            **contract.metrics,
+            metric.name: replace(
+                metric,
+                base_table="users",
+                sql="users.id",
+                allowed_dimensions=(item_dimension.name,),
+                allowed_filters={},
+                join_path=(
+                    "users__orders",
+                    safe_join.name,
+                ),
+            ),
+        },
+    )
+
+    with pytest.raises(ContractError, match="introduces fan-out"):
+        validate_contract(bad_contract)
+
+
+def test_validate_contract_rejects_out_of_order_join_path():
+    """Tests validation rejects paths the ordered compiler cannot emit."""
+    contract = load_contract()
+    metric = contract.metrics["completed_revenue"]
+    item_dimension = Dimension(
+        name="item_id",
+        label="Item ID",
+        description="Order item identifier.",
+        table="order_items",
+        sql="order_items.id",
+    )
+    bad_contract = replace(
+        contract,
+        dimensions={**contract.dimensions, item_dimension.name: item_dimension},
+        metrics={
+            **contract.metrics,
+            metric.name: replace(
+                metric,
+                base_table="users",
+                allowed_dimensions=(item_dimension.name,),
+                allowed_filters={},
+                join_path=("orders__order_items", "users__orders"),
+            ),
+        },
+    )
+
+    with pytest.raises(ContractError, match="not reachable"):
+        validate_contract(bad_contract)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"required_dimensions": ("user_id",), "allowed_dimensions": ()}, "allowed"),
+        ({"default_order_by": "random"}, "unsupported default order"),
+        ({"default_limit": 0}, "between 1 and 1000"),
+        ({"default_limit": 1001}, "between 1 and 1000"),
+    ],
+)
+def test_validate_contract_rejects_invalid_metric_defaults(changes, message):
+    """Tests metric defaults are valid before runtime compilation."""
+    contract = load_contract()
+    metric = contract.metrics["top_users_by_completed_revenue"]
+    bad_contract = replace(
+        contract,
+        metrics={**contract.metrics, metric.name: replace(metric, **changes)},
+    )
+
+    with pytest.raises(ContractError, match=message):
         validate_contract(bad_contract)

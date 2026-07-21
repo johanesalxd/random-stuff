@@ -7,9 +7,11 @@ from typing import Any
 
 import yaml
 
+from semantic.join_planner import JoinPlanError, plan_joins
 from semantic.types import (
     SUPPORTED_METRIC_TYPES,
     SUPPORTED_OPERATORS,
+    SUPPORTED_RELATIONSHIPS,
     ContractError,
     Dimension,
     Join,
@@ -69,6 +71,10 @@ def validate_contract(contract: SemanticContract) -> None:
                 raise ContractError(f"invalid foreign key target: {reference}")
             if target_table not in contract.tables:
                 raise ContractError(f"unknown foreign key table: {target_table}")
+            if target_column != contract.tables[target_table].primary_key:
+                raise ContractError(
+                    f"foreign key target must reference the primary key: {reference}"
+                )
 
     for join in contract.joins.values():
         if join.left not in contract.tables:
@@ -78,6 +84,10 @@ def validate_contract(contract: SemanticContract) -> None:
         if join.right not in contract.tables:
             raise ContractError(
                 f"join {join.name} references unknown table {join.right}"
+            )
+        if join.relationship not in SUPPORTED_RELATIONSHIPS:
+            raise ContractError(
+                f"join {join.name} has unsupported relationship {join.relationship}"
             )
 
     for dimension in contract.dimensions.values():
@@ -186,6 +196,22 @@ def _validate_metric(contract: SemanticContract, metric: Metric) -> None:
         not metric.numerator_sql or not metric.denominator_sql
     ):
         raise ContractError(f"metric {metric.name} requires numerator and denominator")
+    if not set(metric.required_dimensions).issubset(metric.allowed_dimensions):
+        raise ContractError(
+            f"metric {metric.name} required dimensions must also be allowed"
+        )
+    if metric.default_order_by not in {None, "metric_desc"}:
+        raise ContractError(
+            f"metric {metric.name} has unsupported default order {metric.default_order_by}"
+        )
+    if metric.default_limit is not None and (
+        isinstance(metric.default_limit, bool)
+        or not isinstance(metric.default_limit, int)
+        or not 1 <= metric.default_limit <= 1000
+    ):
+        raise ContractError(
+            f"metric {metric.name} default limit must be between 1 and 1000"
+        )
 
     for join_name in metric.join_path:
         if join_name not in contract.joins:
@@ -198,11 +224,24 @@ def _validate_metric(contract: SemanticContract, metric: Metric) -> None:
             raise ContractError(
                 f"metric {metric.name} references unknown dimension {dimension_name}"
             )
-        if not _is_table_reachable(
-            contract, metric, contract.dimensions[dimension_name].table
-        ):
+        try:
+            planned_joins = plan_joins(
+                contract,
+                metric,
+                {
+                    metric.base_table,
+                    contract.dimensions[dimension_name].table,
+                },
+            )
+        except JoinPlanError as error:
             raise ContractError(
                 f"dimension {dimension_name} is not reachable from metric {metric.name}"
+            ) from error
+        if metric.type in {"sum", "ratio"} and any(
+            planned_join.introduces_fan_out for planned_join in planned_joins
+        ):
+            raise ContractError(
+                f"dimension {dimension_name} introduces fan-out for metric {metric.name}"
             )
 
     for dimension_name, operators in metric.allowed_filters.items():
@@ -216,29 +255,6 @@ def _validate_metric(contract: SemanticContract, metric: Metric) -> None:
                 f"filter {dimension_name} has unsupported operators: "
                 f"{sorted(unsupported_operators)}"
             )
-
-
-def _is_table_reachable(
-    contract: SemanticContract,
-    metric: Metric,
-    table_name: str,
-) -> bool:
-    if table_name == metric.base_table:
-        return True
-
-    reachable_tables = {metric.base_table}
-    changed = True
-    while changed:
-        changed = False
-        for join_name in metric.join_path:
-            join = contract.joins[join_name]
-            if join.left in reachable_tables and join.right not in reachable_tables:
-                reachable_tables.add(join.right)
-                changed = True
-            if join.right in reachable_tables and join.left not in reachable_tables:
-                reachable_tables.add(join.left)
-                changed = True
-    return table_name in reachable_tables
 
 
 def _required_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:

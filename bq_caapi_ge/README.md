@@ -261,8 +261,9 @@ uv run python scripts/register_ge_agents.py --delete 12345678901234567890
 For use cases requiring custom agent orchestration, a standalone frontend,
 or chart visualization support, see [`advanced/README.md`](advanced/README.md).
 
-The advanced path deploys ADK agent packages to Vertex AI Agent Engine with
-custom OAuth identity passthrough. Install the additional dependencies with:
+The advanced path includes legacy Agent Engine wrappers with OAuth identity
+passthrough and a local-first ADK semantic-contract prototype. Install the
+additional dependencies with:
 
 ```bash
 uv sync --extra advanced

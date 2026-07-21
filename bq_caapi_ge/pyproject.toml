@@ -13,6 +13,8 @@ dependencies = [
 [project.optional-dependencies]
 advanced = [
     "google-adk>=2.0.0",
+    "google-cloud-bigquery>=3.42.2",
+    "google-cloud-dataplex>=2.13.0",
 ]
 
 [dependency-groups]
