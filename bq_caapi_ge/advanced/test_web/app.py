@@ -1,8 +1,10 @@
-"""Test web app to simulate Gemini Enterprise OAuth passthrough flow."""
+"""Test web app for OAuth passthrough to Agent Engine or local ADK."""
 
 import json
 import os
 import secrets
+import subprocess
+from typing import Any
 
 import requests
 from dotenv import load_dotenv
@@ -24,10 +26,17 @@ CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 REASONING_ENGINE_ID = os.getenv("ORDERS_REASONING_ENGINE_ID")
 AUTH_RESOURCE_ID = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
+ADK_LOCAL_BASE_URL = os.getenv("ADK_LOCAL_BASE_URL")
+ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "certified_analytics")
 
-if not PROJECT_ID or not REASONING_ENGINE_ID:
+if ADK_LOCAL_BASE_URL:
+    RUNTIME_MODE = "local_adk"
+elif PROJECT_ID and REASONING_ENGINE_ID:
+    RUNTIME_MODE = "agent_engine"
+else:
     raise ValueError(
-        "Required environment variables: GOOGLE_CLOUD_PROJECT, ORDERS_REASONING_ENGINE_ID"
+        "Set ADK_LOCAL_BASE_URL for local ADK mode or set "
+        "GOOGLE_CLOUD_PROJECT and ORDERS_REASONING_ENGINE_ID for Agent Engine mode"
     )
 
 SCOPES = [
@@ -42,6 +51,159 @@ AGENT_ENGINE_BASE = (
     f"https://us-central1-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}"
     f"/locations/us-central1/reasoningEngines/{REASONING_ENGINE_ID}"
 )
+
+
+def _get_gcp_access_token() -> str:
+    result = subprocess.run(
+        ["gcloud", "auth", "print-access-token"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _extract_agent_engine_response(response_body: str) -> str:
+    response_text = ""
+    for line in response_body.strip().split("\n"):
+        if line:
+            try:
+                event = json.loads(line)
+                content = event.get("content", {})
+                parts = content.get("parts", [])
+                for part in parts:
+                    if "text" in part:
+                        response_text += part["text"]
+            except json.JSONDecodeError:
+                continue
+    return response_text
+
+
+def _extract_local_adk_response(events: list[dict[str, Any]]) -> str:
+    for event in reversed(events):
+        output = event.get("output")
+        if output is not None:
+            if isinstance(output, str):
+                return output
+            return json.dumps(output, indent=2)
+
+        content = event.get("content", {})
+        parts = content.get("parts", [])
+        text = "".join(part.get("text", "") for part in parts)
+        if text:
+            return text
+
+    return "No response from agent"
+
+
+def _query_local_adk(message: str, access_token: str, user_email: str):
+    base_url = ADK_LOCAL_BASE_URL.rstrip("/")
+    session_payload = {
+        "state": {
+            AUTH_RESOURCE_ID: access_token,
+        }
+    }
+
+    session_response = requests.post(
+        f"{base_url}/apps/{ADK_LOCAL_APP_NAME}/users/{user_email}/sessions",
+        json=session_payload,
+        timeout=30,
+    )
+    if not session_response.ok:
+        return {
+            "error": f"Failed to create local ADK session: {session_response.text}"
+        }, 500
+
+    session_id = session_response.json().get("id")
+    if not session_id:
+        return {"error": f"Local ADK session has no ID: {session_response.text}"}, 500
+
+    run_payload = {
+        "app_name": ADK_LOCAL_APP_NAME,
+        "user_id": user_email,
+        "session_id": session_id,
+        "new_message": {
+            "role": "user",
+            "parts": [{"text": message}],
+        },
+    }
+    run_response = requests.post(
+        f"{base_url}/run",
+        json=run_payload,
+        timeout=120,
+    )
+    if not run_response.ok:
+        return {"error": f"Local ADK query failed: {run_response.text}"}, 500
+
+    return {
+        "response": _extract_local_adk_response(run_response.json()),
+        "session_id": session_id,
+        "runtime_mode": RUNTIME_MODE,
+        "app_name": ADK_LOCAL_APP_NAME,
+    }
+
+
+def _query_agent_engine(message: str, access_token: str, user_email: str):
+    try:
+        gcp_token = _get_gcp_access_token()
+    except Exception as e:
+        return {"error": f"Failed to get GCP token: {e}"}, 500
+
+    headers = {
+        "Authorization": f"Bearer {gcp_token}",
+        "Content-Type": "application/json",
+    }
+
+    session_payload = {
+        "userId": user_email,
+        "sessionState": {
+            AUTH_RESOURCE_ID: access_token,
+        },
+    }
+
+    create_session_url = f"{AGENT_ENGINE_BASE}/sessions"
+    session_response = requests.post(
+        create_session_url,
+        headers=headers,
+        json=session_payload,
+        timeout=30,
+    )
+
+    if not session_response.ok:
+        return {"error": f"Failed to create session: {session_response.text}"}, 500
+
+    operation = session_response.json()
+    session_name = operation.get("name", "")
+    parts = session_name.split("/sessions/")
+    if len(parts) < 2:
+        return {"error": f"Could not parse session ID from: {session_name}"}, 500
+
+    session_id = parts[1].split("/")[0]
+
+    query_payload = {
+        "input": {
+            "message": message,
+            "user_id": user_email,
+            "session_id": session_id,
+        }
+    }
+    query_response = requests.post(
+        f"{AGENT_ENGINE_BASE}:streamQuery",
+        headers=headers,
+        json=query_payload,
+        timeout=120,
+    )
+
+    if not query_response.ok:
+        return {"error": f"Query failed: {query_response.text}"}, 500
+
+    return {
+        "response": _extract_agent_engine_response(query_response.text)
+        or "No response from agent",
+        "session_id": session_id,
+        "runtime_mode": RUNTIME_MODE,
+        "app_name": REASONING_ENGINE_ID,
+    }
 
 
 def get_oauth_flow():
@@ -120,6 +282,9 @@ def chat():
         token_expiry=session.get("token_expiry"),
         reasoning_engine_id=REASONING_ENGINE_ID,
         auth_resource_id=AUTH_RESOURCE_ID,
+        runtime_mode=RUNTIME_MODE,
+        adk_local_base_url=ADK_LOCAL_BASE_URL,
+        adk_local_app_name=ADK_LOCAL_APP_NAME,
     )
 
 
@@ -138,92 +303,9 @@ def query():
     access_token = session["access_token"]
     user_email = session.get("user_email", "test-user")
 
-    # Get GCP access token for API calls
-    try:
-        import subprocess
-
-        gcp_token = subprocess.run(
-            ["gcloud", "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except Exception as e:
-        return {"error": f"Failed to get GCP token: {e}"}, 500
-
-    headers = {
-        "Authorization": f"Bearer {gcp_token}",
-        "Content-Type": "application/json",
-    }
-
-    # Step 1: Create session with OAuth token in state
-    # This simulates what Gemini Enterprise does
-    session_payload = {
-        "userId": user_email,
-        "sessionState": {
-            AUTH_RESOURCE_ID: access_token,  # Key part - token passed in state
-        },
-    }
-
-    create_session_url = f"{AGENT_ENGINE_BASE}/sessions"
-    session_response = requests.post(
-        create_session_url,
-        headers=headers,
-        json=session_payload,
-        timeout=30,
-    )
-
-    if not session_response.ok:
-        return {"error": f"Failed to create session: {session_response.text}"}, 500
-
-    # Extract session ID from operation response
-    operation = session_response.json()
-    # Session ID is in the operation name: .../sessions/SESSION_ID/operations/...
-    session_name = operation.get("name", "")
-    parts = session_name.split("/sessions/")
-    if len(parts) < 2:
-        return {"error": f"Could not parse session ID from: {session_name}"}, 500
-
-    session_id = parts[1].split("/")[0]
-
-    # Step 2: Query the agent
-    query_url = f"{AGENT_ENGINE_BASE}:streamQuery"
-    query_payload = {
-        "input": {
-            "message": message,
-            "user_id": user_email,
-            "session_id": session_id,
-        }
-    }
-
-    query_response = requests.post(
-        query_url,
-        headers=headers,
-        json=query_payload,
-        timeout=120,
-    )
-
-    if not query_response.ok:
-        return {"error": f"Query failed: {query_response.text}"}, 500
-
-    # Parse streaming response (newline-delimited JSON)
-    response_text = ""
-    for line in query_response.text.strip().split("\n"):
-        if line:
-            try:
-                event = json.loads(line)
-                content = event.get("content", {})
-                parts = content.get("parts", [])
-                for part in parts:
-                    if "text" in part:
-                        response_text += part["text"]
-            except json.JSONDecodeError:
-                continue
-
-    return {
-        "response": response_text or "No response from agent",
-        "session_id": session_id,
-    }
+    if RUNTIME_MODE == "local_adk":
+        return _query_local_adk(message, access_token, user_email)
+    return _query_agent_engine(message, access_token, user_email)
 
 
 @app.route("/auth/logout")
@@ -237,8 +319,13 @@ if __name__ == "__main__":
     # Allow OAuth over HTTP for localhost
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
     print("\nTest Web App Starting...")
-    print(f"  Project: {PROJECT_ID}")
-    print(f"  Reasoning Engine: {REASONING_ENGINE_ID}")
+    print(f"  Runtime Mode: {RUNTIME_MODE}")
+    if RUNTIME_MODE == "local_adk":
+        print(f"  ADK Local Base URL: {ADK_LOCAL_BASE_URL}")
+        print(f"  ADK Local App: {ADK_LOCAL_APP_NAME}")
+    else:
+        print(f"  Project: {PROJECT_ID}")
+        print(f"  Reasoning Engine: {REASONING_ENGINE_ID}")
     print(f"  Auth Resource ID: {AUTH_RESOURCE_ID}")
     print("\nOpen http://localhost:8080 in your browser\n")
     app.run(host="0.0.0.0", port=8080, debug=True)

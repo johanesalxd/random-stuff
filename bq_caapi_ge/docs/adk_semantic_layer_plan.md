@@ -446,7 +446,8 @@ Phase 1 status:
 - `adk run` verifies both static certified and static refusal routes.
 - `adk api_server advanced/app` starts successfully with the existing agents and
   the new `certified_analytics` agent discoverable.
-- `advanced/test_web/` local API server integration is still pending.
+- `advanced/test_web/` supports local ADK API server mode through
+  `ADK_LOCAL_BASE_URL` while preserving Agent Engine mode.
 
 ### Phase 2: Contract registry and compiler
 

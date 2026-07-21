@@ -1,6 +1,7 @@
 # Test Web App
 
-Simple Flask app to test OAuth passthrough to Agent Engine.
+Simple Flask app to test OAuth passthrough to Agent Engine or a local ADK API
+server.
 
 ## Setup
 
@@ -16,14 +17,57 @@ uv pip install --index-url https://pypi.org/simple/ flask requests google-auth-o
 1. OAuth redirect URI configured in Google Cloud Console:
    - Add `http://localhost:8080/auth/callback` to your OAuth client
 
-2. Agent deployed to Agent Engine
+2. Backend runtime
+
+   Use one of these modes:
+
+   - Local ADK API server mode: set `ADK_LOCAL_BASE_URL`
+   - Agent Engine mode: set `ORDERS_REASONING_ENGINE_ID`
 
 3. Environment variables in root `../../.env`:
-   - `OAUTH_CLIENT_ID`
-   - `OAUTH_CLIENT_SECRET`
+    - `OAUTH_CLIENT_ID`
+    - `OAUTH_CLIENT_SECRET`
+    - `AUTH_RESOURCE_ORDERS`
+
+   Local ADK API server mode also needs:
+
+   - `ADK_LOCAL_BASE_URL`, for example `http://127.0.0.1:8000`
+   - `ADK_LOCAL_APP_NAME`, optional, defaults to `certified_analytics`
+
+   Agent Engine mode also needs:
+
    - `GOOGLE_CLOUD_PROJECT`
    - `ORDERS_REASONING_ENGINE_ID`
-   - `AUTH_RESOURCE_ORDERS`
+
+## Local ADK Mode
+
+Start the ADK API server from the project root:
+
+```bash
+uv run --extra advanced adk api_server advanced/app \
+  --port 8000 \
+  --auto_create_session \
+  --reload_agents
+```
+
+In another terminal, configure the test web app:
+
+```bash
+export ADK_LOCAL_BASE_URL=http://127.0.0.1:8000
+export ADK_LOCAL_APP_NAME=certified_analytics
+```
+
+Then run the Flask app from `advanced/test_web`.
+
+Local mode creates an ADK API server session at
+`/apps/{app_name}/users/{user_id}/sessions`, stores the OAuth token in session
+state at `AUTH_RESOURCE_ORDERS`, and calls `/run`.
+
+## Agent Engine Mode
+
+Unset `ADK_LOCAL_BASE_URL` and set `GOOGLE_CLOUD_PROJECT` plus
+`ORDERS_REASONING_ENGINE_ID`. The app creates an Agent Engine session with the
+OAuth token in `sessionState[AUTH_RESOURCE_ORDERS]`, then calls `:streamQuery`.
 
 ## Run
 
@@ -37,10 +81,7 @@ Open http://localhost:8080 in your browser.
 
 1. Login with Google OAuth
 2. App captures your access token
-3. When you send a query:
-   - Creates Agent Engine session with token in `sessionState[AUTH_RESOURCE_ORDERS]`
-   - Calls `:streamQuery`
-   - `DataAgentCredentialsConfig(external_access_token_key=...)` reads the token
-     directly from session state on each tool call
-   - DataAgentToolset uses your token for BigQuery queries
-4. Results displayed in chat
+3. When you send a query, the app creates a backend session with the token in
+   session state
+4. The selected backend runs the agent
+5. Results are displayed in chat
