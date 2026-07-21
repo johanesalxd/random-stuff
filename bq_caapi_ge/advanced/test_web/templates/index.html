@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <h1>BQ Data Agent Test Harness</h1>
-        <p class="subtitle">Test OAuth passthrough to Agent Engine</p>
+        <p class="subtitle">Test OAuth passthrough to Agent Engine or a local ADK API server</p>
         
         <div class="login-box">
             <p>Login with your Google account to test querying the Data Agent with your identity.</p>
@@ -20,9 +20,10 @@
             <h3>What this tests:</h3>
             <ul>
                 <li>OAuth login captures your access token</li>
-                <li>Token is passed to Agent Engine session state</li>
-                <li>Agent bridges token to DataAgentToolset</li>
-                <li>BigQuery queries run with your identity</li>
+                <li>Token is passed into the selected agent session state</li>
+                <li>Agent Engine mode calls the deployed <code>:streamQuery</code> API</li>
+                <li>Local mode calls the ADK API server <code>/run</code> endpoint</li>
+                <li>Future certified queries can run with your identity</li>
             </ul>
         </div>
     </div>

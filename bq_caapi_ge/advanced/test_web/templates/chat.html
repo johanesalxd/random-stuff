@@ -18,7 +18,15 @@
         
         <div class="status-bar">
             <div class="status-item">
-                <strong>Agent:</strong> {{ reasoning_engine_id }}
+                <strong>Mode:</strong> {{ runtime_mode }}
+            </div>
+            <div class="status-item">
+                <strong>Agent:</strong>
+                {% if runtime_mode == 'local_adk' %}
+                    {{ adk_local_app_name }} at {{ adk_local_base_url }}
+                {% else %}
+                    {{ reasoning_engine_id }}
+                {% endif %}
             </div>
             <div class="status-item">
                 <strong>Auth Resource:</strong> {{ auth_resource_id }}
@@ -31,7 +39,7 @@
         
         <div id="chat-messages" class="chat-messages">
             <div class="message system">
-                Connected. Your OAuth token will be passed to the agent for BigQuery queries.
+                Connected. Your OAuth token will be passed to the selected agent session.
             </div>
         </div>
         
