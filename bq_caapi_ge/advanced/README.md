@@ -1,7 +1,12 @@
-# Advanced: Custom ADK Runtime Deployment
+# Advanced: Custom ADK Runtime and Semantic Contract
 
-This directory contains an alternative integration path that deploys ADK agent
-packages to Vertex AI Agent Engine with custom OAuth identity passthrough.
+This directory contains two parallel ADK paths:
+
+- Legacy orders and inventory wrappers that deploy to Agent Engine and call CA
+  API data agents with end-user OAuth.
+- A local-first `certified_analytics` Workflow that prototypes deterministic
+  semantic-contract compilation. Its current full-match selector and ADC execution
+  modes are developer checkpoints and return `certified=false`.
 
 Use this approach when you need:
 
@@ -13,7 +18,7 @@ Use this approach when you need:
 For the standard integration (no ADK runtime required), see the
 [root README](../README.md).
 
-## Architecture
+## Legacy Agent Engine Architecture
 
 ```mermaid
 sequenceDiagram
@@ -44,9 +49,10 @@ advanced/
 │   ├── orders/              # Orders Analyst ADK agent
 │   │   ├── __init__.py
 │   │   └── agent.py         # Agent definition + DataAgentToolset
-│   └── inventory/           # Inventory Analyst ADK agent
-│       ├── __init__.py
-│       └── agent.py         # Agent definition + DataAgentToolset
+│   ├── inventory/           # Inventory Analyst ADK agent
+│   │   ├── __init__.py
+│   │   └── agent.py         # Agent definition + DataAgentToolset
+│   └── certified_analytics/ # Local semantic-contract Workflow prototype
 ├── scripts/
 │   ├── deploy_agents.sh     # Deploy to Vertex AI Agent Engine
 │   ├── setup_auth.py        # Create OAuth auth resources in GE
@@ -69,7 +75,7 @@ Install the advanced dependencies:
 uv sync --extra advanced
 ```
 
-This adds `google-adk` on top of the base dependencies.
+This adds `google-adk`, BigQuery, and Dataplex client dependencies.
 
 ## Deployment
 

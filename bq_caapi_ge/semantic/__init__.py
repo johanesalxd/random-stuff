@@ -1,1 +1,1 @@
-"""Semantic contract registry and SQL compiler."""
+"""Semantic contract registry, compiler, catalog retrieval, and execution."""

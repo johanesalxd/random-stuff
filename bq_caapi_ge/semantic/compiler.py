@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from semantic.join_planner import JoinPlanError, plan_joins
 from semantic.types import (
     CompileError,
     CompiledQuery,
@@ -72,7 +73,7 @@ def compile_query(contract: SemanticContract, intent: QueryIntent) -> CompiledQu
         metric=metric.name,
         dimensions=selected_dimensions,
         contract_version=contract.contract_version,
-        certified=contract.certified,
+        contract_certified=contract.certified,
     )
 
 
@@ -101,10 +102,16 @@ def _validate_dimensions(
         dimension = contract.dimensions.get(dimension_name)
         if dimension is None:
             raise CompileError(f"unknown dimension: {dimension_name}")
-        if not _is_table_reachable(contract, metric, dimension.table):
+        try:
+            plan_joins(
+                contract,
+                metric,
+                {metric.base_table, dimension.table},
+            )
+        except JoinPlanError as error:
             raise CompileError(
                 f"dimension {dimension_name} is not reachable from metric {metric.name}"
-            )
+            ) from error
         dimensions[dimension_name] = dimension
     return dimensions
 
@@ -128,11 +135,31 @@ def _validate_filters(
             raise CompileError(
                 f"filter {intent_filter.dimension} requires a list value"
             )
+        if intent_filter.operator == "IN" and not intent_filter.value:
+            raise CompileError(
+                f"filter {intent_filter.dimension} requires a non-empty list"
+            )
+        if (
+            intent_filter.operator == "IN"
+            and len({_parameter_value_type(value) for value in intent_filter.value})
+            != 1
+        ):
+            raise CompileError(
+                f"filter {intent_filter.dimension} requires one value type"
+            )
         if intent_filter.operator == "=" and isinstance(intent_filter.value, list):
             raise CompileError(
                 f"filter {intent_filter.dimension} requires a scalar value"
             )
+        if intent_filter.operator == "=":
+            _parameter_value_type(intent_filter.value)
     return filters
+
+
+def _parameter_value_type(value: object) -> type:
+    if isinstance(value, bool | int | float | str):
+        return type(value)
+    raise CompileError(f"unsupported filter value type: {type(value).__name__}")
 
 
 def _metric_expression(metric: Metric) -> str:
@@ -154,23 +181,16 @@ def _from_and_join_lines(
     required_tables.update(dimension.table for dimension in dimensions.values())
 
     lines = [f"FROM `{contract.dataset}.{metric.base_table}` AS {metric.base_table}"]
-    joined_tables = {metric.base_table}
-    for join_name in metric.join_path:
-        join = contract.joins[join_name]
-        if join.left in joined_tables and join.right not in joined_tables:
-            lines.append(f"LEFT JOIN `{contract.dataset}.{join.right}` AS {join.right}")
-            lines.append(f"  ON {join.on}")
-            joined_tables.add(join.right)
-        elif join.right in joined_tables and join.left not in joined_tables:
-            lines.append(f"LEFT JOIN `{contract.dataset}.{join.left}` AS {join.left}")
-            lines.append(f"  ON {join.on}")
-            joined_tables.add(join.left)
-        if required_tables.issubset(joined_tables):
-            break
-
-    missing_tables = required_tables - joined_tables
-    if missing_tables:
-        raise CompileError(f"missing join path for tables: {sorted(missing_tables)}")
+    try:
+        planned_joins = plan_joins(contract, metric, required_tables)
+    except JoinPlanError as error:
+        raise CompileError(str(error)) from error
+    for planned_join in planned_joins:
+        lines.append(
+            f"LEFT JOIN `{contract.dataset}.{planned_join.table}` AS "
+            f"{planned_join.table}"
+        )
+        lines.append(f"  ON {planned_join.join.on}")
     return lines
 
 
@@ -233,30 +253,9 @@ def _limit_lines(metric: Metric, intent_limit: int | None) -> list[str]:
         return []
     if limit <= 0:
         raise CompileError("limit must be positive")
+    if limit > 1000:
+        raise CompileError("limit must not exceed 1000")
     return [f"LIMIT {limit}"]
-
-
-def _is_table_reachable(
-    contract: SemanticContract,
-    metric: Metric,
-    table_name: str,
-) -> bool:
-    if table_name == metric.base_table:
-        return True
-
-    reachable_tables = {metric.base_table}
-    changed = True
-    while changed:
-        changed = False
-        for join_name in metric.join_path:
-            join = contract.joins[join_name]
-            if join.left in reachable_tables and join.right not in reachable_tables:
-                reachable_tables.add(join.right)
-                changed = True
-            if join.right in reachable_tables and join.left not in reachable_tables:
-                reachable_tables.add(join.left)
-                changed = True
-    return table_name in reachable_tables
 
 
 def _validate_parameter_name(name: str) -> None:

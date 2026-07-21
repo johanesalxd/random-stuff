@@ -2,10 +2,11 @@
 
 ## Objective
 
-Build the `advanced/` path as a custom ADK implementation that demonstrates how
-BigQuery Conversational Analytics could behave with a governed semantic layer.
-The default CA API path remains the out-of-the-box baseline. The advanced path
-becomes the certified analytics prototype.
+Build the `advanced/` path as a bespoke ADK semantic-contract reference
+implementation and compare it with BigQuery Conversational Analytics. The
+default CA API path remains the out-of-the-box baseline. The advanced path is an
+Option D compiled intent-to-SQL prototype, not a claim about native BQ CA
+behavior.
 
 The goal is not to claim unconditional 100% accuracy. The goal is to make the
 number-determining step deterministic for covered business questions:
@@ -29,17 +30,22 @@ The default path now enriches BigQuery and Knowledge Catalog context with
 Dataplex scans, then creates thin CA API data agents that reference BigQuery
 tables. This is the right baseline for out-of-the-box BQ CA behavior.
 
-The current `advanced/` path is still a wrapper around CA API through ADK:
+The current `advanced/` path contains two parallel runtime shapes:
 
 - `advanced/app/orders/agent.py` defines an ADK agent with `DataAgentToolset`.
 - `advanced/app/inventory/agent.py` does the same for inventory.
 - `advanced/test_web/` simulates OAuth passthrough to deployed Agent Engine.
 - `advanced/scripts/register_agents.py` registers deployed ADK agents in Gemini
   Enterprise.
+- `advanced/app/certified_analytics/agent.py` is a local ADK Workflow prototype
+  that compiles contract-selected intents and can run developer-only BigQuery
+  execution modes.
+- `advanced/test_web/` supports both local ADK API server mode and the legacy
+  Agent Engine mode.
 
-For this phase, we will replace the advanced runtime shape. It should no longer
-be just a thin CA API toolset wrapper. It should become a minimal ADK graph-based
-certified analytics agent.
+The legacy wrappers remain as the BQ CA comparison baseline. The certified
+workflow is being added in parallel and must not replace them until its intent,
+auth, evaluation, and audit boundaries pass.
 
 ## ADK 2.0 Findings
 
@@ -84,9 +90,9 @@ ADK projects. The distinction matters:
   handles scaffolding, project enhancement, evaluation workflows, deployment,
   Gemini Enterprise publishing, and observability setup around ADK.
 
-Required local prerequisites from the current Agents CLI docs:
+Required local prerequisites from the current Agents CLI docs and this project:
 
-- Python 3.11+
+- Python 3.11 (`pyproject.toml` currently constrains `>=3.11,<3.12`)
 - `uv`
 - Node.js, because skill installation uses `npx skills`
 
@@ -150,9 +156,9 @@ already has a demo-specific structure, so preserve it until the local certified
 path is working. Revisit Agents CLI enhancement later when deployment,
 evaluation, or observability assets are needed.
 
-Deployment should remain deferred until the local certified path and evaluations
-pass. When deployment starts, prefer Agents CLI for deployment skeletons and
-operational assets:
+Deployment should remain deferred until the local path and evaluations pass.
+After selecting a target, use Agents CLI for deployment skeletons and operational
+assets. For example, if Cloud Run is selected:
 
 ```bash
 agents-cli scaffold enhance --deployment-target cloud_run
@@ -190,13 +196,9 @@ The key separation is:
 Do not deploy to Agent Engine or register in Gemini Enterprise until the local
 prototype works.
 
-Use the existing `advanced/test_web/` UI as the local harness, but change its
-backend target during implementation:
-
-- Current behavior: OAuth login, create Agent Engine session, call
-  `:streamQuery`.
-- Target local behavior: OAuth login, create local ADK API server session, call
-  local ADK REST endpoints.
+Use the existing `advanced/test_web/` UI as the local harness. It now selects
+local ADK API server mode when `ADK_LOCAL_BASE_URL` is set and otherwise keeps
+the legacy Agent Engine `:streamQuery` behavior.
 
 The test web app should keep the OAuth login because user identity passthrough is
 part of the architecture. During early local development, the compiled BigQuery
@@ -209,13 +211,22 @@ Any ADC result must be labeled as developer mode, not end-user certified mode.
 
 ## Certified vs Exploratory Modes
 
-Certified mode:
+Target certified mode:
 
 - Only answers metrics and dimensions covered by a contract.
 - Emits SQL from deterministic code, never from the model.
 - Uses parameterized BigQuery SQL for user-provided filter values.
 - Returns metadata: `certified=true`, metric name, contract version, compiled SQL,
   BigQuery job ID, and coverage status.
+
+Current checkpoint semantics:
+
+- `contract_validated=true` means deterministic compilation succeeded against the
+  current contract.
+- `certified=false` remains mandatory while intent selection is the prototype
+  full-match prototype selector or execution uses ADC rather than the end-user token.
+- `execution_status`, `credential_mode`, and `intent_assurance` are separate from
+  contract validation so one boolean does not conflate multiple guarantees.
 
 Out-of-coverage mode:
 
@@ -344,6 +355,74 @@ Do not let the model use Knowledge Catalog content to invent SQL. The graph node
 that reads Knowledge Catalog should output compact grounding context for the
 intent selector. The compiler should read only the semantic contract.
 
+## Tooling Strategy Findings
+
+The certified path can connect to BigQuery and Knowledge Catalog through more
+than one tool boundary. The common rule is unchanged: tools provide grounding or
+execution, while the semantic contract and deterministic compiler own the SQL.
+
+ADK-native option:
+
+- `BigQueryToolset` provides BigQuery metadata, SQL execution, job lookup, and
+  `search_catalog` for Dataplex-backed catalog search.
+- `BigQueryCredentialsConfig` supports ADC, service accounts, external access
+  tokens, `external_access_token_key` for platform-managed session tokens, and
+  interactive OAuth in `adk web`.
+- This is the fastest path for a local-first ADK prototype because it keeps the
+  implementation inside ADK and avoids a separate MCP integration step.
+- The certified workflow must still call only deterministic code for SQL
+  compilation. If `BigQueryToolset` is used for execution, it should execute the
+  compiler-produced SQL rather than letting the model generate SQL.
+
+MCP option:
+
+- BigQuery exposes a remote MCP server at `https://bigquery.googleapis.com/mcp`.
+- The preferred certified execution tool is `execute_sql_readonly`, not generic
+  `execute_sql`, because certified BI queries should be read-only.
+- Knowledge Catalog exposes a remote MCP server at
+  `https://dataplex.googleapis.com/mcp` with discovery/context tools such as
+  `search_entries`, `lookup_context`, and `lookup_entry`.
+- Remote MCP gives a stronger portable tool boundary for Agent Runtime,
+  non-ADK clients, centralized MCP IAM, audit, and optional Model Armor policy.
+- MCP also has extra setup and constraints. For example, BigQuery
+  `execute_sql_readonly` accepts SQL text, `projectId`, and `dryRun`, but does
+  not expose BigQuery query parameters in the documented tool schema. A future
+  MCP adapter will need deterministic literal rendering for already-validated
+  filter values or another safe parameter strategy.
+
+Decision for the next implementation step:
+
+- Keep the lower-level ADK BigQuery ADC adapters as bounded developer prototypes,
+  not as completed `BigQueryToolset` integration.
+- Complete structured intent preservation and initial evaluations before adding
+  credential-managed `BigQueryToolset` execution.
+- Keep the MCP capability documented as the later portable/cloud-native adapter.
+- Keep `DataAgentToolset` for the out-of-the-box CA API baseline and explicit
+  exploratory fallback only.
+
+OAuth/session-state findings:
+
+- The earlier CA API data-agent agents already use the desired Gemini Enterprise
+  user-token pattern:
+  `DataAgentCredentialsConfig(external_access_token_key=AUTH_RESOURCE_ID)`.
+- `advanced/app/orders/agent.py` reads `AUTH_RESOURCE_ORDERS` and
+  `advanced/app/inventory/agent.py` reads `AUTH_RESOURCE_INVENTORY` as the ADK
+  session-state keys where Gemini Enterprise or the local test harness deposits
+  the user's OAuth access token.
+- ADK BigQuery supports the same pattern through
+  `BigQueryCredentialsConfig(external_access_token_key=...)`.
+- Installed ADK 2.5.0 forwards the documented `google.adk.tools.bigquery` import
+  path to the non-deprecated `google.adk.integrations.bigquery` package. New
+  certified-path code should keep using `google.adk.integrations.bigquery`.
+- The current executor and catalog retrieval adapters call lower-level
+  `query_tool` and `search_tool` functions directly with ADC or injected test
+  credentials. That bypasses the `GoogleTool` credential manager and therefore
+  cannot read user OAuth tokens from ADK session state yet.
+- To reuse the existing OAuth integration cleanly, user-token execution and
+  catalog retrieval should run through `BigQueryToolset`/`GoogleTool` or an equivalent
+  credential-resolution boundary, with the real workflow `ctx` passed through as
+  the tool context.
+
 ## Proposed Advanced Folder Shape
 
 ```text
@@ -361,6 +440,7 @@ semantic/
   __init__.py
   types.py
   registry.py
+  join_planner.py
   compiler.py
   grounding.py
   executor.py
@@ -434,7 +514,8 @@ Initial graph nodes:
   - `uv run --extra advanced adk --help`
   - `uv run --extra advanced adk api_server advanced/app --port 8000`
 - Add `advanced/app/certified_analytics/agent.py` with a minimal graph that
-  returns a static certified/refusal response.
+  returns placeholder covered/refusal responses. This was a historical skeleton,
+  not an end-to-end certification claim.
 - Update `advanced/test_web/` to call local ADK API endpoints instead of Agent
   Engine when `ADK_LOCAL_BASE_URL` is set.
 
@@ -443,7 +524,7 @@ Phase 1 status:
 - Dependency and CLI verification are complete.
 - `advanced/app/certified_analytics/agent.py` exists as a function-only ADK 2
   workflow skeleton.
-- `adk run` verifies both static certified and static refusal routes.
+- At that checkpoint, `adk run` verified placeholder covered and refusal routes.
 - `adk api_server advanced/app` starts successfully with the existing agents and
   the new `certified_analytics` agent discoverable.
 - `advanced/test_web/` supports local ADK API server mode through
@@ -462,28 +543,106 @@ Phase 2 status:
   metrics: completed order count, completed revenue, average order value, and
   top users by completed revenue.
 - `semantic.registry` loads and validates metric, dimension, table, join,
-  allowed-filter, and reachability references.
+  allowed-filter, relationship, primary-key target, reachability, and additive
+  metric fan-out constraints.
 - `semantic.compiler` emits deterministic BigQuery SQL with required filters,
   declared joins, grouping, ordering, limits, and user filters as query
   parameters.
 - Tests cover stable SQL, required filters, parameterization, unsupported
   metrics, unsupported dimensions, unsupported filter operators, IN filters, and
   unreachable dimensions.
-- The compiler is not wired into the ADK graph yet.
+- At the committed Phase 2 checkpoint, the compiler was not wired into the ADK
+  graph. The current working checkpoint adds that integration as Phase 3 work.
 
-### Phase 3: Local certified query execution
+### Phase 3: Local contract-query developer execution
 
 - Add `semantic/executor.py`.
 - Support ADC developer mode first.
 - Add user-token execution after the local flow is stable.
 - Return SQL, rows, job ID, and certification metadata to `advanced/test_web/`.
 
-### Phase 4: Knowledge Catalog grounding node
+Phase 3 status: developer checkpoint complete.
 
-- Add `semantic/grounding.py`.
-- Read glossary/table/column context from Knowledge Catalog or Dataplex APIs.
-- Feed compact grounding context to `select_intent` only.
-- Keep contract as the source of truth for SQL.
+- `semantic/executor.py` executes contract-validated SQL with BigQuery using ADC
+  developer mode.
+- `SEMANTIC_EXECUTION_MODE=compile_only` is the safe default and returns
+  contract-validated SQL without querying BigQuery.
+- `SEMANTIC_EXECUTION_MODE=adc_developer` executes the compiled SQL and returns
+  rows, job ID, truncation, credential mode, and contract metadata through the
+  local ADK response.
+- Both compile-only and ADC responses remain `certified=false` because the
+  full-match intent selector is not an end-to-end certification boundary.
+- Optional `SEMANTIC_MAXIMUM_BYTES_BILLED` limits BigQuery scan cost.
+- User-token execution is still deferred.
+
+### Phase 3A: Lower-level ADK BigQuery ADC adapter
+
+Phase 3A status: developer checkpoint complete.
+
+- Added `SEMANTIC_EXECUTION_MODE=adk_bigquery_adc` using lower-level ADK BigQuery
+  query helpers with `WriteMode.BLOCKED` and ADC.
+- Added an optional maximum-bytes-billed guardrail and truncation metadata.
+- This is not credential-managed `BigQueryToolset` integration and is not the
+  preferred deployed architecture.
+- It refuses compiled parameter bindings because the ADK helper signature accepts
+  SQL text but no query parameters. The direct `adc_developer` adapter remains the
+  parameter-capable developer path.
+- Both ADC paths return `certified=false` and identify their credential mode.
+- BigQuery MCP remains a later portable adapter. Any future certified MCP path
+  should prefer `execute_sql_readonly` and resolve the same parameterization gap
+  without weakening validated filter handling.
+
+### Phase 4: Catalog retrieval adapter
+
+Phase 4 status: retrieval checkpoint complete; intent grounding is pending.
+
+- Added `semantic/grounding.py` with disabled and `adk_bigquery_adc` catalog
+  retrieval modes.
+- Catalog errors are recorded in response metadata and do not block contract-only
+  prototype routing.
+- Retrieved assets are diagnostic metadata only and explicitly report
+  `used_for_intent_selection=false`.
+- Do not describe this as grounded intent selection until a contract-constrained
+  selector consumes compact catalog context.
+- The compiler continues to read only the semantic contract.
+
+### Phase 4A: Structured intent safety and initial evaluation
+
+- Replace the prototype full-match grammar with structured intent selection for
+  metric, dimensions, filters, limit, route, and reason.
+- Derive the selectable vocabulary from the configured contract rather than
+  hardcoded sample-specific branches.
+- Preserve every material user constraint. If a constraint cannot be represented,
+  refuse instead of dropping it.
+- Feed compact catalog context only into intent selection; never into SQL
+  compilation.
+- Add authoring-gap JSONL logging for unmatched intent and contract-validation
+  refusals.
+- Start covered, constraint-preservation, ambiguity, paraphrase, and refusal
+  evaluations here. Evaluation is complementary to the contract and must not wait
+  until fallback or deployment.
+- Keep `certified=false` until intent assurance passes the defined evaluation gate.
+
+Phase 4A status: planned next checkpoint.
+
+### Phase 4B: Parameter-capable user-token BigQuery tooling
+
+- Reuse `AUTH_RESOURCE_ORDERS`; do not create a separate authorization resource
+  without a concrete scope or lifecycle requirement.
+- Mirror the existing data-agent pattern with
+  `BigQueryCredentialsConfig(external_access_token_key=AUTH_RESOURCE_ORDERS)`.
+- Pass the real workflow context into credential-managed BigQuery tools so ADK can
+  read `ctx.state[AUTH_RESOURCE_ORDERS]`.
+- Use an execution boundary that preserves compiler query parameters. Do not make
+  a SQL-text-only adapter the preferred certified path.
+- Convert only affected workflow nodes to async functions for
+  `GoogleTool.run_async(...)`.
+- Missing user tokens must fail closed without exploratory fallback.
+- Verify local ADK and Gemini Enterprise session-state token propagation with the
+  same key.
+- Require a query job ID or define an equivalent production audit identifier.
+
+Phase 4B status: planned after Phase 4A.
 
 ### Phase 5: CA API fallback and verified-query outputs
 
@@ -496,6 +655,7 @@ Phase 2 status:
 
 ### Phase 6: Evaluation harness
 
+- Expand the initial Phase 4A semantic checks into the full three-rung comparison.
 - Port the three-rung evaluation pattern into this project:
   - Rung 1: BQ CA baseline.
   - Rung 2: BQ CA + Knowledge Catalog metadata.
@@ -507,9 +667,39 @@ Phase 2 status:
 ### Phase 7: Deployment and GE registration
 
 - Defer until local test web and evals pass.
-- Revisit Agent Engine deployment only after the graph runtime, auth, and local
-  certification metadata are stable.
-- Revisit Gemini Enterprise registration after Agent Engine deployment works.
+- Treat the deployment target as undecided until graph workflow behavior,
+  user-token propagation, parameter handling, and audit metadata are verified on
+  Agent Runtime and Cloud Run.
+- Existing deployment and registration scripts cover only the legacy orders and
+  inventory agents. Do not present them as certified-agent deployment support.
+- Register in Gemini Enterprise only after the selected deployment target passes.
+
+### Phase 8: Portability and user adaptation
+
+- Move minimum runtime portability before live evaluation or deployment:
+  configurable contract path and fully qualified BigQuery table references.
+- Start broader authoring portability after the local intent, auth, and evaluation
+  gates are verified.
+- Make the skeleton explicitly adaptable to user environments instead of only
+  demonstrating the `thelook_ecommerce` sample.
+- Load the semantic contract path from configuration, such as
+  `SEMANTIC_CONTRACT_PATH`, instead of assuming `thelook_orders.yaml`.
+- Support fully qualified BigQuery table references, including project, dataset,
+  and table names, so users can target their own projects without changing
+  compiler code.
+- Add a concise semantic contract authoring guide that explains tables,
+  dimensions, metrics, joins, required filters, allowed filters, and common
+  validation failures.
+- Add a minimal bring-your-own-tables sample contract that users can copy and
+  adapt without touching Python code.
+- Consider adding a machine-readable schema for contract validation once the
+  contract shape stabilizes.
+- Keep runtime metric selection contract-derived as required by Phase 4A.
+- Document the supported metric types and the current extension points for new
+  metric types, custom filters, and organization-specific certification rules.
+- Keep all portability work subordinate to correctness: do not generalize the
+  compiler in ways that weaken deterministic SQL generation, contract validation,
+  or certified-vs-exploratory routing.
 
 ## Verification Strategy
 
@@ -528,13 +718,28 @@ Minimum tests before deployment:
 - Certified-looking failures never silently fall back to CA API.
 - Test web displays certification metadata.
 
-## Open Questions
+## Decisions and Open Questions
 
-- Should local execution default to ADC or require OAuth token mode from day one?
-- What is the minimum useful Knowledge Catalog lookup for Phase 4: glossary terms,
-  table descriptions, column descriptions, profile summaries, or all of them?
-- Should BigQuery Graph be introduced only for relationship/path questions, or
-  should it be part of the first compiler prototype?
+Decisions:
+
+- Local execution defaults to `compile_only`. ADC modes are developer-only.
+- The current catalog adapter retrieves compact asset summaries only and does not
+  yet ground intent selection.
+- BigQuery Graph is deferred until relationship or traversal questions justify it.
+- `certified=true` is reserved for a covered, intent-assured, user-authorized,
+  successfully executed answer rather than compilation alone.
+
+Open questions:
+
+- Which parameter-capable boundary should combine compiler bindings with ADK
+  user-token credential management?
+- What evaluation threshold is sufficient to promote intent assurance?
+- Should catalog retrieval fail open to contract-only selection or fail closed for
+  production certification?
+- Is a nullable BigQuery job ID acceptable, or is another immutable audit ID
+  required?
+- Which deployment target supports the required Workflow and OAuth behavior with
+  the smallest operational footprint?
 
 ## Position on BigQuery Graph
 

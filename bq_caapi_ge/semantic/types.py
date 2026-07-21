@@ -8,6 +8,12 @@ from typing import Any
 
 SUPPORTED_METRIC_TYPES = {"count_distinct", "sum", "ratio"}
 SUPPORTED_OPERATORS = {"=", "IN"}
+SUPPORTED_RELATIONSHIPS = {
+    "one_to_one",
+    "one_to_many",
+    "many_to_one",
+    "many_to_many",
+}
 
 
 class ContractError(ValueError):
@@ -15,7 +21,7 @@ class ContractError(ValueError):
 
 
 class CompileError(ValueError):
-    """Raised when an intent cannot compile to certified SQL."""
+    """Raised when an intent cannot compile against the semantic contract."""
 
 
 @dataclass(frozen=True)
@@ -121,11 +127,11 @@ class QueryParameter:
 
 @dataclass(frozen=True)
 class CompiledQuery:
-    """Compiled certified SQL with metadata."""
+    """Compiled contract-validated SQL with metadata."""
 
     sql: str
     parameters: tuple[QueryParameter, ...]
     metric: str
     dimensions: tuple[str, ...]
     contract_version: str
-    certified: bool
+    contract_certified: bool
