@@ -61,11 +61,86 @@ Relevant ADK 2.0 concepts:
 
 Current dependency state:
 
-- `pyproject.toml` declares `google-adk>=1.28.1` for the advanced extra.
-- `uv.lock` currently resolves `google-adk==1.33.0`.
-- The next implementation phase should upgrade the advanced extra to ADK 2.x and
-  verify `uv run adk --help`, `uv run adk run ...`, and
-  `uv run adk api_server ...` locally.
+- `pyproject.toml` declares `google-adk>=2.0.0` for the advanced extra.
+- `uv.lock` resolves `google-adk==2.5.0`.
+- Verified ADK 2.5.0 is available through `uv`.
+- Verified the ADK 2.5.0 CLI exposes `create`, `run`, `web`, `api_server`,
+  `eval`, `test`, `migrate`, `optimize`, and `deploy`.
+- Verified the current `DataAgentToolset` imports still load under ADK 2.5.0,
+  so the existing advanced baseline can remain while the certified path is
+  built.
+
+## Agents CLI Findings
+
+Agent Platform now documents Agents CLI as the higher-level lifecycle tool for
+ADK projects. The distinction matters:
+
+- `adk` is the ADK runtime and developer CLI for running, serving, evaluating,
+  and deploying ADK agents directly.
+- `agents-cli` is the Agent Platform lifecycle CLI and skills package. It
+  handles scaffolding, project enhancement, evaluation workflows, deployment,
+  Gemini Enterprise publishing, and observability setup around ADK.
+
+Required local prerequisites from the current Agents CLI docs:
+
+- Python 3.11+
+- `uv`
+- Node.js, because skill installation uses `npx skills`
+
+Optional deployment prerequisites:
+
+- Google Cloud SDK
+- Terraform, when using generated infrastructure workflows
+
+Observed local prerequisite status:
+
+- Python 3.11.14 is available through `uv run python --version`.
+- Node.js v24.18.0 and npx 12.0.1 are available for skill installation.
+- Google Cloud SDK 567.0.0 is available.
+- Terraform is not installed. This is not blocking until generated
+  infrastructure workflows are needed.
+
+Safe verification commands:
+
+```bash
+uv sync --extra advanced
+uv run adk --version
+uv run adk --help
+uv run adk api_server --help
+uvx google-agents-cli --help
+uvx google-agents-cli setup --workspace --skip-auth --dry-run
+```
+
+Do not run real Agents CLI setup automatically in this repo. The real command
+can install tools and skills into global or workspace coding-agent
+configuration:
+
+```bash
+uvx google-agents-cli setup --workspace --skip-auth
+```
+
+Run it only when explicitly approved. The dry run showed it would execute:
+
+```text
+uv tool install google-agents-cli
+npx -y skills@1.4.8 add https://github.com/google/agents-cli -y
+```
+
+Local ADK development should prefer:
+
+```bash
+uv run adk web advanced/app --port 8080 --reload_agents
+uv run adk api_server advanced/app --port 8000 --auto_create_session --reload_agents
+```
+
+Deployment should remain deferred until the local certified path and evaluations
+pass. When deployment starts, prefer Agents CLI for deployment skeletons and
+operational assets:
+
+```bash
+agents-cli scaffold enhance --deployment-target cloud_run
+agents-cli deploy
+```
 
 ## Target Architecture
 
