@@ -5,12 +5,15 @@ This directory contains two parallel ADK paths:
 - Legacy orders and inventory wrappers that deploy to Agent Engine and call CA
   API data agents with end-user OAuth.
 - A local-first `semantic_analytics` Workflow that selects bounded semantic
-  concepts from portable YAML. It currently stops at a narrow or broad catalog
-  handoff and does not execute SQL.
+  concepts from portable YAML, grounds them against the catalog (narrow or broad),
+  and generates guarded, read-only BigQuery SQL. It validates read-only and
+  source-scope policy, dry-runs, and executes only in developer mode (plan mode by
+  default). See [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
 
-The deterministic compiler and execution adapters under `semantic/` remain
-historical implementation research and are not imported by the active workflow.
-See [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
+The historical deterministic compiler and execution adapters were removed from
+`semantic/` in the Phase 7 cleanup; they are recoverable from git history if a
+strict-compilation mode is revisited. See
+[`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
 
 Use this approach when you need:
 

@@ -69,9 +69,10 @@ Local mode creates an ADK API server session at
 `/apps/{app_name}/users/{user_id}/sessions`, stores the OAuth token in session
 state at `AUTH_RESOURCE_ORDERS`, and calls `/run`.
 
-The current `semantic_analytics` workflow returns selected semantic context and a
-`semantic_narrow` or `catalog_broad` handoff. Knowledge Catalog retrieval and SQL
-execution are not implemented yet.
+The current `semantic_analytics` workflow selects semantic context, grounds it
+against the catalog (`semantic_narrow` or `catalog_broad`), and generates guarded,
+read-only SQL. It dry-runs every query and executes only when
+`SQL_EXECUTION_MODE=developer` (plan mode, dry-run only, is the default).
 
 ## Agent Engine Mode
 
