@@ -7,18 +7,22 @@ from typing import Annotated, Any
 
 from google.adk.agents.context import Context
 from google.adk.events.event import Event
+from google.adk.models import LlmResponse
 from google.adk.workflow import node
+from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from semantic.context import (
     SemanticContextError,
     build_semantic_index_entry,
     build_selected_semantic_context,
+    validate_selected_semantic_context_size,
 )
 from semantic.registry import load_contracts
 from semantic.types import SemanticContract
 
 _QUESTION_STATE_KEY = "semantic_question"
+_SELECTOR_OUTPUT_INVALID_STATE_KEY = "temp:semantic_selector_output_invalid"
 _MAX_QUESTION_LENGTH = 8_000
 _MAX_SELECTOR_CONTEXT_CHARS = 100_000
 
@@ -103,8 +107,50 @@ def load_semantic_registry(node_input: Any) -> Event:
             "question": question,
             "semantic_candidates": candidates,
         },
-        state={_QUESTION_STATE_KEY: question},
+        state={
+            _QUESTION_STATE_KEY: question,
+            _SELECTOR_OUTPUT_INVALID_STATE_KEY: False,
+        },
     )
+
+
+def recover_invalid_semantic_selection(
+    callback_context: Context,
+    llm_response: LlmResponse,
+) -> LlmResponse | None:
+    """Replaces schema-invalid successful selector output with a safe fallback.
+
+    Args:
+        callback_context: Current ADK workflow context.
+        llm_response: Model response before ADK output-schema validation.
+
+    Returns:
+        A schema-valid fallback response for malformed successful output, or None
+        to preserve valid output and provider errors.
+    """
+    if llm_response.error_code or llm_response.partial:
+        return None
+
+    content = llm_response.content
+    text = ""
+    if content:
+        text = "".join(
+            part.text or "" for part in content.parts or [] if not part.thought
+        )
+    try:
+        SemanticSelection.model_validate_json(text)
+    except ValidationError:
+        callback_context.state[_SELECTOR_OUTPUT_INVALID_STATE_KEY] = True
+        fallback = SemanticSelection(reason="Selector output failed schema validation.")
+        return llm_response.model_copy(
+            update={
+                "content": types.Content(
+                    role="model",
+                    parts=[types.Part(text=fallback.model_dump_json())],
+                )
+            }
+        )
+    return None
 
 
 @node
@@ -121,6 +167,16 @@ async def resolve_semantic_selection(
     Returns:
         Routed event containing selected context and provenance.
     """
+    if ctx.state.get(_SELECTOR_OUTPUT_INVALID_STATE_KEY, False):
+        fallback = SemanticSelection(reason="Selector output failed schema validation.")
+        output, route = _catalog_broad_response(
+            ctx.state[_QUESTION_STATE_KEY],
+            fallback,
+            error="semantic selector returned schema-invalid output",
+            route_cause="invalid_selection",
+        )
+        return Event(output=output, route=route)
+
     try:
         selection = SemanticSelection.model_validate(node_input)
     except ValidationError as error:
@@ -223,6 +279,15 @@ def resolve_selection(
             selection,
             error="; ".join(errors),
             route_cause="invalid_selection",
+        )
+    try:
+        validate_selected_semantic_context_size(selected_contexts)
+    except SemanticContextError as error:
+        return _catalog_broad_response(
+            question,
+            selection,
+            error=str(error),
+            route_cause="context_limit_exceeded",
         )
     if not selected_contexts:
         return _catalog_broad_response(

@@ -19,6 +19,7 @@ from semantic.runtime import (  # noqa: E402
     finish_catalog_broad_resolution,
     finish_semantic_narrow_resolution,
     load_semantic_registry,
+    recover_invalid_semantic_selection,
     resolve_semantic_selection,
 )
 
@@ -27,6 +28,7 @@ semantic_selector = LlmAgent(
     model=os.getenv("MODEL_NAME", "gemini-2.5-flash"),
     instruction=SEMANTIC_SELECTION_INSTRUCTION,
     output_schema=SemanticSelection,
+    after_model_callback=recover_invalid_semantic_selection,
 )
 
 root_agent = Workflow(

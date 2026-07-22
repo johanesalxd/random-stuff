@@ -175,10 +175,13 @@ Configuration text is treated as untrusted data. The selector instruction tells
 the model to ignore instructions embedded in descriptions, examples, labels, or
 synonyms.
 
-The `LlmAgent` applies `SemanticSelection` as its `output_schema`. Schema-invalid
-model output can fail in the LLM node before the resolver runs; it is not currently
-guaranteed to produce a `catalog_broad` response. The resolver's defensive schema
-handling covers malformed input delivered by non-LLM or test nodes only.
+The `LlmAgent` applies `SemanticSelection` as its `output_schema`. An after-model
+callback validates successful model text before ADK's output-schema boundary.
+Schema-invalid successful output is replaced with a valid empty selection and a
+request-scoped marker; the resolver then routes broad with
+`route_cause=invalid_selection`. Provider, authentication, quota, and transport
+errors are not converted into semantic misses. The resolver also retains
+defensive schema handling for malformed input delivered by non-LLM nodes.
 
 ### Phase 6 Response
 
@@ -197,11 +200,12 @@ semantic_source_names: [...]
 semantic_contexts: [...]
 semantic_selection: {...}
 selection_reason: ...
-selection_error: ...              # resolver-detected invalid selection
+selection_error: ...              # invalid selection or context bound
 route_cause: semantic_context_resolved |
              no_semantic_match |
              model_declared_incomplete |
-             invalid_selection
+             invalid_selection |
+             context_limit_exceeded
 next_step: narrow_catalog_grounding | broad_catalog_grounding
 ```
 
@@ -210,25 +214,32 @@ catalog retrieval. `catalog_broad` means no useful context matched, selected
 context is incomplete, or schema-valid selected IDs failed deterministic
 validation. A semantic miss is not a refusal.
 
+Expanded selected context is serialized as deterministic compact JSON and limited
+to 100,000 UTF-8 bytes after required dimensions, relationships, tables, and
+source closure are injected. The boundary is inclusive. Oversized aggregate
+context is never truncated; it is discarded and routed broad with
+`route_cause=context_limit_exceeded`.
+
 ## Phase 6 Exit Criteria
 
-Status: **in progress**.
+Status: **complete**.
 
 Implemented code now prevents explicit relationship IDs from widening a selected
 metric beyond its declared relationship paths.
 
 Verified for this checkpoint:
 
-- complete advanced-extra suite passes with 107 tests
+- complete advanced-extra suite passes with 113 tests
+- focused semantic and ADK compatibility suite passes with 37 tests
+- the installed `LlmAgent` propagates structured output through a deterministic
+  `BaseLlm` boundary without external credentials
+- schema-invalid successful model output routes broad while provider errors remain
+  hard failures
+- aggregate selected context accepts the exact size limit and rejects larger
+  multi-context payloads
 - ADK API discovery loads `orders`, `inventory`, and `semantic_analytics`
 - a fresh-process import of `semantic_analytics` does not load compiler, executor,
   grounding, or join-planner modules
-
-Completion still requires:
-
-- verify actual structured output propagation through the installed `LlmAgent`
-- choose and test graph-level behavior for schema-invalid model output
-- define and enforce an aggregate bound for expanded selected context
 
 ## Target End-State
 
@@ -248,7 +259,7 @@ flowchart TD
   BroadAssess -->|Yes| Generate
   Generate --> Policy[Validate read-only and source scope]
   Policy --> DryRun[Dry run and cost check]
-  DryRun --> Execute[Execute with explicit credentials]
+  DryRun --> Execute[Execute with user credentials]
   Execute --> Answer[Summarize rows with provenance]
 ```
 
@@ -257,7 +268,7 @@ make a model read semantic and catalog context before using query tools.
 
 ## Phase 7: Knowledge Catalog Grounding
 
-Status: **planned after Phase 6 completes**.
+Status: **planned next**.
 
 Goals:
 
@@ -313,14 +324,18 @@ Exit criteria:
 ### Phase 9: User Authentication And Local UX
 
 - resolve user credentials through workflow-compatible BigQuery tooling
+- reuse the existing OAuth authorization and session-state resource unless a
+  concretely different scope requires a separate resource
 - fail explicitly when a required user token is absent
 - never silently switch to ADC in a user-facing mode
 - display reasoning path and execution provenance in the test UI
 - add live user-token integration coverage
 
-The local Flask harness already validates OAuth state, keeps tokens in process
-memory, passes an explicit session-state key, and reuses backend sessions. It is a
-development harness, not a production identity service.
+The current Flask harness passes an explicit session-state key but otherwise has
+legacy development behavior: it does not explicitly validate stored OAuth state,
+uses Flask's client-side signed session for the access token, and creates a new
+backend session for each query. Phase 9 must address those gaps; the harness is
+not a production identity service.
 
 ### Phase 10: Evaluation
 
@@ -336,7 +351,9 @@ and query cost.
 
 ### Phase 11: Optional Data-Agent Delegation
 
-Evaluate only after the custom catalog path works. Delegation must be explicit and
+The initial custom fallback remains Knowledge Catalog. Only after the custom
+catalog path has been evaluated may a future configuration expose
+`SEMANTIC_FALLBACK_MODE=kc|data_agent|refuse`. Delegation must be explicit and
 reported as `reasoning_path=data_agent`. CA-generated SQL is not modified and
 re-executed by default because CA has already executed it.
 
@@ -344,7 +361,8 @@ re-executed by default because CA has already executed it.
 
 Defer deployment of `semantic_analytics` until local user-token execution and
 evaluations pass. Select Agent Runtime or Cloud Run based on verified Workflow,
-OAuth, observability, and operational behavior.
+OAuth, observability, and operational behavior. Revisit Agents CLI deployment,
+evaluation, and observability assets only after selecting the deployment target.
 
 ## Design Requirements
 
@@ -413,8 +431,10 @@ Target user execution uses a session-state OAuth token through a
 workflow-compatible BigQuery credential boundary. The installed
 `BigQueryCredentialsConfig(external_access_token_key=...)` can support local
 experiments but is marked experimental by ADK and is not assumed to be the final
-production interface. ADC is acceptable only for explicit local developer mode.
-Missing user credentials must not fall back silently.
+production interface. Reuse the existing OAuth authorization and session-state
+resource unless a different scope is concretely required. ADC is acceptable only
+for explicit local developer mode. Missing user credentials must not fall back
+silently.
 
 ## Repository Shape
 
@@ -453,6 +473,8 @@ The installed SDK behavior is covered by focused tests:
 - `Event` imports from `google.adk.events.event`
 - `LlmAgent` nodes can sit directly in graph edges
 - structured LLM nodes use Pydantic `output_schema`
+- after-model callbacks can replace malformed successful output before workflow
+  output-schema validation
 - routing uses `Event(route=...)`
 - dynamic work uses `ctx.run_node(...)`
 - `ToolContext` is compatible with workflow `Context`
@@ -477,8 +499,9 @@ metrics and dimensions in Python regular expressions, treated authored coverage
 as a blocker, and required Python changes for semantic changes.
 
 That workflow package was removed in Phase 6. The lower-level compiler and
-executor remain isolated research for a possible future strict mode. They do not
-define active runtime capabilities.
+executor remain research for a possible future strict mode. They share registry
+and type modules with the active path but are unreachable from the active workflow
+import graph and do not define active runtime capabilities.
 
 Historical commits:
 
@@ -495,7 +518,7 @@ Historical commits:
 | 3 | Historical | Guarded ADC developer execution |
 | 4 | Historical | Compact catalog asset retrieval spike |
 | 5 | Complete | Portable multi-contract schema and ADK compatibility |
-| 6 | In progress | Bounded concept selection and catalog handoff |
+| 6 | Complete | Bounded concept selection and catalog handoff |
 | 7 | Planned | Narrow and broad Knowledge Catalog grounding |
 
 ### Certification
