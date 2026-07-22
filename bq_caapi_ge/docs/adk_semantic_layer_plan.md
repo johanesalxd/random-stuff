@@ -18,8 +18,7 @@ accuracy, consistency, and explainability.
 
 ## Current Checkpoint
 
-Current phase: **Phase 6 is in progress. Phase 7 is planned after its exit
-criteria pass.**
+Current phase: **Phase 6 is complete. Phase 7 is planned next.**
 
 The executable `semantic_analytics` flow currently stops before Knowledge Catalog
 or SQL:
@@ -46,6 +45,9 @@ Implemented:
 - registry reload after selection with explicit version-drift detection
 - semantic IDs, versions, sources, route, and selection provenance
 - deterministic workflow integration coverage with a substituted selector
+- installed `LlmAgent` structured-output coverage with a deterministic `BaseLlm`
+- graph-level broad-catalog recovery from schema-invalid successful model output
+- a 100,000-byte aggregate bound on expanded selected context
 
 Not implemented in the active workflow:
 
@@ -58,8 +60,7 @@ Not implemented in the active workflow:
 - SQL repair
 - user-token BigQuery execution
 - result summarization
-- graph-level recovery from schema-invalid `LlmAgent` output
-- a live structured-selector smoke test
+- a provider-backed structured-selector smoke test, deferred to Phase 10 evaluation
 
 The active runtime does not import the historical compiler, executor, or catalog
 retrieval spike.
@@ -85,9 +86,16 @@ Current safety bounds:
 - at most 8,000 characters in a user question
 - at most 100,000 serialized characters in the selector candidate context
 - at most three selected domains per request
+- at most 20 metrics, 30 dimensions, and 30 relationships per selected domain
+- at most 128 characters per selected ID and 4,000 characters in the selection
+  reason
+- at most 100,000 UTF-8 bytes in the aggregate expanded selected context
 
-Exceeding a bound fails explicitly. The workflow does not silently truncate
-business semantics.
+Contract, question, selector-candidate, and structured-output violations fail
+explicitly or are converted into the documented invalid-selection route. An
+oversized expanded selected context is discarded and routes to `catalog_broad`
+with `route_cause=context_limit_exceeded`. The workflow does not silently
+truncate business semantics.
 
 ### Canonical YAML Shape
 
@@ -214,6 +222,9 @@ catalog retrieval. `catalog_broad` means no useful context matched, selected
 context is incomplete, or schema-valid selected IDs failed deterministic
 validation. A semantic miss is not a refusal.
 
+At the current checkpoint, `next_step` is informational metadata. Both routes end
+in pass-through terminal functions; no catalog node consumes this field yet.
+
 Expanded selected context is serialized as deterministic compact JSON and limited
 to 100,000 UTF-8 bytes after required dimensions, relationships, tables, and
 source closure are injected. The boundary is inclusive. Oversized aggregate
@@ -227,7 +238,7 @@ Status: **complete**.
 Implemented code now prevents explicit relationship IDs from widening a selected
 metric beyond its declared relationship paths.
 
-Verified for this checkpoint:
+Verified at Phase 6 closure commit `9a95d5b`:
 
 - complete advanced-extra suite passes with 113 tests
 - focused semantic and ADK compatibility suite passes with 37 tests
@@ -280,6 +291,28 @@ Goals:
 - route narrow insufficiency to broad discovery without executing SQL
 - bound, redact, and timestamp every metadata payload
 
+### Phase 7 Source Boundary
+
+Catalog search configuration must separate the compute or billing project from
+searchable data sources:
+
+- `GOOGLE_CLOUD_PROJECT` identifies the compute or billing project and does not
+  implicitly authorize catalog search in that project
+- planned `CATALOG_ALLOWED_PROJECTS` contains comma-separated searchable project
+  IDs for broad discovery
+- planned `CATALOG_ALLOWED_DATASETS` contains comma-separated
+  `project.dataset` identifiers for broad discovery
+- absent or invalid broad-search allowlists fail closed; they never trigger an
+  organization-wide search
+- narrow retrieval uses only exact fully qualified sources from validated
+  semantic contracts; those curated sources form the narrow-path allowlist
+- every `semantic_source_names` value is parsed as exactly
+  `project.dataset.table` before catalog access
+
+Broad results must match the configured project and dataset allowlists. Phase 8
+source policy will use the exact sources returned by the selected catalog route;
+it must not infer permission from the compute project.
+
 Proposed nodes:
 
 1. `load_narrow_catalog_context`
@@ -287,6 +320,19 @@ Proposed nodes:
 3. `load_broad_catalog_context`
 4. `assess_broad_context`
 5. terminal clarification or Phase 8 SQL handoff
+
+The first Phase 7 graph change replaces the current pass-through branch targets:
+
+```text
+semantic_narrow -> load_narrow_catalog_context -> assess_context
+catalog_broad   -> load_broad_catalog_context  -> assess_broad_context
+assess_context insufficient -> load_broad_catalog_context
+```
+
+Each loader receives the complete Phase 6 handoff payload. Narrow loading uses
+`semantic_source_names`; broad loading uses the preserved question and configured
+allowlists. The pass-through terminal functions can be removed after both routes
+have equivalent integration coverage.
 
 Context sufficiency must report:
 
@@ -309,6 +355,28 @@ Exit criteria:
 - metadata size and result counts are bounded
 - both routes are tested without SQL execution
 
+### Resume Here
+
+Phase 6 implementation closed at commit `9a95d5b`. The active graph is
+`advanced/app/semantic_analytics/agent.py`; it currently terminates at the two
+pass-through functions in `semantic/runtime.py`.
+
+The first Phase 7 implementation slice is:
+
+1. Verify the lock-resolved Knowledge Catalog client operations and aspect payloads
+   needed for BigQuery table schema, profile, and insight metadata.
+2. Add typed, default-deny parsing for `CATALOG_ALLOWED_PROJECTS` and
+   `CATALOG_ALLOWED_DATASETS`, keeping compute-project configuration separate.
+3. Add a reusable catalog adapter boundary with injected fakes for deterministic
+   tests; do not make live catalog calls in unit tests.
+4. Replace the two pass-through branch targets with narrow and broad loading nodes.
+5. Add deterministic sufficiency routing and bound, redact, and timestamp the
+   metadata payload.
+
+Phase 7 must stop before SQL generation or execution. Do not reconnect the
+historical grounding, compiler, executor, or join-planner modules to the active
+workflow merely because similarly named code already exists.
+
 ## Remaining Roadmap
 
 ### Phase 8: SQL Generation And Guarded Developer Execution
@@ -324,12 +392,26 @@ Exit criteria:
 ### Phase 9: User Authentication And Local UX
 
 - resolve user credentials through workflow-compatible BigQuery tooling
-- reuse the existing OAuth authorization and session-state resource unless a
-  concretely different scope requires a separate resource
+- reuse the OAuth client and scope configuration where appropriate
+- configure the local ADK session-state token key explicitly through planned
+  `ADK_OAUTH_TOKEN_STATE_KEY`; the current harness uses `AUTH_RESOURCE_ORDERS` as
+  a key, which does not make the semantic workflow the owner of the orders
+  authorization resource
+- create a distinct authorization resource for `semantic_analytics` if it is
+  registered as a separate Gemini Enterprise agent, using planned
+  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`, because deployed GE agents require a 1:1
+  agent-to-authorization-resource mapping
 - fail explicitly when a required user token is absent
 - never silently switch to ADC in a user-facing mode
+- validate OAuth state before token exchange
+- validate token expiry and implement refresh or explicit reauthentication
+- move access tokens out of Flask's client-side signed cookie session
+- configure a stable secret and secure session-cookie settings outside source code
+- reuse backend sessions instead of creating one for every query
+- declare Flask and OAuth dependencies in `pyproject.toml` and `uv.lock`; remove
+  the manual `uv pip install` setup path
 - display reasoning path and execution provenance in the test UI
-- add live user-token integration coverage
+- add Flask OAuth regression tests and live user-token integration coverage
 
 The current Flask harness passes an explicit session-state key but otherwise has
 legacy development behavior: it does not explicitly validate stored OAuth state,
@@ -344,6 +426,10 @@ Evaluate independently:
 1. CA `DataAgentToolset` baseline.
 2. Custom Knowledge Catalog-only path.
 3. Custom semantic-first plus Knowledge Catalog path.
+
+Begin with a provider-backed structured-selector smoke case. It verifies live
+Gemini schema behavior and credentials, but remains an evaluation or manual
+integration check rather than a deterministic `pytest` test or a Phase 7 blocker.
 
 Measure SQL and answer correctness, source selection, constraint preservation,
 routing, semantic contribution, repeated-run consistency, repair rate, latency,
@@ -431,10 +517,11 @@ Target user execution uses a session-state OAuth token through a
 workflow-compatible BigQuery credential boundary. The installed
 `BigQueryCredentialsConfig(external_access_token_key=...)` can support local
 experiments but is marked experimental by ADK and is not assumed to be the final
-production interface. Reuse the existing OAuth authorization and session-state
-resource unless a different scope is concretely required. ADC is acceptable only
-for explicit local developer mode. Missing user credentials must not fall back
-silently.
+production interface. OAuth client and scope configuration can be shared, but
+local token-state keys and deployed Gemini Enterprise authorization resources are
+different concerns. A separately registered GE agent needs its own authorization
+resource. ADC is acceptable only for explicit local developer mode. Missing user
+credentials must not fall back silently.
 
 ## Repository Shape
 
@@ -450,7 +537,7 @@ semantic/
   types.py                  # Contract and historical query types
   registry.py               # Portable loading and separate validations
   context.py                # Selector and filtered full context
-  runtime.py                # Active Phase 6 nodes and instructions
+  runtime.py                # Active semantic-resolution nodes and instructions
   grounding.py              # Historical asset-summary retrieval spike
   join_planner.py           # Historical deterministic join planning
   compiler.py               # Historical deterministic compiler
@@ -465,6 +552,11 @@ Add modules only when they own a clear reusable boundary. Planned catalog contex
 SQL planning, and policy modules do not exist yet.
 
 ## ADK 2.5 Compatibility Record
+
+The lock-resolved and tested SDK version is `google-adk==2.5.0`.
+`pyproject.toml` declares the broader minimum `google-adk>=2.0.0`; that declaration
+does not imply every later version is verified. Rerun compatibility and workflow
+tests after every ADK lockfile upgrade.
 
 The installed SDK behavior is covered by focused tests:
 
@@ -535,6 +627,51 @@ query models. It must not force table-specific Python back into the active path.
 Deterministic code uses `pytest`; model behavior and SQL quality use ADK or Agents
 CLI evaluations. Pytest must not assert nondeterministic LLM wording.
 
+Run deterministic repository checks from the project root:
+
+```bash
+uv run --extra advanced pytest tests
+uv run --extra advanced pytest \
+  tests/test_semantic_context.py \
+  tests/test_semantic_analytics_agent.py \
+  tests/test_adk_workflow_compatibility.py
+uv run --extra advanced ruff check .
+uv run --extra advanced ruff format --check .
+uv lock --check
+git diff --check
+```
+
+The 113 full-suite and 37 focused-suite counts above record Phase 6 closure; later
+test additions should change the counts without being treated as regressions.
+
+Verify ADK discovery and the active import boundary in fresh processes:
+
+```bash
+uv run --extra advanced python - <<'PY'
+from google.adk.cli.utils.agent_loader import AgentLoader
+
+agents = AgentLoader("advanced/app").list_agents()
+print(agents)
+assert {"orders", "inventory", "semantic_analytics"}.issubset(agents)
+PY
+
+uv run --extra advanced python - <<'PY'
+import sys
+
+import advanced.app.semantic_analytics.agent
+
+forbidden = {
+    "semantic.compiler",
+    "semantic.executor",
+    "semantic.grounding",
+    "semantic.join_planner",
+}
+loaded = sorted(forbidden.intersection(sys.modules))
+print(loaded)
+assert not loaded
+PY
+```
+
 Required checks across the roadmap:
 
 - unrelated and renamed semantic concepts require no Python changes
@@ -542,7 +679,8 @@ Required checks across the roadmap:
 - fully qualified cross-dataset sources remain intact
 - selector IDs are validated before context expansion
 - explicit relationships cannot widen selected metric paths
-- actual `LlmAgent` structured-output behavior is smoke-tested
+- installed `LlmAgent` structured-output propagation is tested with a deterministic
+  model boundary; provider-backed behavior is evaluated separately
 - semantic misses route broad rather than refuse
 - narrow and broad catalog boundaries cannot escape allowlists
 - sufficiency reports missing information explicitly
