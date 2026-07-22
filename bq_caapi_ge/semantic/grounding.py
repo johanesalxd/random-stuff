@@ -76,7 +76,7 @@ def load_adk_bigquery_catalog_adc(
         )
         settings = BigQueryToolConfig(
             write_mode=WriteMode.BLOCKED,
-            application_name="bq-caapi-certified-analytics",
+            application_name="bq-caapi-legacy-catalog-spike",
             compute_project_id=project,
             location=location,
         )

@@ -27,7 +27,7 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 REASONING_ENGINE_ID = os.getenv("ORDERS_REASONING_ENGINE_ID")
 AUTH_RESOURCE_ID = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
 ADK_LOCAL_BASE_URL = os.getenv("ADK_LOCAL_BASE_URL")
-ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "certified_analytics")
+ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "semantic_analytics")
 
 if ADK_LOCAL_BASE_URL:
     RUNTIME_MODE = "local_adk"

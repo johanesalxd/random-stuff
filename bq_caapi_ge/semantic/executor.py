@@ -47,7 +47,7 @@ def execute_adk_bigquery_adc_query(
     """Executes a compiled query through ADK's BigQuery integration.
 
     Args:
-        compiled: Certified SQL and query parameters from the semantic compiler.
+        compiled: Contract-compiled SQL and query parameters.
         project: Google Cloud project used for BigQuery compute and billing.
         location: Optional BigQuery job location.
         max_results: Maximum rows to return from the ADK BigQuery tool.
@@ -62,8 +62,8 @@ def execute_adk_bigquery_adc_query(
     Raises:
         ExecutionError: If the query cannot execute through ADK BigQuery tools.
     """
-    if not compiled.contract_certified:
-        raise ExecutionError("only contract-certified queries can execute")
+    if not compiled.compiled_from_contract:
+        raise ExecutionError("only contract-compiled queries can execute")
     if compiled.parameters:
         raise ExecutionError(
             "lower-level ADK BigQuery execution does not support compiled query "
@@ -94,10 +94,10 @@ def execute_adk_bigquery_adc_query(
             write_mode=WriteMode.BLOCKED,
             maximum_bytes_billed=maximum_bytes_billed,
             max_query_result_rows=max_results,
-            application_name="bq-caapi-certified-analytics",
+            application_name="bq-caapi-legacy-contract-compiler",
             compute_project_id=project,
             location=location,
-            job_labels={"semantic_contract_validated": "true"},
+            job_labels={"semantic_contract_compiled": "true"},
         )
         execute_sql = execute_sql_tool or query_tool.get_execute_sql(settings)
         result = execute_sql(
@@ -150,7 +150,7 @@ def execute_adc_developer_query(
     """Executes a compiled query with local Application Default Credentials.
 
     Args:
-        compiled: Certified SQL and query parameters from the semantic compiler.
+        compiled: Contract-compiled SQL and query parameters.
         client: Optional BigQuery client, primarily for tests.
         project: Optional Google Cloud project for the BigQuery client.
         location: Optional BigQuery job location.
@@ -161,10 +161,10 @@ def execute_adc_developer_query(
         Query rows, job ID, and execution mode metadata.
 
     Raises:
-        ExecutionError: If the query is not certified or execution fails.
+        ExecutionError: If the query is not validated or execution fails.
     """
-    if not compiled.contract_certified:
-        raise ExecutionError("only contract-certified queries can execute")
+    if not compiled.compiled_from_contract:
+        raise ExecutionError("only contract-compiled queries can execute")
     _validate_max_results(max_results)
     _validate_maximum_bytes_billed(maximum_bytes_billed)
 

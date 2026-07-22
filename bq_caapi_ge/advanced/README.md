@@ -4,9 +4,13 @@ This directory contains two parallel ADK paths:
 
 - Legacy orders and inventory wrappers that deploy to Agent Engine and call CA
   API data agents with end-user OAuth.
-- A local-first `certified_analytics` Workflow that prototypes deterministic
-  semantic-contract compilation. Its current full-match selector and ADC execution
-  modes are developer checkpoints and return `certified=false`.
+- A local-first `semantic_analytics` Workflow that selects bounded semantic
+  concepts from portable YAML. It currently stops at a narrow or broad catalog
+  handoff and does not execute SQL.
+
+The deterministic compiler and execution adapters under `semantic/` remain
+historical implementation research and are not imported by the active workflow.
+See [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
 
 Use this approach when you need:
 
@@ -52,7 +56,7 @@ advanced/
 │   ├── inventory/           # Inventory Analyst ADK agent
 │   │   ├── __init__.py
 │   │   └── agent.py         # Agent definition + DataAgentToolset
-│   └── certified_analytics/ # Local semantic-contract Workflow prototype
+│   └── semantic_analytics/  # Semantic context-selection Workflow
 ├── scripts/
 │   ├── deploy_agents.sh     # Deploy to Vertex AI Agent Engine
 │   ├── setup_auth.py        # Create OAuth auth resources in GE
@@ -131,23 +135,16 @@ export $(cat .env | xargs)
 uv run adk run advanced/app/orders
 ```
 
-## Local Testing with OAuth
-
-Test the OAuth passthrough flow using the Flask test harness:
+Run the semantic workflow with:
 
 ```bash
-cd advanced/test_web
-uv venv .venv
-source .venv/bin/activate
-uv pip install --index-url https://pypi.org/simple/ flask requests google-auth-oauthlib python-dotenv
-python app.py
+uv run --extra advanced adk run advanced/app/semantic_analytics
 ```
 
-Open http://localhost:8080, log in with Google, and query the agent.
+## Local Testing with OAuth
 
-**Prerequisites:**
-- Add `http://localhost:8080/auth/callback` to OAuth client redirect URIs
-- Set `ORDERS_REASONING_ENGINE_ID` in root `.env`
+See [`test_web/README.md`](test_web/README.md) for local ADK and Agent Engine
+test-harness instructions.
 
 ## Chart Visualization
 

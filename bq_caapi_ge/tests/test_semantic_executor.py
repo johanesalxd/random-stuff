@@ -1,4 +1,4 @@
-"""Tests for certified BigQuery query execution."""
+"""Tests for validated BigQuery query execution."""
 
 from __future__ import annotations
 
@@ -91,8 +91,8 @@ def test_execute_adc_developer_query_runs_contract_sql_with_parameters():
         parameters=(QueryParameter("p1_country", "US"),),
         metric="completed_order_count",
         dimensions=("country",),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     query_job = _FakeQueryJob([_FakeRow({"country": "US"})])
     client = _FakeClient(query_job)
@@ -126,8 +126,8 @@ def test_execute_adc_developer_query_serializes_rows_for_adk_output():
         parameters=(),
         metric="completed_revenue",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     query_job = _FakeQueryJob(
         [
@@ -156,18 +156,18 @@ def test_execute_adc_developer_query_serializes_rows_for_adk_output():
     )
 
 
-def test_execute_adc_developer_query_rejects_uncertified_query():
-    """Tests only contract-certified compiled queries can execute."""
+def test_execute_adc_developer_query_rejects_non_contract_query():
+    """Tests the historical executor accepts only contract-compiled queries."""
     compiled = CompiledQuery(
         sql="SELECT 1",
         parameters=(),
         metric="unsupported",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=False,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=False,
     )
 
-    with pytest.raises(ExecutionError, match="only contract-certified"):
+    with pytest.raises(ExecutionError, match="only contract-compiled"):
         execute_adc_developer_query(compiled, client=_FakeClient(_FakeQueryJob([])))
 
 
@@ -178,8 +178,8 @@ def test_execute_adc_developer_query_uses_array_parameters():
         parameters=(QueryParameter("p1_country", ["US", "UK"]),),
         metric="completed_revenue",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     client = _FakeClient(_FakeQueryJob([]))
 
@@ -211,8 +211,8 @@ def test_execute_adk_bigquery_adc_query_runs_with_blocked_writes():
         parameters=(),
         metric="completed_order_count",
         dimensions=("country",),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     result = execute_adk_bigquery_adc_query(
@@ -248,8 +248,8 @@ def test_execute_adk_bigquery_adc_query_rejects_compiled_parameters():
         parameters=(QueryParameter("p1_country", "US"),),
         metric="completed_order_count",
         dimensions=("country",),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="does not support compiled query"):
@@ -268,8 +268,8 @@ def test_execute_adk_bigquery_adc_query_requires_project():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="GOOGLE_CLOUD_PROJECT"):
@@ -288,8 +288,8 @@ def test_execute_adk_bigquery_adc_query_raises_tool_errors():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="permission denied"):
@@ -311,8 +311,8 @@ def test_execute_adk_bigquery_adc_query_wraps_tool_exceptions():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     def fail_tool(**_kwargs):
@@ -334,8 +334,8 @@ def test_execute_adc_developer_query_reports_truncated_results():
         parameters=(),
         metric="completed_order_count",
         dimensions=("country",),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     query_job = _FakeQueryJob([_FakeRow({"country": "US"})], total_rows=2)
 
@@ -355,8 +355,8 @@ def test_execute_adc_developer_query_reports_unknown_completeness():
         parameters=(),
         metric="completed_order_count",
         dimensions=("country",),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     query_job = _FakeQueryJob(
         [_FakeRow({"country": "US"})],
@@ -380,8 +380,8 @@ def test_execute_adc_developer_query_rejects_unsafe_array_parameters(value):
         parameters=(QueryParameter("p1_country", value),),
         metric="completed_revenue",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="array query parameter"):
@@ -398,8 +398,8 @@ def test_execute_adc_developer_query_rejects_low_bytes_limit():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="at least 10485760"):
@@ -418,8 +418,8 @@ def test_execute_adc_developer_query_rejects_unbounded_result_limit(max_results)
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="between 1 and 1000"):
@@ -437,8 +437,8 @@ def test_execute_adc_developer_query_rejects_non_select_statement():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
     client = _FakeClient(_FakeQueryJob([]), statement_type="DELETE")
 
@@ -468,8 +468,8 @@ def test_execute_adk_bigquery_adc_query_rejects_malformed_results(response):
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="malformed"):
@@ -488,8 +488,8 @@ def test_execute_adk_bigquery_adc_query_reports_possible_truncation():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     result = execute_adk_bigquery_adc_query(
@@ -513,8 +513,8 @@ def test_execute_adk_bigquery_adc_query_rejects_excess_rows():
         parameters=(),
         metric="completed_order_count",
         dimensions=(),
-        contract_version="thelook_ecommerce:v1",
-        contract_certified=True,
+        contract_version="thelook_orders:v1",
+        compiled_from_contract=True,
     )
 
     with pytest.raises(ExecutionError, match="more rows than requested"):
