@@ -1,4 +1,4 @@
-"""Tests for semantic contract loading and deterministic SQL compilation."""
+"""Tests for the historical deterministic SQL compiler."""
 
 from __future__ import annotations
 
@@ -13,7 +13,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from semantic.compiler import compile_query  # noqa: E402
-from semantic.registry import load_contract, validate_contract  # noqa: E402
+from semantic.registry import (  # noqa: E402
+    load_contract,
+    validate_compiler_contract,
+    validate_contract,
+)
 from semantic.types import (  # noqa: E402
     CompileError,
     ContractError,
@@ -21,7 +25,6 @@ from semantic.types import (  # noqa: E402
     IntentFilter,
     Join,
     QueryIntent,
-    SemanticContract,
 )
 
 
@@ -29,14 +32,36 @@ def test_load_contract_validates_first_metrics():
     """Tests the default contract loads with the planned first metrics."""
     contract = load_contract()
 
-    assert contract.contract_version == "thelook_ecommerce:v1"
-    assert contract.certified is True
+    assert contract.contract_version == "thelook_orders:v1"
+    assert contract.description == ("Order, customer, and completed-revenue analytics.")
     assert set(contract.metrics) == {
         "completed_order_count",
         "completed_revenue",
         "average_order_value",
         "top_users_by_completed_revenue",
     }
+
+
+def test_portable_validation_does_not_enforce_compiler_capabilities():
+    """Tests active semantic context can exceed historical compiler features."""
+    contract = load_contract()
+    metric = contract.metrics["completed_revenue"]
+    portable_contract = replace(
+        contract,
+        metrics={
+            **contract.metrics,
+            metric.name: replace(
+                metric,
+                type="median",
+                default_order_by="business_priority",
+            ),
+        },
+    )
+
+    validate_contract(portable_contract)
+
+    with pytest.raises(ContractError, match="unsupported type"):
+        validate_compiler_contract(portable_contract)
 
 
 def test_compile_query_completed_orders_by_country_is_stable():
@@ -56,8 +81,8 @@ def test_compile_query_completed_orders_by_country_is_stable():
             "SELECT",
             "  users.country AS country,",
             "  COUNT(DISTINCT orders.order_id) AS completed_order_count",
-            "FROM `thelook_ecommerce.orders` AS orders",
-            "LEFT JOIN `thelook_ecommerce.users` AS users",
+            "FROM `bigquery-public-data.thelook_ecommerce.orders` AS orders",
+            "LEFT JOIN `bigquery-public-data.thelook_ecommerce.users` AS users",
             "  ON users.id = orders.user_id",
             "WHERE",
             "  orders.status = 'Complete'",
@@ -65,7 +90,7 @@ def test_compile_query_completed_orders_by_country_is_stable():
             "ORDER BY country",
         ]
     )
-    assert first.contract_certified is True
+    assert first.compiled_from_contract is True
     assert first.parameters == ()
 
 
@@ -123,7 +148,10 @@ def test_compile_query_base_table_only_does_not_emit_unused_join():
 
     compiled = compile_query(contract, QueryIntent(metric="completed_revenue"))
 
-    assert "FROM `thelook_ecommerce.order_items` AS order_items" in compiled.sql
+    assert (
+        "FROM `bigquery-public-data.thelook_ecommerce.order_items` AS order_items"
+        in compiled.sql
+    )
     assert "JOIN" not in compiled.sql
 
 
@@ -229,7 +257,7 @@ def test_compile_query_rejects_unsupported_scalar_filter_values(value):
         )
 
 
-def test_validate_contract_rejects_unreachable_dimension():
+def test_validate_compiler_contract_rejects_unreachable_dimension():
     """Tests contract validation enforces join reachability."""
     contract = load_contract()
     bad_dimensions = dict(contract.dimensions)
@@ -240,13 +268,8 @@ def test_validate_contract_rejects_unreachable_dimension():
         table="order_items",
         sql="order_items.product_id",
     )
-    bad_contract = SemanticContract(
-        version=contract.version,
-        dataset=contract.dataset,
-        owner=contract.owner,
-        certified=contract.certified,
-        tables=contract.tables,
-        joins=contract.joins,
+    bad_contract = replace(
+        contract,
         dimensions=bad_dimensions,
         metrics={
             **contract.metrics,
@@ -262,7 +285,7 @@ def test_validate_contract_rejects_unreachable_dimension():
     )
 
     with pytest.raises(ContractError, match="not reachable"):
-        validate_contract(bad_contract)
+        validate_compiler_contract(bad_contract)
 
 
 def test_validate_contract_rejects_unknown_join_relationship():
@@ -300,7 +323,7 @@ def test_validate_contract_requires_foreign_key_to_primary_key():
         validate_contract(bad_contract)
 
 
-def test_validate_contract_rejects_sum_dimension_with_join_fan_out():
+def test_validate_compiler_contract_rejects_sum_dimension_with_join_fan_out():
     """Tests additive metrics cannot traverse a fan-out join."""
     contract = load_contract()
     metric = contract.metrics["completed_revenue"]
@@ -320,10 +343,10 @@ def test_validate_contract_rejects_sum_dimension_with_join_fan_out():
     )
 
     with pytest.raises(ContractError, match="introduces fan-out"):
-        validate_contract(bad_contract)
+        validate_compiler_contract(bad_contract)
 
 
-def test_validate_contract_uses_compiler_join_order_for_fan_out():
+def test_validate_compiler_contract_uses_join_order_for_fan_out():
     """Tests a later safe route cannot hide the compiler's earlier fan-out path."""
     contract = load_contract()
     metric = contract.metrics["completed_revenue"]
@@ -362,10 +385,10 @@ def test_validate_contract_uses_compiler_join_order_for_fan_out():
     )
 
     with pytest.raises(ContractError, match="introduces fan-out"):
-        validate_contract(bad_contract)
+        validate_compiler_contract(bad_contract)
 
 
-def test_validate_contract_rejects_out_of_order_join_path():
+def test_validate_compiler_contract_rejects_out_of_order_join_path():
     """Tests validation rejects paths the ordered compiler cannot emit."""
     contract = load_contract()
     metric = contract.metrics["completed_revenue"]
@@ -392,7 +415,7 @@ def test_validate_contract_rejects_out_of_order_join_path():
     )
 
     with pytest.raises(ContractError, match="not reachable"):
-        validate_contract(bad_contract)
+        validate_compiler_contract(bad_contract)
 
 
 @pytest.mark.parametrize(
@@ -404,7 +427,7 @@ def test_validate_contract_rejects_out_of_order_join_path():
         ({"default_limit": 1001}, "between 1 and 1000"),
     ],
 )
-def test_validate_contract_rejects_invalid_metric_defaults(changes, message):
+def test_validate_compiler_contract_rejects_invalid_metric_defaults(changes, message):
     """Tests metric defaults are valid before runtime compilation."""
     contract = load_contract()
     metric = contract.metrics["top_users_by_completed_revenue"]
@@ -414,4 +437,4 @@ def test_validate_contract_rejects_invalid_metric_defaults(changes, message):
     )
 
     with pytest.raises(ContractError, match=message):
-        validate_contract(bad_contract)
+        validate_compiler_contract(bad_contract)

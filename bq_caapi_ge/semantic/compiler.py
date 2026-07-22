@@ -1,13 +1,15 @@
-"""Deterministic SQL compiler for certified semantic intents."""
+"""Historical deterministic SQL compiler for contract-defined intents."""
 
 from __future__ import annotations
 
 import re
 
 from semantic.join_planner import JoinPlanError, plan_joins
+from semantic.registry import validate_compiler_contract
 from semantic.types import (
     CompileError,
     CompiledQuery,
+    ContractError,
     Dimension,
     IntentFilter,
     Metric,
@@ -33,6 +35,11 @@ def compile_query(contract: SemanticContract, intent: QueryIntent) -> CompiledQu
     Raises:
         CompileError: If the intent is outside the contract coverage.
     """
+    try:
+        validate_compiler_contract(contract)
+    except ContractError as error:
+        raise CompileError(f"contract is not compiler-compatible: {error}") from error
+
     metric = _get_metric(contract, intent.metric)
     filters = _validate_filters(metric, intent.filters)
     filter_dimensions = tuple(intent_filter.dimension for intent_filter in filters)
@@ -73,7 +80,7 @@ def compile_query(contract: SemanticContract, intent: QueryIntent) -> CompiledQu
         metric=metric.name,
         dimensions=selected_dimensions,
         contract_version=contract.contract_version,
-        contract_certified=contract.certified,
+        compiled_from_contract=True,
     )
 
 
@@ -180,16 +187,15 @@ def _from_and_join_lines(
     required_tables = {metric.base_table}
     required_tables.update(dimension.table for dimension in dimensions.values())
 
-    lines = [f"FROM `{contract.dataset}.{metric.base_table}` AS {metric.base_table}"]
+    base_source = contract.tables[metric.base_table].source.qualified_name
+    lines = [f"FROM `{base_source}` AS {metric.base_table}"]
     try:
         planned_joins = plan_joins(contract, metric, required_tables)
     except JoinPlanError as error:
         raise CompileError(str(error)) from error
     for planned_join in planned_joins:
-        lines.append(
-            f"LEFT JOIN `{contract.dataset}.{planned_join.table}` AS "
-            f"{planned_join.table}"
-        )
+        join_source = contract.tables[planned_join.table].source.qualified_name
+        lines.append(f"LEFT JOIN `{join_source}` AS {planned_join.table}")
         lines.append(f"  ON {planned_join.join.on}")
     return lines
 

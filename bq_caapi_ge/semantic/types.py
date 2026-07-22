@@ -25,10 +25,25 @@ class CompileError(ValueError):
 
 
 @dataclass(frozen=True)
+class TableSource:
+    """Identifies a physical BigQuery table."""
+
+    project: str
+    dataset: str
+    table: str
+
+    @property
+    def qualified_name(self) -> str:
+        """Returns the fully qualified BigQuery table name."""
+        return f"{self.project}.{self.dataset}.{self.table}"
+
+
+@dataclass(frozen=True)
 class Table:
     """Describes a physical table and its grain."""
 
     name: str
+    source: TableSource
     primary_key: str
     grain: str
     foreign_keys: dict[str, str] = field(default_factory=dict)
@@ -47,7 +62,7 @@ class Join:
 
 @dataclass(frozen=True)
 class Dimension:
-    """Describes a dimension available to certified intents."""
+    """Describes a semantic dimension."""
 
     name: str
     label: str
@@ -59,7 +74,7 @@ class Dimension:
 
 @dataclass(frozen=True)
 class Metric:
-    """Describes a certified metric formula and coverage limits."""
+    """Describes a semantic metric formula and usage constraints."""
 
     name: str
     label: str
@@ -81,12 +96,14 @@ class Metric:
 
 @dataclass(frozen=True)
 class SemanticContract:
-    """Complete semantic contract used by the compiler."""
+    """Portable semantic domain context and physical source mappings."""
 
+    id: str
     version: int
-    dataset: str
     owner: str
-    certified: bool
+    description: str
+    routing_terms: tuple[str, ...]
+    examples: tuple[str, ...]
     tables: dict[str, Table]
     joins: dict[str, Join]
     dimensions: dict[str, Dimension]
@@ -95,7 +112,7 @@ class SemanticContract:
     @property
     def contract_version(self) -> str:
         """Returns a stable external contract version string."""
-        return f"{self.dataset}:v{self.version}"
+        return f"{self.id}:v{self.version}"
 
 
 @dataclass(frozen=True)
@@ -134,4 +151,4 @@ class CompiledQuery:
     metric: str
     dimensions: tuple[str, ...]
     contract_version: str
-    contract_certified: bool
+    compiled_from_contract: bool

@@ -1,18 +1,34 @@
+id: thelook_orders
 version: 1
-dataset: thelook_ecommerce
 owner: analytics-platform
-certified: true
+description: Order, customer, and completed-revenue analytics.
+routing_terms: [orders, customers, revenue, sales, average order value]
+examples:
+  - How many completed orders were placed by country?
+  - Which customers generated the most completed revenue?
 
 tables:
   users:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: users
     primary_key: id
     grain: user
   orders:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: orders
     primary_key: order_id
     grain: order
     foreign_keys:
       user_id: users.id
   order_items:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: order_items
     primary_key: id
     grain: order_item
     foreign_keys:

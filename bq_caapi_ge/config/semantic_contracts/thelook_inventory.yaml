@@ -1,0 +1,107 @@
+id: thelook_inventory
+version: 1
+owner: analytics-platform
+description: Product, inventory, stock availability, and distribution analytics.
+routing_terms: [inventory, stock, products, brands, distribution centers]
+examples:
+  - How many inventory items are available by product brand?
+  - Which distribution centers hold the most stock?
+
+tables:
+  distribution_centers:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: distribution_centers
+    primary_key: id
+    grain: distribution center
+  products:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: products
+    primary_key: id
+    grain: product
+    foreign_keys:
+      distribution_center_id: distribution_centers.id
+  inventory_items:
+    source:
+      project: bigquery-public-data
+      dataset: thelook_ecommerce
+      table: inventory_items
+    primary_key: id
+    grain: inventory item
+    foreign_keys:
+      product_id: products.id
+
+joins:
+  distribution_centers__products:
+    left: distribution_centers
+    right: products
+    "on": distribution_centers.id = products.distribution_center_id
+    relationship: one_to_many
+  products__inventory_items:
+    left: products
+    right: inventory_items
+    "on": products.id = inventory_items.product_id
+    relationship: one_to_many
+
+dimensions:
+  product_category:
+    label: Product category
+    description: Category assigned to the product.
+    table: products
+    sql: products.category
+    synonyms: [category]
+  product_brand:
+    label: Product brand
+    description: Brand associated with the product.
+    table: products
+    sql: products.brand
+    synonyms: [brand]
+  distribution_center:
+    label: Distribution center
+    description: Distribution center responsible for the product.
+    table: distribution_centers
+    sql: distribution_centers.name
+    synonyms: [warehouse, fulfillment center]
+
+metrics:
+  product_count:
+    label: Products
+    description: Number of distinct products in the catalog.
+    synonyms: [catalog products, product catalog size]
+    type: count_distinct
+    base_table: products
+    sql: products.id
+    allowed_dimensions:
+      - product_category
+      - product_brand
+      - distribution_center
+    join_path:
+      - distribution_centers__products
+    allowed_filters:
+      product_category: ["=", "IN"]
+      product_brand: ["=", "IN"]
+      distribution_center: ["=", "IN"]
+
+  available_inventory_item_count:
+    label: Available inventory items
+    description: Number of distinct inventory items that have not been sold.
+    synonyms: [available stock, unsold inventory, stock on hand]
+    type: count_distinct
+    base_table: inventory_items
+    sql: inventory_items.id
+    required_filters:
+      - inventory_items.sold_at IS NULL
+    allowed_dimensions:
+      - product_category
+      - product_brand
+      - distribution_center
+    join_path:
+      - products__inventory_items
+      - distribution_centers__products
+    allowed_filters:
+      product_category: ["=", "IN"]
+      product_brand: ["=", "IN"]
+      distribution_center: ["=", "IN"]
