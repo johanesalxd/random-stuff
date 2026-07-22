@@ -13,8 +13,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from semantic.context import (  # noqa: E402
+    SemanticContextError,
     build_semantic_context,
     build_semantic_index_entry,
+    validate_selected_semantic_context_size,
 )
 from semantic.registry import load_contract, load_contracts  # noqa: E402
 from semantic.types import ContractError  # noqa: E402
@@ -242,3 +244,40 @@ def test_build_semantic_index_entry_omits_physical_expressions(monkeypatch):
     assert "completed_revenue" in serialized
     assert "bigquery-public-data" not in serialized
     assert "expression" not in serialized
+
+
+def test_validate_selected_semantic_context_size_accepts_exact_limit():
+    """Tests the aggregate context bound is inclusive at the exact limit."""
+    contexts = [{"description": "temperature by station"}]
+    size = len(
+        json.dumps(
+            contexts,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+
+    validate_selected_semantic_context_size(contexts, max_bytes=size)
+
+
+def test_validate_selected_semantic_context_size_rejects_aggregate_over_limit():
+    """Tests individually bounded contexts cannot exceed the aggregate limit."""
+    contexts = [{"description": "a" * 30}, {"description": "b" * 30}]
+    individual_sizes = [
+        len(
+            json.dumps(
+                [context],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+        for context in contexts
+    ]
+    limit = max(individual_sizes)
+
+    for context in contexts:
+        validate_selected_semantic_context_size([context], max_bytes=limit)
+    with pytest.raises(SemanticContextError, match="aggregate size limit"):
+        validate_selected_semantic_context_size(contexts, max_bytes=limit)

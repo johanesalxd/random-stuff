@@ -3,13 +3,44 @@
 from __future__ import annotations
 
 from collections import deque
+import json
 from typing import Any
 
 from semantic.types import Dimension, Join, Metric, SemanticContract, Table
 
 
 class SemanticContextError(ValueError):
-    """Raised when selected concepts cannot form connected semantic context."""
+    """Raised when selected concepts cannot form safe semantic context."""
+
+
+_MAX_SELECTED_CONTEXT_BYTES = 100_000
+
+
+def validate_selected_semantic_context_size(
+    contexts: list[dict[str, Any]],
+    *,
+    max_bytes: int = _MAX_SELECTED_CONTEXT_BYTES,
+) -> None:
+    """Validates the aggregate serialized size of selected semantic context.
+
+    Args:
+        contexts: Fully expanded semantic contexts.
+        max_bytes: Maximum permitted compact JSON size in UTF-8 bytes.
+
+    Raises:
+        SemanticContextError: If the aggregate context exceeds the limit.
+    """
+    serialized = json.dumps(
+        contexts,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    if len(serialized) > max_bytes:
+        raise SemanticContextError(
+            "selected semantic context exceeds aggregate size limit: "
+            f"{len(serialized)} bytes exceeds {max_bytes} bytes"
+        )
 
 
 def build_semantic_context(contract: SemanticContract) -> dict[str, Any]:
