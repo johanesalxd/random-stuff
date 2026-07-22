@@ -8,7 +8,12 @@ deterministic and unit tests inject fakes without live calls.
 
 Execution mode is fail-safe: the default is plan mode (dry run only). Real query
 execution occurs only when ``SQL_EXECUTION_MODE`` is explicitly set to
-``developer``, and always with Application Default Credentials.
+``developer``.
+
+Whose credentials execute the query is a separate, orthogonal decision governed by
+``SQL_AUTH_MODE``. The default is ``adc`` (Application Default Credentials). Setting
+``SQL_AUTH_MODE=user`` requires an OAuth access token to be supplied per request and
+fails closed when it is absent; it never silently falls back to ADC.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ import os
 from typing import Any, Callable, Protocol, runtime_checkable
 
 _EXECUTION_MODE_ENV = "SQL_EXECUTION_MODE"
+_AUTH_MODE_ENV = "SQL_AUTH_MODE"
 _MAX_BYTES_ENV = "SQL_MAX_BYTES_BILLED"
 _MAX_ROWS_ENV = "SQL_MAX_RESULT_ROWS"
 _LOCATION_ENV = "BIGQUERY_LOCATION"
@@ -25,6 +31,8 @@ _COMPUTE_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT"
 
 PLAN_MODE = "plan"
 DEVELOPER_MODE = "developer"
+ADC_AUTH_MODE = "adc"
+USER_AUTH_MODE = "user"
 _DEFAULT_MAX_RESULT_ROWS = 50
 _APPLICATION_NAME = "semantic-analytics"
 
@@ -182,24 +190,71 @@ def resolve_execution_mode(raw: str | None = None) -> str:
     return DEVELOPER_MODE if value.strip().lower() == DEVELOPER_MODE else PLAN_MODE
 
 
-def build_sql_executor() -> SqlExecutor:
+def resolve_auth_mode(raw: str | None = None) -> str:
+    """Returns the effective credential mode, defaulting to ADC.
+
+    Args:
+        raw: An explicit override; when ``None`` the ``SQL_AUTH_MODE`` environment
+            variable is consulted.
+
+    Returns:
+        ``user`` when explicitly requested, otherwise ``adc``.
+    """
+    value = raw if raw is not None else os.getenv(_AUTH_MODE_ENV, ADC_AUTH_MODE)
+    return USER_AUTH_MODE if value.strip().lower() == USER_AUTH_MODE else ADC_AUTH_MODE
+
+
+def build_sql_executor(
+    *, access_token: str | None = None, auth_mode: str | None = None
+) -> SqlExecutor:
     """Returns the configured live read-only executor.
 
+    Args:
+        access_token: An OAuth access token identifying the querying user. Required
+            when the effective auth mode is ``user``; ignored under ``adc``.
+        auth_mode: An explicit auth-mode override; when ``None`` the
+            ``SQL_AUTH_MODE`` environment variable is consulted.
+
+    Returns:
+        An :class:`AdkBigQueryExecutor`. Under ``adc`` it resolves Application
+        Default Credentials lazily; under ``user`` it is bound to the supplied
+        access token.
+
     Raises:
-        SqlExecutionError: If the compute project is not configured.
+        SqlExecutionError: If the compute project is not configured, or if the auth
+            mode is ``user`` and no access token was supplied.
     """
     project = os.getenv(_COMPUTE_PROJECT_ENV, "").strip()
     if not project:
         raise SqlExecutionError(
             f"{_COMPUTE_PROJECT_ENV} must be set to build the SQL executor"
         )
+    mode = resolve_auth_mode(auth_mode)
+    credentials: Any = None
+    if mode == USER_AUTH_MODE:
+        if not access_token:
+            raise SqlExecutionError(
+                "user auth mode requires a per-request OAuth access token"
+            )
+        credentials = _build_user_credentials(access_token)
     return AdkBigQueryExecutor(
         project=project,
         max_bytes_billed=_int_env(_MAX_BYTES_ENV),
         max_result_rows=_int_env(_MAX_ROWS_ENV, _DEFAULT_MAX_RESULT_ROWS)
         or _DEFAULT_MAX_RESULT_ROWS,
         location=os.getenv(_LOCATION_ENV, "").strip() or None,
+        credentials=credentials,
     )
+
+
+def _build_user_credentials(access_token: str) -> Any:
+    try:
+        from google.oauth2.credentials import Credentials
+    except ImportError as error:  # pragma: no cover - dependency guard
+        raise SqlExecutionError(
+            "google-auth is required for user-token execution"
+        ) from error
+    return Credentials(token=access_token)
 
 
 def _map_result(raw: dict[str, Any], *, mode: str) -> ExecResult:

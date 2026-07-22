@@ -9,6 +9,8 @@ fakes; no node trusts model output for policy decisions.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+import os
 from typing import Annotated, Any
 
 from google.adk.agents.context import Context
@@ -20,8 +22,11 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 
 from semantic.catalog_runtime import finish_catalog_grounding
 from semantic.execution import (
+    ADC_AUTH_MODE,
     DEVELOPER_MODE,
+    USER_AUTH_MODE,
     build_sql_executor,
+    resolve_auth_mode,
     resolve_execution_mode,
 )
 from semantic.sql_policy import validate_sql
@@ -32,6 +37,10 @@ _MAX_ERROR_CHARS = 800
 _PERMITTED_STATE_KEY = "sql_permitted_sources"
 _CONTEXT_STATE_KEY = "sql_generation_context"
 _REPAIR_STATE_KEY = "temp:sql_repair_attempts"
+
+_TOKEN_STATE_KEY_ENV = "ADK_OAUTH_TOKEN_STATE_KEY"
+_DEFAULT_TOKEN_STATE_KEY = "AUTH_RESOURCE_SEMANTIC_ANALYTICS"
+_AUTH_SOURCES = {USER_AUTH_MODE: "user-token", ADC_AUTH_MODE: "application-default"}
 
 _QualifiedSource = Annotated[
     str,
@@ -165,28 +174,60 @@ async def enforce_sql_policy(ctx: Context, node_input: dict[str, Any]) -> Event:
 async def dry_run_sql(ctx: Context, node_input: dict[str, Any]) -> Event:
     """Validates the query and estimates cost without executing it.
 
+    The dry run is the credential gate for the whole SQL chain: it always contacts
+    BigQuery, so it resolves the effective auth mode here. In ``user`` mode a missing
+    access token fails closed to refusal rather than falling back to ADC.
+
     Args:
         ctx: Current ADK workflow context.
         node_input: Policy-approved payload containing ``sql``.
 
     Returns:
-        Routed event: ``valid`` to proceed, ``invalid`` for bounded repair.
+        Routed event: ``valid`` to proceed, ``invalid`` for bounded repair, or
+        ``unauthorized`` for refusal.
     """
-    payload, route = run_dry_run(node_input, build_sql_executor())
+    auth_mode, token, auth_error = resolve_sql_auth(ctx.state)
+    if auth_error:
+        payload = dict(node_input)
+        payload["auth"] = {"mode": auth_mode, "authorized": False}
+        payload["auth_error"] = auth_error
+        return Event(output=payload, route="unauthorized")
+    payload, route = run_dry_run(node_input, build_auth_executor(auth_mode, token))
+    payload["auth"] = {
+        "mode": auth_mode,
+        "authorized": True,
+        "source": _AUTH_SOURCES[auth_mode],
+    }
     return Event(output=payload, route=route)
 
 
-def maybe_execute_sql(node_input: dict[str, Any]) -> Event:
+@node
+async def maybe_execute_sql(ctx: Context, node_input: dict[str, Any]) -> Event:
     """Executes the query only in developer mode; otherwise returns the plan.
 
+    Developer-mode execution reuses the auth mode resolved at dry run so the query
+    runs under the same identity that validated it.
+
     Args:
+        ctx: Current ADK workflow context.
         node_input: Dry-run-approved payload containing ``sql``.
 
     Returns:
         Event carrying the execution result or a skipped-execution marker.
     """
     mode = resolve_execution_mode()
-    executor = build_sql_executor() if mode == DEVELOPER_MODE else None
+    if mode != DEVELOPER_MODE:
+        return Event(output=run_execution(node_input, None, mode=mode))
+    auth_mode, token, auth_error = resolve_sql_auth(ctx.state)
+    if auth_error:  # pragma: no cover - dry run already gated this path
+        payload = dict(node_input)
+        payload["execution"] = {
+            "status": "ERROR",
+            "mode": DEVELOPER_MODE,
+            "error": auth_error,
+        }
+        return Event(output=payload)
+    executor = build_auth_executor(auth_mode, token)
     return Event(output=run_execution(node_input, executor, mode=mode))
 
 
@@ -278,6 +319,54 @@ def run_execution(
     return payload
 
 
+def resolve_sql_auth(
+    state: Mapping[str, Any],
+) -> tuple[str, str | None, str | None]:
+    """Resolves the effective auth mode and any per-user access token.
+
+    Args:
+        state: The workflow state mapping to read the access token from.
+
+    Returns:
+        A ``(auth_mode, access_token, error)`` triple. ``access_token`` is populated
+        only in ``user`` mode; ``error`` is set when ``user`` mode is required but no
+        token is present, signalling a fail-closed refusal.
+    """
+    auth_mode = resolve_auth_mode()
+    if auth_mode != USER_AUTH_MODE:
+        return auth_mode, None, None
+    token = str(state.get(_token_state_key(), "") or "").strip()
+    if not token:
+        return (
+            auth_mode,
+            None,
+            "user authentication is required but no access token is present",
+        )
+    return auth_mode, token, None
+
+
+def build_auth_executor(auth_mode: str, access_token: str | None) -> Any:
+    """Builds an executor bound to the resolved auth mode.
+
+    Args:
+        auth_mode: The resolved auth mode (``adc`` or ``user``).
+        access_token: The per-user access token, required in ``user`` mode.
+
+    Returns:
+        A :class:`~semantic.execution.SqlExecutor`.
+    """
+    if auth_mode == USER_AUTH_MODE:
+        return build_sql_executor(access_token=access_token, auth_mode=USER_AUTH_MODE)
+    return build_sql_executor()
+
+
+def _token_state_key() -> str:
+    return (
+        os.getenv(_TOKEN_STATE_KEY_ENV, _DEFAULT_TOKEN_STATE_KEY).strip()
+        or _DEFAULT_TOKEN_STATE_KEY
+    )
+
+
 def plan_repair(
     node_input: dict[str, Any],
     *,
@@ -341,6 +430,9 @@ def _carry_generation_fields(node_input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _failure_reason(node_input: dict[str, Any]) -> str:
+    auth_error = node_input.get("auth_error")
+    if isinstance(auth_error, str) and auth_error:
+        return _bound(auth_error)
     policy = node_input.get("sql_policy")
     if isinstance(policy, dict) and policy.get("violations"):
         return _bound("; ".join(policy["violations"]))

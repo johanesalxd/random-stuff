@@ -25,12 +25,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from semantic import sql_runtime  # noqa: E402
 from semantic.execution import (  # noqa: E402
+    ADC_AUTH_MODE,
     DEVELOPER_MODE,
     PLAN_MODE,
+    USER_AUTH_MODE,
     AdkBigQueryExecutor,
     ExecResult,
     SqlExecutionError,
     build_sql_executor,
+    resolve_auth_mode,
     resolve_execution_mode,
 )
 from semantic.sql_policy import (  # noqa: E402
@@ -50,6 +53,7 @@ from semantic.sql_runtime import (  # noqa: E402
     plan_repair,
     recover_invalid_sql,
     repair_sql,
+    resolve_sql_auth,
     run_dry_run,
     run_execution,
 )
@@ -196,6 +200,72 @@ def test_resolve_execution_mode_defaults_to_plan(monkeypatch):
     assert resolve_execution_mode() == PLAN_MODE
     assert resolve_execution_mode("developer") == DEVELOPER_MODE
     assert resolve_execution_mode("anything-else") == PLAN_MODE
+
+
+# --- auth mode (Phase 9 Slice 1) -------------------------------------------
+
+
+def test_resolve_auth_mode_defaults_to_adc(monkeypatch):
+    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
+    assert resolve_auth_mode() == ADC_AUTH_MODE
+    assert resolve_auth_mode("user") == USER_AUTH_MODE
+    assert resolve_auth_mode("USER") == USER_AUTH_MODE
+    assert resolve_auth_mode("anything-else") == ADC_AUTH_MODE
+
+
+def test_build_sql_executor_binds_user_token(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
+    executor = build_sql_executor(access_token="tok-123", auth_mode="user")
+    assert isinstance(executor, AdkBigQueryExecutor)
+    assert executor._credentials.token == "tok-123"
+
+
+def test_build_sql_executor_user_mode_requires_token(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
+    with pytest.raises(SqlExecutionError):
+        build_sql_executor(auth_mode="user")
+
+
+def test_build_sql_executor_adc_mode_has_no_bound_credentials(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
+    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
+    executor = build_sql_executor()
+    assert executor._credentials is None
+
+
+def test_resolve_sql_auth_reads_token_from_state(monkeypatch):
+    monkeypatch.setenv("SQL_AUTH_MODE", "user")
+    monkeypatch.delenv("ADK_OAUTH_TOKEN_STATE_KEY", raising=False)
+    mode, token, error = resolve_sql_auth(
+        {"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-abc"}
+    )
+    assert mode == USER_AUTH_MODE
+    assert token == "tok-abc"
+    assert error is None
+
+
+def test_resolve_sql_auth_fails_closed_without_token(monkeypatch):
+    monkeypatch.setenv("SQL_AUTH_MODE", "user")
+    mode, token, error = resolve_sql_auth({})
+    assert mode == USER_AUTH_MODE
+    assert token is None
+    assert error and "no access token" in error
+
+
+def test_resolve_sql_auth_adc_ignores_token(monkeypatch):
+    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
+    mode, token, error = resolve_sql_auth({"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "x"})
+    assert mode == ADC_AUTH_MODE
+    assert token is None
+    assert error is None
+
+
+def test_resolve_sql_auth_honors_custom_state_key(monkeypatch):
+    monkeypatch.setenv("SQL_AUTH_MODE", "user")
+    monkeypatch.setenv("ADK_OAUTH_TOKEN_STATE_KEY", "custom_token")
+    mode, token, error = resolve_sql_auth({"custom_token": "tok-9"})
+    assert token == "tok-9"
+    assert error is None
 
 
 # --- runtime pure logic ----------------------------------------------------
@@ -394,7 +464,7 @@ def _sql_agent(payload):
     )
 
 
-async def _run_sql(sql_agent):
+async def _run_sql(sql_agent, state=None):
     workflow = Workflow(
         name="sql_generation_test",
         edges=[
@@ -402,14 +472,21 @@ async def _run_sql(sql_agent):
             (enter_sql_generation, sql_agent),
             (sql_agent, enforce_sql_policy),
             (enforce_sql_policy, {"allowed": dry_run_sql, "rejected": repair_sql}),
-            (dry_run_sql, {"valid": maybe_execute_sql, "invalid": repair_sql}),
+            (
+                dry_run_sql,
+                {
+                    "valid": maybe_execute_sql,
+                    "invalid": repair_sql,
+                    "unauthorized": finish_sql_refusal,
+                },
+            ),
             (repair_sql, {"retry": sql_agent, "exhausted": finish_sql_refusal}),
             (maybe_execute_sql, finish_sql_result),
         ],
     )
     session_service = InMemorySessionService()
     await session_service.create_session(
-        app_name="sql_test", user_id="user", session_id="session"
+        app_name="sql_test", user_id="user", session_id="session", state=state or {}
     )
     runner = Runner(
         agent=workflow, app_name="sql_test", session_service=session_service
@@ -484,3 +561,73 @@ def test_workflow_dry_run_error_refused(monkeypatch):
     final = outputs[-1]
     assert final["status"] == "sql_refused"
     assert "unknown column" in final["refusal_reason"]
+
+
+def test_workflow_user_mode_without_token_refuses(monkeypatch):
+    monkeypatch.setenv("SQL_AUTH_MODE", "user")
+    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
+    calls: list[dict] = []
+
+    def fake_build(**kwargs):
+        calls.append(kwargs)
+        return _FakeExecutor()
+
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", fake_build)
+    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
+
+    outputs = asyncio.run(_run_sql(agent))
+
+    final = outputs[-1]
+    assert final["status"] == "sql_refused"
+    assert "no access token" in final["refusal_reason"]
+    assert final["auth"] == {"mode": "user", "authorized": False}
+    # Fails closed before any executor is built (no ADC fallback).
+    assert calls == []
+
+
+def test_workflow_user_mode_with_token_executes(monkeypatch):
+    monkeypatch.setenv("SQL_AUTH_MODE", "user")
+    monkeypatch.setenv("SQL_EXECUTION_MODE", "developer")
+    calls: list[dict] = []
+
+    def fake_build(**kwargs):
+        calls.append(kwargs)
+        return _FakeExecutor()
+
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", fake_build)
+    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
+
+    outputs = asyncio.run(
+        _run_sql(agent, state={"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-xyz"})
+    )
+
+    final = outputs[-1]
+    assert final["status"] == "sql_executed"
+    assert final["auth"] == {
+        "mode": "user",
+        "authorized": True,
+        "source": "user-token",
+    }
+    # Both dry run and execution build the executor with the user token, no ADC.
+    assert calls == [
+        {"access_token": "tok-xyz", "auth_mode": "user"},
+        {"access_token": "tok-xyz", "auth_mode": "user"},
+    ]
+
+
+def test_workflow_adc_mode_records_auth_provenance(monkeypatch):
+    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
+    monkeypatch.setenv("SQL_EXECUTION_MODE", "developer")
+    executor = _FakeExecutor()
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
+    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
+
+    outputs = asyncio.run(_run_sql(agent))
+
+    final = outputs[-1]
+    assert final["status"] == "sql_executed"
+    assert final["auth"] == {
+        "mode": "adc",
+        "authorized": True,
+        "source": "application-default",
+    }

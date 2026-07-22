@@ -94,10 +94,16 @@ Implemented:
 - graph-level broad-catalog recovery from schema-invalid successful model output
 - a 100,000-byte aggregate bound on expanded selected context
 
+Implemented in the active workflow (Phase 9 Slice 1):
+
+- per-user BigQuery execution: `SQL_AUTH_MODE=user` binds the query to a per-request
+  OAuth access token read from workflow state; it fails closed to refusal when the
+  token is absent and never falls back to ADC. `SQL_AUTH_MODE=adc` (default) keeps
+  Application Default Credentials. Auth mode is orthogonal to `SQL_EXECUTION_MODE`.
+
 Not implemented in the active workflow:
 
-- user-token BigQuery execution (Phase 9; developer-mode ADC execution is
-  implemented)
+- Flask harness OAuth hardening and provenance UI (Phase 9 Slice 2)
 - result summarization
 - provider-backed structured-selector, live catalog, and live execution smoke
   tests, deferred to Phase 10 evaluation
@@ -517,8 +523,9 @@ maybe_execute_sql -> finish_sql_result
 
 ### Phase 9: User Authentication And Local UX
 
-Status: **planned**. Split into two slices so the functional per-user execution
-gap lands first (hermetic, high value) and the dev-harness hardening second.
+Status: **Slice 1 complete; Slice 2 planned.** Split into two slices so the
+functional per-user execution gap lands first (hermetic, high value) and the
+dev-harness hardening second.
 
 The semantic workflow currently executes only with Application Default Credentials
 (`semantic/execution.py` `_get_credentials()` calls `google.auth.default()`;
@@ -526,21 +533,40 @@ The semantic workflow currently executes only with Application Default Credentia
 function with no `ctx`/session access). "Per-user execution" is therefore a real
 functional gap distinct from the Flask harness polish.
 
-#### Slice 1: User-token execution in the workflow (functional core)
+#### Slice 1: User-token execution in the workflow (functional core) — implemented
 
-- `semantic/execution.py`: let `build_sql_executor(...)` accept an optional user
-  access token and build `google.oauth2.credentials.Credentials(token=...)` for
-  injection into `AdkBigQueryExecutor` (which already supports a `credentials`
-  param). Add an explicit auth mode so a user-facing mode fails when the token is
-  absent instead of silently falling back to ADC. Keep ADC for `developer` mode.
-- `semantic/sql_runtime.py`: make `maybe_execute_sql` and `dry_run_sql` `@node`s
-  that read the user token from `ctx.state` under a configurable key, the planned
-  `ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`), not the
-  orders key. Route to refusal (no ADC fallback) when required but absent.
-- Provenance: record `auth_mode` (`adc`/`user`) and a user identity marker in the
-  result payload.
-- Tests (hermetic): token to credentials propagation, fail-when-absent in user
-  mode, ADC in developer mode, plan mode needs no credentials.
+- `semantic/execution.py`: `build_sql_executor(*, access_token=None, auth_mode=None)`
+  builds `google.oauth2.credentials.Credentials(token=...)` for injection into
+  `AdkBigQueryExecutor` (which already supports a `credentials` param). A new
+  `resolve_auth_mode()` reads `SQL_AUTH_MODE` (default `adc`); `user` mode requires
+  an access token and raises `SqlExecutionError` when it is absent, never falling
+  back to ADC. Auth mode is orthogonal to `SQL_EXECUTION_MODE` (plan/developer).
+- `semantic/sql_runtime.py`: `dry_run_sql` and `maybe_execute_sql` are now `@node`s.
+  `resolve_sql_auth(state)` reads the user token from `ctx.state` under the
+  configurable `ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`),
+  not the orders key. The dry run is the credential gate; in `user` mode a missing
+  token routes to `unauthorized` -> `finish_sql_refusal` (no ADC fallback).
+- Provenance: the result payload carries an `auth` block recording `mode`
+  (`adc`/`user`), `authorized`, and `source` (`application-default`/`user-token`).
+- `advanced/app/semantic_analytics/agent.py`: the `dry_run_sql` branch adds the
+  `unauthorized -> finish_sql_refusal` edge.
+- Tests (hermetic): auth-mode resolution, token-to-credentials binding,
+  fail-when-absent in user mode, ADC has no bound credentials, custom state key,
+  and workflow-level user-mode refuse/execute plus ADC provenance.
+
+Identity scope (intentional split — "Option A"). `SQL_AUTH_MODE=user` scopes only
+SQL execution (the ADK `execute_sql` toolset) to the user. Catalog grounding reads
+schema, dataset and table listings via the raw `google-cloud-bigquery` client, and
+Dataplex search and profile enrichment via `google-cloud-dataplex`; both keep using
+Application Default Credentials (the deployment identity) regardless of
+`SQL_AUTH_MODE`. This is deliberate: schema and structural metadata are treated as
+deployment-readable, while row data is read under the caller's identity so per-user
+access controls (row-level security, authorized views, column policy) apply. A
+consequence is that grounding can reveal the existence and schema of a table the
+caller cannot query; execution then fails closed for that caller at the data layer.
+The full-user-scoped alternative (threading the token into the catalog and Dataplex
+clients, which requires the token to carry `cloud-platform` for Dataplex) is
+recorded as a future option, not implemented.
 
 #### Slice 2: Flask harness hardening, dependencies, and provenance UI
 
@@ -550,6 +576,12 @@ functional gap distinct from the Flask harness polish.
   registered as a separate Gemini Enterprise agent, using planned
   `AUTH_RESOURCE_SEMANTIC_ANALYTICS`, because deployed GE agents require a 1:1
   agent-to-authorization-resource mapping
+- request the `.../auth/bigquery` OAuth scope, which is sufficient under the Option A
+  split identity (see Phase 12 "Identity and IAM model"); `cloud-platform` is needed
+  only if user-scoped Dataplex is later adopted
+- write the token to `ADK_OAUTH_TOKEN_STATE_KEY` (default
+  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`); the harness currently stores it at
+  `AUTH_RESOURCE_ORDERS`
 - validate OAuth state before token exchange
 - validate token expiry and implement refresh or explicit reauthentication
 - move access tokens out of Flask's client-side signed cookie session
@@ -664,6 +696,45 @@ Defer deployment of `semantic_analytics` until local user-token execution and
 evaluations pass. Select Agent Runtime or Cloud Run based on verified Workflow,
 OAuth, observability, and operational behavior. Revisit Agents CLI deployment,
 evaluation, and observability assets only after selecting the deployment target.
+
+#### Identity and IAM model
+
+Under the Phase 9 Slice 1 split (Option A), a deployment runs under two identities:
+metadata grounding uses the deployment service account (ADC), and SQL execution
+uses the caller's OAuth token when `SQL_AUTH_MODE=user`.
+
+Application Default Credentials resolve to the attached service account on both
+targets:
+
+- Cloud Run: the service's runtime service account (assign a dedicated one; the
+  default compute service account is over-privileged).
+- Vertex AI Agent Engine / Agent Runtime: the Reasoning Engine service agent
+  (`service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com`) or a
+  custom service account supplied at deploy time.
+
+The end-user token source differs by target but lands in the same session-state key
+the workflow reads (`ADK_OAUTH_TOKEN_STATE_KEY`, default
+`AUTH_RESOURCE_SEMANTIC_ANALYTICS`), so engine code is deployment-agnostic:
+
+- Cloud Run with the Flask harness: the local OAuth flow (Slice 2) writes the token.
+- Agent Engine behind Gemini Enterprise: GE injects the token via the authorization
+  resource (the 1:1 agent-to-authorization-resource mapping).
+
+IAM grants:
+
+- Deployment service account (metadata only, no row data):
+  `roles/bigquery.metadataViewer` on the allowlisted datasets, plus
+  `roles/dataplex.catalogViewer` only when `CATALOG_DATAPLEX_ENABLED=true`. It must
+  not hold `roles/bigquery.dataViewer` on source data, so an accidental ADC
+  execution fallback fails closed at the data layer instead of over-permitting.
+- End user (via the OAuth token): `roles/bigquery.jobUser` on the compute project
+  (`GOOGLE_CLOUD_PROJECT`, where jobs are created and bytes billed) and
+  `roles/bigquery.dataViewer` on the data they may read. OAuth scope
+  `.../auth/bigquery` is sufficient under Option A.
+
+Production requirement: any multi-user deployment must set `SQL_AUTH_MODE=user`.
+Leaving it at the `adc` default runs every caller's query as the shared service
+account and bypasses per-user data controls.
 
 ## Design Requirements
 
@@ -827,6 +898,7 @@ Historical commits (restore points):
 | 6 | Complete | Bounded concept selection and catalog handoff |
 | 7 | Complete | Narrow and broad Knowledge Catalog grounding (Dataplex optional; live smoke test deferred to Phase 10) |
 | 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
+| 9 | Slice 1 complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding); Slice 2 Flask/OAuth harness hardening planned |
 
 ### Certification
 
