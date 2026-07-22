@@ -74,6 +74,13 @@ against the catalog (`semantic_narrow` or `catalog_broad`), and generates guarde
 read-only SQL. It dry-runs every query and executes only when
 `SQL_EXECUTION_MODE=developer` (plan mode, dry-run only, is the default).
 
+Whose credentials run the query is governed separately by `SQL_AUTH_MODE`. The
+default `adc` uses Application Default Credentials. Setting `SQL_AUTH_MODE=user`
+binds each query to a per-request OAuth access token read from session state at
+`ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`), and fails
+closed to a refusal when the token is absent. Wiring this harness to populate that
+key (it currently stores the token at `AUTH_RESOURCE_ORDERS`) is Phase 9 Slice 2.
+
 ## Agent Engine Mode
 
 Unset `ADK_LOCAL_BASE_URL` and set `GOOGLE_CLOUD_PROJECT` plus

@@ -99,6 +99,7 @@ root_agent = Workflow(
             {
                 "valid": maybe_execute_sql,
                 "invalid": repair_sql,
+                "unauthorized": finish_sql_refusal,
             },
         ),
         (
