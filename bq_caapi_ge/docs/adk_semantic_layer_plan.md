@@ -103,7 +103,6 @@ Implemented in the active workflow (Phase 9 Slice 1):
 
 Not implemented in the active workflow:
 
-- Flask harness OAuth hardening and provenance UI (Phase 9 Slice 2)
 - result summarization
 - provider-backed structured-selector, live catalog, and live execution smoke
   tests, deferred to Phase 10 evaluation
@@ -523,9 +522,8 @@ maybe_execute_sql -> finish_sql_result
 
 ### Phase 9: User Authentication And Local UX
 
-Status: **Slice 1 complete; Slice 2 planned.** Split into two slices so the
-functional per-user execution gap lands first (hermetic, high value) and the
-dev-harness hardening second.
+Status: **complete.** Split into two slices so the functional per-user execution
+gap landed first (hermetic, high value) and the dev-harness hardening second.
 
 The semantic workflow currently executes only with Application Default Credentials
 (`semantic/execution.py` `_get_credentials()` calls `google.auth.default()`;
@@ -568,35 +566,35 @@ The full-user-scoped alternative (threading the token into the catalog and Datap
 clients, which requires the token to carry `cloud-platform` for Dataplex) is
 recorded as a future option, not implemented.
 
-#### Slice 2: Flask harness hardening, dependencies, and provenance UI
+#### Slice 2: Flask harness hardening, dependencies, and provenance UI — implemented
 
-- resolve user credentials through workflow-compatible BigQuery tooling; reuse the
-  OAuth client and scope configuration where appropriate
-- create a distinct authorization resource for `semantic_analytics` if it is
-  registered as a separate Gemini Enterprise agent, using planned
-  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`, because deployed GE agents require a 1:1
-  agent-to-authorization-resource mapping
-- request the `.../auth/bigquery` OAuth scope, which is sufficient under the Option A
-  split identity (see Phase 12 "Identity and IAM model"); `cloud-platform` is needed
-  only if user-scoped Dataplex is later adopted
-- write the token to `ADK_OAUTH_TOKEN_STATE_KEY` (default
-  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`); the harness currently stores it at
-  `AUTH_RESOURCE_ORDERS`
-- validate OAuth state before token exchange
-- validate token expiry and implement refresh or explicit reauthentication
-- move access tokens out of Flask's client-side signed cookie session
-- configure a stable secret and secure session-cookie settings outside source code
-- reuse backend sessions instead of creating one for every query
-- declare Flask and OAuth dependencies in `pyproject.toml` and `uv.lock` (a `web`
-  extra); remove the manual `uv pip install` setup path
-- display reasoning path and execution provenance in the test UI
-- add Flask OAuth regression tests and live user-token integration coverage
+`advanced/test_web/app.py` was hardened from a legacy development harness (it is
+still a dev harness, not a production identity service):
 
-The current Flask harness passes an explicit session-state key but otherwise has
-legacy development behavior: it does not explicitly validate stored OAuth state,
-uses Flask's client-side signed session for the access token, and creates a new
-backend session for each query. Slice 2 must address those gaps; the harness is
-not a production identity service.
+- writes the user token to `ADK_OAUTH_TOKEN_STATE_KEY` (default
+  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`), matching the engine, instead of the orders key
+- requests the `cloud-platform` scope, a superset of the `.../auth/bigquery` scope
+  sufficient under the Option A split identity (see Phase 12 "Identity and IAM
+  model")
+- validates the OAuth `state` (constant-time) before exchanging the authorization
+  code
+- holds the access token, refresh token, and expiry in a server-side store, placing
+  only an opaque session id in the signed cookie; refreshes the token when expired
+  and otherwise asks the user to reauthenticate
+- uses a stable `FLASK_SECRET_KEY` when set and sets `HttpOnly`, `SameSite=Lax`, and
+  optional `Secure` (`COOKIE_SECURE`) cookie flags
+- reuses the backend session across queries, recreating it only when the token has
+  been refreshed
+- declares Flask and OAuth dependencies in a `web` extra and removes the manual
+  `uv pip install` setup path
+- returns reasoning-path and execution provenance alongside the response for display
+- adds hermetic Flask/OAuth regression tests (`tests/test_web_app.py`), which
+  require the `web` extra and skip otherwise; live user-token integration coverage
+  is exercised under Phase 10
+
+Deferred to a later step: a distinct Gemini Enterprise authorization resource for
+`semantic_analytics` (the 1:1 agent-to-authorization-resource mapping) is a
+deployment-registration concern, tracked with Phase 12.
 
 ### Phase 10: Evaluation
 
@@ -898,7 +896,7 @@ Historical commits (restore points):
 | 6 | Complete | Bounded concept selection and catalog handoff |
 | 7 | Complete | Narrow and broad Knowledge Catalog grounding (Dataplex optional; live smoke test deferred to Phase 10) |
 | 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
-| 9 | Slice 1 complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding); Slice 2 Flask/OAuth harness hardening planned |
+| 9 | Complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding) and hardened Flask/OAuth test harness (server-side tokens, state validation, refresh, session reuse, `web` extra) |
 
 ### Certification
 
@@ -918,6 +916,7 @@ Run deterministic repository checks from the project root:
 
 ```bash
 uv run --extra advanced pytest tests
+uv run --extra advanced --extra web pytest tests
 uv run --extra advanced pytest \
   tests/test_semantic_context.py \
   tests/test_semantic_analytics_agent.py \
@@ -927,6 +926,9 @@ uv run --extra advanced ruff format --check .
 uv lock --check
 git diff --check
 ```
+
+The web harness tests (`tests/test_web_app.py`) require the `web` extra and are
+skipped by the `advanced`-only run; the second command includes them.
 
 The 113 full-suite and 37 focused-suite counts above record Phase 6 closure; later
 test additions should change the counts without being treated as regressions.

@@ -18,6 +18,12 @@ advanced = [
     "google-cloud-dataplex>=2.13.0",
     "sqlglot>=27.0.0",
 ]
+web = [
+    "flask>=3.0.0",
+    "google-auth-oauthlib>=1.2.0",
+    "requests>=2.32.0",
+    "python-dotenv>=1.2.1",
+]
 
 [dependency-groups]
 dev = [
