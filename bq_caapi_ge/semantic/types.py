@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
-SUPPORTED_METRIC_TYPES = {"count_distinct", "sum", "ratio"}
-SUPPORTED_OPERATORS = {"=", "IN"}
 SUPPORTED_RELATIONSHIPS = {
     "one_to_one",
     "one_to_many",
@@ -18,10 +15,6 @@ SUPPORTED_RELATIONSHIPS = {
 
 class ContractError(ValueError):
     """Raised when a semantic contract is invalid."""
-
-
-class CompileError(ValueError):
-    """Raised when an intent cannot compile against the semantic contract."""
 
 
 @dataclass(frozen=True)
@@ -113,42 +106,3 @@ class SemanticContract:
     def contract_version(self) -> str:
         """Returns a stable external contract version string."""
         return f"{self.id}:v{self.version}"
-
-
-@dataclass(frozen=True)
-class IntentFilter:
-    """A user-requested filter after intent selection."""
-
-    dimension: str
-    operator: str
-    value: str | int | float | bool | list[str | int | float | bool]
-
-
-@dataclass(frozen=True)
-class QueryIntent:
-    """Structured intent passed into the deterministic compiler."""
-
-    metric: str
-    dimensions: tuple[str, ...] = ()
-    filters: tuple[IntentFilter, ...] = ()
-    limit: int | None = None
-
-
-@dataclass(frozen=True)
-class QueryParameter:
-    """A BigQuery query parameter emitted by the compiler."""
-
-    name: str
-    value: Any
-
-
-@dataclass(frozen=True)
-class CompiledQuery:
-    """Compiled contract-validated SQL with metadata."""
-
-    sql: str
-    parameters: tuple[QueryParameter, ...]
-    metric: str
-    dimensions: tuple[str, ...]
-    contract_version: str
-    compiled_from_contract: bool

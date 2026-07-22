@@ -18,10 +18,15 @@ accuracy, consistency, and explainability.
 
 ## Current Checkpoint
 
-Current phase: **Phase 6 is complete. Phase 7 is planned next.**
+Current phase: **Phases 6, 7, and 8 are complete. Catalog grounding uses a live
+BigQuery-backed adapter (optional Dataplex search and structural, value-free profile
+enrichment behind `CATALOG_DATAPLEX_ENABLED`), and guarded read-only SQL generation,
+independent source-scope policy, dry run, bounded repair, and mode-gated execution
+run behind deterministic boundaries. Deferred items are the provider-backed live
+catalog and execution smoke tests under Phase 10.**
 
-The executable `semantic_analytics` flow currently stops before Knowledge Catalog
-or SQL:
+The executable `semantic_analytics` flow grounds selected context against the
+catalog through the adapter boundary and then generates guarded, read-only SQL:
 
 ```text
 question
@@ -29,8 +34,49 @@ question
   -> select domain, metric, dimension, and relationship IDs with an LLM
   -> reload and validate selected IDs against current configuration
   -> expand only selected concepts and their physical source closure
-  -> return semantic_narrow or catalog_broad handoff metadata
+  -> semantic_narrow -> load_narrow_catalog_context -> assess_context
+  -> catalog_broad   -> load_broad_catalog_context  -> assess_broad_context
+  -> assess_context insufficient -> load_broad_catalog_context
+  -> grounded -> enter_sql_generation -> generate_sql (LLM)
+  -> enforce_sql_policy -> dry_run_sql -> maybe_execute_sql -> result
+  -> policy or dry-run failure -> bounded repair -> refuse when exhausted
+  -> insufficient grounding -> clarify or refuse
 ```
+
+Phase 7 (catalog grounding), tested with injected fakes:
+
+- `semantic/catalog.py`: `project.dataset.table` parsing, default-deny
+  `CATALOG_ALLOWED_PROJECTS` / `CATALOG_ALLOWED_DATASETS` allowlists separate from
+  the compute project, bounded and profile-redacted timestamped `TableMetadata`,
+  and the injectable `CatalogAdapter` protocol
+- `semantic/catalog_runtime.py`: narrow and broad loading nodes, deterministic
+  sufficiency assessment (no confidence score), and clarification or SQL-handoff
+  terminals
+- `advanced/app/semantic_analytics/agent.py`: the graph now routes through the
+  catalog grounding nodes; the Phase 6 pass-through terminals are retired from the
+  active graph
+- `semantic/catalog.py` `BigQueryCatalogAdapter`: the live adapter reads current
+  schema for narrow sources via the BigQuery metadata API and enumerates only the
+  configured allowlists for broad discovery; the client is created lazily and is
+  injectable for deterministic tests
+- `semantic/catalog.py` `DataplexCatalogAdapter`: an optional decorator (enabled by
+  `CATALOG_DATAPLEX_ENABLED`) that adds Dataplex Catalog search for broad discovery
+  and structural, value-free profile enrichment (null ratio, distinct ratio, and a
+  derived candidate-key flag) plus presence of a generated insight aspect. It
+  re-clamps every discovery result to the allowlists, falls back to the BigQuery
+  name-match search on error or when no in-scope entry is found, and never surfaces
+  data values (samples, min, max, top-N, averages, quantiles). BigQuery remains the
+  schema source of truth; the Dataplex client is lazy and injectable
+- `tests/test_semantic_catalog.py`: parsing, redaction, bounding, narrow and broad
+  grounding, sufficiency routing, scope-escape prevention, live-adapter schema
+  mapping and allowlist-bounded search with a fake client, Dataplex search
+  clamp/fallback, profile enrichment with strict value redaction, and workflow
+  integration
+
+`build_catalog_adapter` requires `GOOGLE_CLOUD_PROJECT` and returns the live
+BigQuery-backed adapter, wrapped in `DataplexCatalogAdapter` when
+`CATALOG_DATAPLEX_ENABLED` is truthy (default off). Only the provider-backed live
+smoke test remains deferred to Phase 10.
 
 Implemented:
 
@@ -38,7 +84,6 @@ Implemented:
 - fully qualified physical table references
 - strict YAML shape and size validation
 - portable semantic reference validation
-- separate historical compiler validation
 - bounded, domain-neutral structured semantic selection
 - prompt-injection guidance for configuration-derived selector data
 - concept-level context and source filtering
@@ -51,19 +96,14 @@ Implemented:
 
 Not implemented in the active workflow:
 
-- Knowledge Catalog schema or profile retrieval
-- narrow-context sufficiency assessment
-- broad catalog discovery
-- SQL generation
-- SQL policy validation
-- BigQuery dry run or execution
-- SQL repair
-- user-token BigQuery execution
+- user-token BigQuery execution (Phase 9; developer-mode ADC execution is
+  implemented)
 - result summarization
-- a provider-backed structured-selector smoke test, deferred to Phase 10 evaluation
+- provider-backed structured-selector, live catalog, and live execution smoke
+  tests, deferred to Phase 10 evaluation
 
-The active runtime does not import the historical compiler, executor, or catalog
-retrieval spike.
+The historical compiler, executor, join planner, and catalog-retrieval spike were
+removed in the Phase 7 cleanup; they are recoverable from git history.
 
 ## Current Interfaces
 
@@ -145,10 +185,10 @@ metrics:
       order_status: ['=', IN]
 ```
 
-The active portable validator checks schema types and references. It does not
-reject a contract merely because the historical compiler lacks an aggregation,
-operator, path, or ordering feature. `validate_compiler_contract()` owns those
-legacy restrictions.
+The active portable validator (`validate_contract()`) checks schema types and
+references only. The historical compiler's stricter aggregation, operator, path,
+and ordering checks were removed with the compiler in the Phase 7 cleanup; a
+future strict mode would reintroduce its own validation.
 
 Compiler-era YAML fields remain because they provide useful calculation and
 relationship guidance. Active model context presents `allowed_dimensions` and
@@ -249,8 +289,8 @@ Verified at Phase 6 closure commit `9a95d5b`:
 - aggregate selected context accepts the exact size limit and rejects larger
   multi-context payloads
 - ADK API discovery loads `orders`, `inventory`, and `semantic_analytics`
-- a fresh-process import of `semantic_analytics` does not load compiler, executor,
-  grounding, or join-planner modules
+- a fresh-process import of `semantic_analytics` loads only the active
+  semantic-resolution and catalog-grounding modules
 
 ## Target End-State
 
@@ -279,7 +319,11 @@ make a model read semantic and catalog context before using query tools.
 
 ## Phase 7: Knowledge Catalog Grounding
 
-Status: **planned next**.
+Status: **complete** (functionally). The deterministic grounding core, adapter
+boundary, graph wiring, a live BigQuery-backed adapter, and the optional
+Dataplex-backed search and structural profile enrichment are all implemented and
+tested with injected fakes. Only the provider-backed live smoke test is deferred to
+Phase 10 evaluation.
 
 Goals:
 
@@ -298,10 +342,14 @@ searchable data sources:
 
 - `GOOGLE_CLOUD_PROJECT` identifies the compute or billing project and does not
   implicitly authorize catalog search in that project
-- planned `CATALOG_ALLOWED_PROJECTS` contains comma-separated searchable project
-  IDs for broad discovery
-- planned `CATALOG_ALLOWED_DATASETS` contains comma-separated
-  `project.dataset` identifiers for broad discovery
+- `CATALOG_ALLOWED_PROJECTS` contains comma-separated searchable project IDs for
+  broad discovery
+- `CATALOG_ALLOWED_DATASETS` contains comma-separated `project.dataset`
+  identifiers for broad discovery
+- `CATALOG_DATAPLEX_ENABLED` (default off) opts into Dataplex Catalog search and
+  structural profile enrichment; when off, discovery uses BigQuery name-match
+  enumeration and no profile aspects are read. Dataplex search is always re-clamped
+  to the allowlists and falls back to name-match on error
 - absent or invalid broad-search allowlists fail closed; they never trigger an
   organization-wide search
 - narrow retrieval uses only exact fully qualified sources from validated
@@ -358,82 +406,249 @@ Exit criteria:
 ### Resume Here
 
 Phase 6 implementation closed at commit `9a95d5b`. The active graph is
-`advanced/app/semantic_analytics/agent.py`; it currently terminates at the two
-pass-through functions in `semantic/runtime.py`.
+`advanced/app/semantic_analytics/agent.py`; it now routes through the catalog
+grounding nodes in `semantic/catalog_runtime.py` and terminates at the grounded
+SQL handoff or clarification.
 
-The first Phase 7 implementation slice is:
+Phase 7 grounding is implemented:
 
-1. Verify the lock-resolved Knowledge Catalog client operations and aspect payloads
-   needed for BigQuery table schema, profile, and insight metadata.
-2. Add typed, default-deny parsing for `CATALOG_ALLOWED_PROJECTS` and
-   `CATALOG_ALLOWED_DATASETS`, keeping compute-project configuration separate.
-3. Add a reusable catalog adapter boundary with injected fakes for deterministic
-   tests; do not make live catalog calls in unit tests.
+1. Live Knowledge Catalog schema retrieval via the BigQuery metadata API
+   (`get_table` schema and description). **(done)**
+2. Typed, default-deny parsing for `CATALOG_ALLOWED_PROJECTS` and
+   `CATALOG_ALLOWED_DATASETS`, kept separate from the compute project. **(done)**
+3. Reusable catalog adapter boundary (`CatalogAdapter`) plus the live
+   `BigQueryCatalogAdapter`; unit tests inject fakes and make no live calls. **(done)**
 4. Replace the two pass-through branch targets with narrow and broad loading nodes.
-5. Add deterministic sufficiency routing and bound, redact, and timestamp the
-   metadata payload.
+   **(done)**
+5. Deterministic sufficiency routing with bounded, redacted, timestamped metadata
+   payloads. **(done)**
+6. Optional `DataplexCatalogAdapter` (behind `CATALOG_DATAPLEX_ENABLED`) adding
+   Dataplex Catalog search and structural, value-free profile enrichment, both
+   re-clamped to the allowlists and falling back to name-match on error. **(done)**
+
+Structural enrichment surfaces only null ratio, distinct ratio, a derived
+candidate-key flag, and the presence of a generated insight aspect. Actual data
+values (samples, min, max, top-N, averages, quantiles) are never read or surfaced,
+satisfying the redaction exit criterion. The `broad` payload records
+`catalog_discovery_backend` (`dataplex`, `name_match`, or `name_match_fallback`)
+for provenance and Phase 10 evaluation.
+
+Remaining Phase 7 work:
+
+- add the provider-backed live smoke test under Phase 10 evaluation (the only
+  deferred item)
 
 Phase 7 must stop before SQL generation or execution. Do not reconnect the
 historical grounding, compiler, executor, or join-planner modules to the active
 workflow merely because similarly named code already exists.
 
-## Remaining Roadmap
+## Phase 8: SQL Generation And Guarded Developer Execution
 
-### Phase 8: SQL Generation And Guarded Developer Execution
+Status: **complete** (functionally). Guarded SQL generation, independent policy,
+dry run, bounded repair, and mode-gated execution are implemented and tested with
+injected fakes. A provider-backed live execution smoke test is deferred to Phase 10.
 
-- generate structured BigQuery SQL from assembled semantic and catalog context
-- include selected sources, interpretation, and unresolved assumptions
-- enforce read-only and allowed-source policy independently of model output
-- dry run before execution and enforce maximum bytes
-- keep SQL repair bounded and explicit
-- execute with ADC only in identified developer mode
-- return SQL, policy, dry-run, execution, row, and job metadata
+### Catalog and execution access decision (ADR)
+
+Catalog access uses raw Google Cloud client libraries (`google-cloud-bigquery`,
+`google-cloud-dataplex`) behind the deterministic `CatalogAdapter` boundary.
+Execution uses the ADK BigQuery tool (`google.adk.integrations.bigquery`)
+`execute_sql` behind the deterministic `SqlExecutor` boundary. Both boundaries are
+invoked programmatically from workflow nodes, not exposed to the model as tools.
+
+- Grounding stays on the SDK because it must be deterministic, hermetically
+  testable, and fully guardrailed (bounding, redaction, allowlist clamp), and
+  because no ADK or MCP tool exposes Dataplex per-column profile aspects.
+- Execution reuses ADK `execute_sql` + `BigQueryToolConfig` because read-only
+  (`WriteMode.BLOCKED`), maximum bytes billed, maximum result rows, and dry run are
+  enforced by Google-maintained code; our policy layer adds the source-scope
+  guarantee ADK does not provide.
+- MCP (for example, MCP Toolbox for Databases) is deferred. It is model-facing and
+  requires a separate server process that would break hermetic tests; it is a
+  candidate only for exposing this layer to external hosts later.
+
+### Implemented behavior
+
+- `semantic/sql_policy.py`: `sqlglot` (BigQuery dialect) AST validation. It rejects
+  anything that is not a single read-only `SELECT`/`WITH` query, requires fully
+  qualified `project.dataset.table` references, excludes CTE names, and enforces
+  that every referenced source is within the sources the grounding step selected.
+  This source-scope guarantee is independent of model output.
+- `semantic/execution.py`: `SqlExecutor` boundary plus `AdkBigQueryExecutor`, which
+  calls ADK `execute_sql` with `WriteMode.BLOCKED`, `maximum_bytes_billed`,
+  `max_query_result_rows`, and `compute_project_id`. It maps results to a normalized
+  `ExecResult`, exposes `dry_run` and `execute`, is injectable for tests, and fails
+  closed without a compute project.
+- `semantic/sql_runtime.py`: `generate_sql` (an `LlmAgent` with the `GeneratedSql`
+  output schema and a schema-recovery callback), `enforce_sql_policy`, `dry_run_sql`,
+  `maybe_execute_sql`, bounded `repair_sql`, and the `finish_sql_result` /
+  `finish_sql_refusal` terminals, split into pure functions and thin nodes.
+- `advanced/app/semantic_analytics/agent.py`: the grounded routes now continue into
+  the guarded SQL chain instead of terminating.
+
+### Execution modes
+
+Execution is fail-safe. `SQL_EXECUTION_MODE` defaults to `plan`, which stops after a
+successful dry run and returns the SQL, policy result, and estimated bytes without
+executing. Setting `SQL_EXECUTION_MODE=developer` runs the query with Application
+Default Credentials as the final step, still read-only and cost-capped. Related
+settings: `SQL_MAX_BYTES_BILLED`, `SQL_MAX_RESULT_ROWS`, and `BIGQUERY_LOCATION`.
+
+### Graph
+
+```text
+grounded -> enter_sql_generation -> generate_sql -> enforce_sql_policy
+enforce_sql_policy allowed -> dry_run_sql | rejected -> repair_sql
+dry_run_sql valid -> maybe_execute_sql | invalid -> repair_sql
+repair_sql retry -> generate_sql (bounded) | exhausted -> finish_sql_refusal
+maybe_execute_sql -> finish_sql_result
+```
+
+### Exit criteria
+
+- SQL is generated only from grounded semantic and catalog context
+- read-only is enforced by policy and by the execution engine
+- referenced sources cannot escape the selected sources
+- a dry run precedes any execution and maximum bytes are enforced
+- SQL repair is bounded to one attempt and then refuses
+- execution occurs with ADC only in developer mode; plan mode never executes
+- SQL, policy, dry-run, and execution provenance are returned
+- all paths are tested without live calls
 
 ### Phase 9: User Authentication And Local UX
 
-- resolve user credentials through workflow-compatible BigQuery tooling
-- reuse the OAuth client and scope configuration where appropriate
-- configure the local ADK session-state token key explicitly through planned
-  `ADK_OAUTH_TOKEN_STATE_KEY`; the current harness uses `AUTH_RESOURCE_ORDERS` as
-  a key, which does not make the semantic workflow the owner of the orders
-  authorization resource
+Status: **planned**. Split into two slices so the functional per-user execution
+gap lands first (hermetic, high value) and the dev-harness hardening second.
+
+The semantic workflow currently executes only with Application Default Credentials
+(`semantic/execution.py` `_get_credentials()` calls `google.auth.default()`;
+`build_sql_executor()` never passes credentials; `maybe_execute_sql` is a plain
+function with no `ctx`/session access). "Per-user execution" is therefore a real
+functional gap distinct from the Flask harness polish.
+
+#### Slice 1: User-token execution in the workflow (functional core)
+
+- `semantic/execution.py`: let `build_sql_executor(...)` accept an optional user
+  access token and build `google.oauth2.credentials.Credentials(token=...)` for
+  injection into `AdkBigQueryExecutor` (which already supports a `credentials`
+  param). Add an explicit auth mode so a user-facing mode fails when the token is
+  absent instead of silently falling back to ADC. Keep ADC for `developer` mode.
+- `semantic/sql_runtime.py`: make `maybe_execute_sql` and `dry_run_sql` `@node`s
+  that read the user token from `ctx.state` under a configurable key, the planned
+  `ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`), not the
+  orders key. Route to refusal (no ADC fallback) when required but absent.
+- Provenance: record `auth_mode` (`adc`/`user`) and a user identity marker in the
+  result payload.
+- Tests (hermetic): token to credentials propagation, fail-when-absent in user
+  mode, ADC in developer mode, plan mode needs no credentials.
+
+#### Slice 2: Flask harness hardening, dependencies, and provenance UI
+
+- resolve user credentials through workflow-compatible BigQuery tooling; reuse the
+  OAuth client and scope configuration where appropriate
 - create a distinct authorization resource for `semantic_analytics` if it is
   registered as a separate Gemini Enterprise agent, using planned
   `AUTH_RESOURCE_SEMANTIC_ANALYTICS`, because deployed GE agents require a 1:1
   agent-to-authorization-resource mapping
-- fail explicitly when a required user token is absent
-- never silently switch to ADC in a user-facing mode
 - validate OAuth state before token exchange
 - validate token expiry and implement refresh or explicit reauthentication
 - move access tokens out of Flask's client-side signed cookie session
 - configure a stable secret and secure session-cookie settings outside source code
 - reuse backend sessions instead of creating one for every query
-- declare Flask and OAuth dependencies in `pyproject.toml` and `uv.lock`; remove
-  the manual `uv pip install` setup path
+- declare Flask and OAuth dependencies in `pyproject.toml` and `uv.lock` (a `web`
+  extra); remove the manual `uv pip install` setup path
 - display reasoning path and execution provenance in the test UI
 - add Flask OAuth regression tests and live user-token integration coverage
 
 The current Flask harness passes an explicit session-state key but otherwise has
 legacy development behavior: it does not explicitly validate stored OAuth state,
 uses Flask's client-side signed session for the access token, and creates a new
-backend session for each query. Phase 9 must address those gaps; the harness is
+backend session for each query. Slice 2 must address those gaps; the harness is
 not a production identity service.
 
 ### Phase 10: Evaluation
 
+Status: **planned**. Locked decisions: correctness is measured as execution
+accuracy against gold SQL result sets; the harness is bespoke (defer Prism and the
+BigQuery Agent Analytics SDK to a later CI-gate step); the live run executes real
+BigQuery in developer mode; Slice 1 (harness core plus arms 2 and 3) is built first.
+
 Evaluate independently:
 
-1. CA `DataAgentToolset` baseline.
+1. CA `DataAgentToolset` baseline (raw question, no grounding).
 2. Custom Knowledge Catalog-only path.
-3. Custom semantic-first plus Knowledge Catalog path.
+3. Custom semantic-first plus Knowledge Catalog path (the recommended path; SQL
+   authored and guarded by the custom workflow).
+4. Grounded CA delegation: semantic selection plus narrow Knowledge Catalog
+   injected as context, then handed to `DataAgentToolset.ask_data_agent`. CA
+   still authors and executes the SQL; grounding is advisory prompt context, not
+   a binding contract.
 
-Begin with a provider-backed structured-selector smoke case. It verifies live
-Gemini schema behavior and credentials, but remains an evaluation or manual
-integration check rather than a deterministic `pytest` test or a Phase 7 blocker.
+Arm 4 exists to answer the Phase 11 question directly: does grounding lift CA far
+enough to serve as the broad / long-tail fallback rung? It is the ablation
+between arm 1 (raw CA) and arm 3 (grounded plus guarded custom generation).
+Because `ask_data_agent` returns only after CA has generated and executed the SQL
+(no pre-execution approval boundary), arm 4 cannot enforce the pre-execution
+guardrails (dry run, byte and cost caps, source-scope) that arm 3 applies, and
+its provenance is limited to CA's returned SQL rather than contract-bound
+generation. Score those two properties explicitly, not just answer correctness.
 
 Measure SQL and answer correctness, source selection, constraint preservation,
 routing, semantic contribution, repeated-run consistency, repair rate, latency,
-and query cost.
+query cost, and — for arm 4 specifically — provenance auditability and
+pre-execution guardrail coverage. Promote arm 4 to the Phase 11 `data_agent`
+fallback rung only if its silent-error rate and repeated-run consistency approach
+arm 3 and its returned SQL is auditable enough for provenance; otherwise it stays
+a comparison baseline.
+
+#### Frameworks decision
+
+The docs name Prism (OSS, CA A/B) and the BigQuery Agent Analytics SDK (trace
+logging, golden-trajectory matching) but frame the comparison gate as `[Bespoke]`.
+ADK's own `adk eval` scores text `response_match`, which is a poor fit for
+execution-accuracy correctness and does not cover the REST CA arms. Phase 10 builds
+a bespoke 4-way harness; BigQuery Agent Analytics and Prism are optional later
+CI-gate wiring.
+
+#### Harness structure (`bq_caapi_ge/eval/`)
+
+- `eval/arms.py`: an `ArmRunner` protocol and a normalized `ArmResult` (sql,
+  referenced_sources, result rows, route, status, repair_count, latency, dry-run
+  bytes, provenance, guardrail_coverage). Adapters: `SemanticFirstArm` (arm 3, runs
+  `agent.root_agent` via `Runner`), `KcOnlyArm` (arm 2, a Workflow that starts at
+  `load_broad_catalog_context`, bypassing the selector), and later the CA REST
+  adapters (arms 1 and 4). Models are injectable so tests use a scripted `BaseLlm`.
+- `eval/metrics.py` (pure, unit-tested): `result_set_equal` (order-insensitive
+  multiset comparison with numeric normalization) is the execution-accuracy metric;
+  plus source-selection, constraint-preservation (`sqlglot`/regex against expected
+  constructs such as `COUNT(DISTINCT)` and required filters), routing,
+  consistency aggregation (N-run), semantic-contribution delta (arm 3 minus arm 2),
+  repair rate, latency, and cost.
+- `eval/golden/thelook.yaml`: golden cases over `bigquery-public-data.thelook_ecommerce`,
+  each with `question`, `gold_sql`, `expected_route`, `expected_sources`,
+  `expected_constraints`, and `difficulty` (simple aggregate, filtered, multi-table
+  join, ratio, top-N, should-clarify, should-refuse).
+- `eval/loader.py`, `eval/orchestration.py` (pure over injected runners),
+  `eval/report.py` (JSON and markdown scorecard), `eval/run_eval.py` (live CLI).
+
+#### Hermetic versus live
+
+Harness logic (metrics, orchestration, report, arm-payload extraction) is unit
+tested with fakes and scripted models; no live calls in `pytest`. The live run
+(`run_eval.py`) executes real Gemini and BigQuery in developer mode and is a
+separate credentialed job, including the provider-backed structured-selector smoke
+case. Pytest must not assert nondeterministic LLM wording.
+
+#### Slices
+
+1. Harness core plus arms 2 and 3, metrics, golden set, and hermetic tests (no CA
+   dependency).
+2. Arms 1 and 4 (CA REST adapter reusing `advanced/docs/examples/chart_with_ca_api.py`;
+   arm-4 grounding injection into the CA `query`/`system_instruction`; a thelook CA
+   data agent via `scripts/admin_tools.py`) plus arm-4 provenance and guardrail
+   coverage scoring.
+3. Full live orchestration (N-run consistency, cost, latency), scorecard write-up,
+   and this section's status update.
 
 ### Phase 11: Optional Data-Agent Delegation
 
@@ -534,22 +749,20 @@ advanced/app/
     agent.py                 # Thin Workflow construction
 
 semantic/
-  types.py                  # Contract and historical query types
-  registry.py               # Portable loading and separate validations
+  types.py                  # Semantic contract dataclasses
+  registry.py               # Portable contract loading and validation
   context.py                # Selector and filtered full context
   runtime.py                # Active semantic-resolution nodes and instructions
-  grounding.py              # Historical asset-summary retrieval spike
-  join_planner.py           # Historical deterministic join planning
-  compiler.py               # Historical deterministic compiler
-  executor.py               # Historical guarded developer execution
+  catalog.py                # Catalog grounding boundary and adapter protocol
+  catalog_runtime.py        # Narrow and broad catalog grounding nodes
 
 config/semantic_contracts/
   thelook_orders.yaml
   thelook_inventory.yaml
 ```
 
-Add modules only when they own a clear reusable boundary. Planned catalog context,
-SQL planning, and policy modules do not exist yet.
+Add modules only when they own a clear reusable boundary. The catalog grounding
+boundary now exists; planned SQL planning and policy modules do not exist yet.
 
 ## ADK 2.5 Compatibility Record
 
@@ -590,12 +803,13 @@ and a sample-specific `certified_analytics` workflow. The workflow duplicated
 metrics and dimensions in Python regular expressions, treated authored coverage
 as a blocker, and required Python changes for semantic changes.
 
-That workflow package was removed in Phase 6. The lower-level compiler and
-executor remain research for a possible future strict mode. They share registry
-and type modules with the active path but are unreachable from the active workflow
-import graph and do not define active runtime capabilities.
+That workflow package was removed in Phase 6. The lower-level compiler, executor,
+join planner, and catalog-retrieval spike were then removed from the repository in
+the Phase 7 cleanup, along with their contract-compiler validation
+(`validate_compiler_contract`) and compiler-only types. A future strict mode would
+restore them from git history rather than keep dead code in the active tree.
 
-Historical commits:
+Historical commits (restore points):
 
 - `1f87502 feat: Add semantic contract compiler`
 - `7ca0350 feat: Add guarded semantic execution`
@@ -606,12 +820,13 @@ Historical commits:
 |---|---|---|
 | 0 | Complete | Original compiler plan |
 | 1 | Superseded | Local covered/refusal Workflow skeleton |
-| 2 | Historical | Registry, join planner, deterministic compiler |
-| 3 | Historical | Guarded ADC developer execution |
-| 4 | Historical | Compact catalog asset retrieval spike |
+| 2 | Removed | Registry, join planner, deterministic compiler (in git history) |
+| 3 | Removed | Guarded ADC developer execution (in git history) |
+| 4 | Removed | Compact catalog asset retrieval spike (in git history) |
 | 5 | Complete | Portable multi-contract schema and ADK compatibility |
 | 6 | Complete | Bounded concept selection and catalog handoff |
-| 7 | Planned | Narrow and broad Knowledge Catalog grounding |
+| 7 | Complete | Narrow and broad Knowledge Catalog grounding (Dataplex optional; live smoke test deferred to Phase 10) |
+| 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
 
 ### Certification
 
@@ -660,6 +875,9 @@ import sys
 
 import advanced.app.semantic_analytics.agent
 
+# The historical compiler/executor/grounding/join-planner modules were removed in
+# the Phase 7 cleanup. This guard ensures they are never reintroduced into the
+# active import graph.
 forbidden = {
     "semantic.compiler",
     "semantic.executor",

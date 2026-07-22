@@ -12,8 +12,6 @@ from yaml.constructor import ConstructorError
 from yaml.resolver import BaseResolver
 
 from semantic.types import (
-    SUPPORTED_METRIC_TYPES,
-    SUPPORTED_OPERATORS,
     SUPPORTED_RELATIONSHIPS,
     ContractError,
     Dimension,
@@ -258,20 +256,6 @@ def validate_contract(contract: SemanticContract) -> None:
         _validate_metric_references(contract, metric)
 
 
-def validate_compiler_contract(contract: SemanticContract) -> None:
-    """Validates restrictions required by the historical SQL compiler.
-
-    Args:
-        contract: Contract to validate for deterministic compilation.
-
-    Raises:
-        ContractError: If the compiler cannot safely consume the contract.
-    """
-    validate_contract(contract)
-    for metric in contract.metrics.values():
-        _validate_compiler_metric(contract, metric)
-
-
 def _parse_contract(raw: dict[str, Any]) -> SemanticContract:
     _reject_unknown_keys(raw, _ROOT_KEYS, "contract")
     return SemanticContract(
@@ -430,68 +414,6 @@ def _validate_metric_references(contract: SemanticContract, metric: Metric) -> N
         if dimension_name not in contract.dimensions:
             raise ContractError(
                 f"metric {metric.name} references unknown dimension {dimension_name}"
-            )
-
-
-def _validate_compiler_metric(contract: SemanticContract, metric: Metric) -> None:
-    from semantic.join_planner import JoinPlanError, plan_joins
-
-    if metric.type not in SUPPORTED_METRIC_TYPES:
-        raise ContractError(f"metric {metric.name} has unsupported type {metric.type}")
-    if metric.type in {"count_distinct", "sum"} and not metric.sql:
-        raise ContractError(f"metric {metric.name} requires sql")
-    if metric.type == "ratio" and (
-        not metric.numerator_sql or not metric.denominator_sql
-    ):
-        raise ContractError(f"metric {metric.name} requires numerator and denominator")
-    if not set(metric.required_dimensions).issubset(metric.allowed_dimensions):
-        raise ContractError(
-            f"metric {metric.name} required dimensions must also be allowed"
-        )
-    if metric.default_order_by not in {None, "metric_desc"}:
-        raise ContractError(
-            f"metric {metric.name} has unsupported default order {metric.default_order_by}"
-        )
-    if metric.default_limit is not None and (
-        isinstance(metric.default_limit, bool)
-        or not isinstance(metric.default_limit, int)
-        or not 1 <= metric.default_limit <= 1000
-    ):
-        raise ContractError(
-            f"metric {metric.name} default limit must be between 1 and 1000"
-        )
-
-    for dimension_name in metric.allowed_dimensions + metric.required_dimensions:
-        try:
-            planned_joins = plan_joins(
-                contract,
-                metric,
-                {
-                    metric.base_table,
-                    contract.dimensions[dimension_name].table,
-                },
-            )
-        except JoinPlanError as error:
-            raise ContractError(
-                f"dimension {dimension_name} is not reachable from metric {metric.name}"
-            ) from error
-        if metric.type in {"sum", "ratio"} and any(
-            planned_join.introduces_fan_out for planned_join in planned_joins
-        ):
-            raise ContractError(
-                f"dimension {dimension_name} introduces fan-out for metric {metric.name}"
-            )
-
-    for dimension_name, operators in metric.allowed_filters.items():
-        if dimension_name not in metric.allowed_dimensions:
-            raise ContractError(
-                f"filter {dimension_name} is not an allowed dimension for {metric.name}"
-            )
-        unsupported_operators = set(operators) - SUPPORTED_OPERATORS
-        if unsupported_operators:
-            raise ContractError(
-                f"filter {dimension_name} has unsupported operators: "
-                f"{sorted(unsupported_operators)}"
             )
 
 
