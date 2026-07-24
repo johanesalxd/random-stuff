@@ -110,9 +110,20 @@ few days, and confirm `$0` in AWS Cost Explorer the next day.
 - **BQML forecast fails to read the federated table** — confirm the catalog is
   synced (Phase 3) and everything is in `us-east4`; as a fallback, `SELECT` the
   `sales_history` rows into a `us-east4` staging table and train on that.
-- **DataScan rejects the payload (`gcp/06`)** — preview API shapes vary; switch to
-  the documented `bigqueryPublishingConfig.tableType=OBJECT_TABLE` +
-  `unstructuredDataEventsConfig.enabled=true` shape (noted inline in the script).
+- **DataScan rejects the payload (`gcp/06`)** — preview API shapes vary. The live
+  v1 discovery API expects `bigqueryPublishingConfig.tableType=BIGLAKE` +
+  `storageConfig.unstructuredDataOptions.semanticInferenceEnabled=true` (not
+  `OBJECT_TABLE` / `unstructuredDataEventsConfig`, and not `entity_inference_enabled`).
+- **`datascans run` fails with `INVALID_ARGUMENT: ... does not exist` (`gcp/06`)** —
+  create is async; the scan is `state=CREATING` for a bit and `describe` succeeds
+  before it's runnable. Wait until `state=ACTIVE` (the script now polls for this)
+  before running.
+- **Discovery job fails "unable to acquire necessary resources" (`gcp/06`)** —
+  transient regional capacity error; just rerun. The script auto-retries once.
+- **No "Extract with SQL" in the Insights tab (`gcp/06`)** — semantic extraction is
+  console-only and region-gated in preview (e.g. `us-east4` shows only *Manage
+  discovery scan settings* / *Generate insights*). The object table is still
+  published; use the `gcp/05` seed as the grounded stand-in until it's available.
 - Preview support: biglake-help@google.com
 
 ## References
