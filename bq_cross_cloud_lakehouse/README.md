@@ -59,6 +59,7 @@ flowchart LR
 - **Keyless auth (OIDC)** — GCP's BigLake SA assumes an AWS IAM role via `sts:AssumeRoleWithWebIdentity`; no long-lived AWS keys in Google Cloud.
 - **Credential vending** — the catalog hands BigQuery short-lived, downscoped S3 creds at query time.
 - **Single query surface** — native BQ tables and AWS-federated Iceberg tables join in one `us-east4` query (BigQuery can't join across regions, so the native side is co-located in `us-east4`).
+- **No Databricks, no Cross-Cloud Interconnect** — managed catalog federation plus credential vending delivers the cross-cloud read directly, replacing what would otherwise require a Databricks Unity Catalog integration or a private Cross-Cloud Interconnect link.
 
 ## Quick start
 
@@ -148,6 +149,12 @@ the optional live Knowledge Catalog extraction tell the same story.
   the Dataplex extraction, once it's GA / allowlisted in your region. Today the
   repo uses Knowledge Catalog (beat-faithful) + a deterministic seed; GA
   `ML.PROCESS_DOCUMENT` is the SQL-native alternative.
+- **Semantic "Extract with SQL"** is a console step that is region-gated in
+  preview. `gcp/06` reliably publishes the BigLake **object table** over the PDFs,
+  but in some regions (e.g. `us-east4` today) the Insights tab exposes only
+  *Manage discovery scan settings* / *Generate insights* — the *Extract with SQL*
+  action isn't offered yet. The `gcp/05` seed stands in for that extracted output
+  until it lands.
 - **VS Code Data Agent Kit** agentic flow — see `assets/copilot-instructions.md`.
 
 ## Cost

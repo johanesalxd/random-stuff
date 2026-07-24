@@ -15,7 +15,7 @@ CONN="${GCP_PROJECT}.${GCP_REGION}.${BQ_CONNECTION_ID}"
 CONN_SA="$(bq --project_id="${GCP_PROJECT}" --format=json show --connection "${CONN}" 2>/dev/null \
   | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["cloudResource"]["serviceAccountId"])' 2>/dev/null || true)"
 if [[ -n "${CONN_SA:-}" ]]; then
-  for ROLE in roles/aiplatform.user roles/dataplex.serviceAgent roles/bigquery.dataEditor; do
+  for ROLE in roles/bigquery.user roles/bigquery.dataEditor roles/aiplatform.user roles/dataplex.discoveryPublishingServiceAgent; do
     gcloud projects remove-iam-policy-binding "${GCP_PROJECT}" \
       --member="serviceAccount:${CONN_SA}" --role="${ROLE}" --condition=None --quiet >/dev/null 2>&1 || true
   done
