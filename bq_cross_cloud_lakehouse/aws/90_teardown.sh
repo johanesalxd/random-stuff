@@ -5,8 +5,9 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
-echo "== Drop Glue table + database =="
-aws glue delete-table --database-name "${GLUE_DATABASE}" --name "${ICEBERG_TABLE}" 2>/dev/null || true
+echo "== Drop Glue tables + database =="
+aws glue delete-table --database-name "${GLUE_DATABASE}" --name "${FROYO_LOYALTY_TABLE}" 2>/dev/null || true
+aws glue delete-table --database-name "${GLUE_DATABASE}" --name "${FROYO_SALES_TABLE}" 2>/dev/null || true
 aws glue delete-database --name "${GLUE_DATABASE}" 2>/dev/null || true
 
 echo "== Empty + delete S3 bucket ${S3_BUCKET} =="
