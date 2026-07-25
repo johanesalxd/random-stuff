@@ -8,8 +8,9 @@
   :root {
     --gcp-blue: #1a73e8;
     --gcp-fill: #aecbfa;
-    --gcp-alt-fill: #d7e6fb;
+    --gcp-alt-fill: #e8f0fe;
     --dbx-fill: #fbc02d;
+    --dbx-alt-fill: #fdeaba;
     --sync-green: #34a853;
     --border: #202124;
     --grey-fill: #f1f3f4;
@@ -55,7 +56,7 @@
   .row {
     display: grid;
     grid-template-columns: 150px 1fr;
-    gap: 16px; align-items: stretch; margin-bottom: 26px;
+    gap: 16px; align-items: stretch; margin-bottom: 46px;
     position: relative; z-index: 2;
   }
   .row.foundation { margin-top: 6px; }
@@ -79,14 +80,13 @@
     display:flex; align-items:center; justify-content:center;
   }
   .xclake span {
-    writing-mode: vertical-rl; transform: rotate(180deg);
     font-size: 12.5px; font-weight: 600; color: var(--gcp-blue);
-    letter-spacing:.03em; text-align:center; padding: 6px 0;
+    letter-spacing:.02em; text-align:center; line-height:1.35; padding: 0 10px;
   }
   .xclake.off { opacity:.26; border-color:#dadce0; background:var(--grey-fill); }
   .xclake.off span { color:#9aa0a6; }
-  .xclake.dim { opacity:.5; }
-  .xclake.on  { opacity:1; box-shadow: 0 2px 9px rgba(26,115,232,.22); }
+  /* active-but-alternative (GCP led / full): dimmed-blue fill, no heavy shadow */
+  .xclake.on  { opacity:1; background: var(--gcp-alt-fill); box-shadow:none; }
 
   .cell {
     background: #fff; border: 1.5px solid var(--border); border-radius: 11px;
@@ -99,34 +99,39 @@
   .cell.gcp { color: var(--gcp-blue); }
   .cell.other { color: #202124; }
   .cell .paren { font-style: italic; font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .cell .vm { font-size:10px; font-weight:600; color:#8a6d00; letter-spacing:.02em; margin-top:3px;
-              text-transform:uppercase; opacity:.85; }
-  /* upcoming / preview: dotted border shown in default too */
-  .cell.upcoming { border-style: dashed; }
+  /* deployment-model badges: serverless (green) vs self-managed (red) */
+  .model { font-size:10px; font-weight:700; letter-spacing:.02em; margin-top:3px; text-transform:uppercase; }
+  .model.srv { color:#188038; }
+  .model.vm  { color:#c5221f; }
+  /* preview / upcoming text marker: asterisk (works even with a solid border) */
+  .cell .pstar { color:#8a6d00; font-weight:700; }
+  .cell .prevstar { display:none; }
+  .cell.prev .prevstar { display:inline; }
 
   /* scenario states */
   .stage.scenario .cell { opacity: .26; background: var(--grey-fill); color: #9aa0a6 !important; border-color:#dadce0; }
-  .stage.scenario .cell small, .stage.scenario .cell .vm, .stage.scenario .cell .paren { color:#9aa0a6 !important; }
+  .stage.scenario .cell small, .stage.scenario .cell .model, .stage.scenario .cell .paren { color:#9aa0a6 !important; }
   .stage.scenario .cell.on { opacity: 1; }
   .cell.on.own-gcp  { background: var(--gcp-fill); color:#202124 !important; border-color: var(--border); box-shadow: 0 2px 9px rgba(26,115,232,.25); }
   .cell.on.own-dbx  { background: var(--dbx-fill); color:#202124 !important; border-color: var(--border); box-shadow: 0 2px 9px rgba(249,168,37,.3); }
   .cell.on.own-gcp small, .cell.on.own-dbx small,
-  .cell.on.own-gcp .paren, .cell.on.own-dbx .paren,
-  .cell.on.own-gcp .vm, .cell.on.own-dbx .vm { color:#3c4043 !important; }
+  .cell.on.own-gcp .paren, .cell.on.own-dbx .paren { color:#3c4043 !important; }
+  /* keep the green/red model badges visible on active cells */
+  .stage.scenario .cell.on .model.srv { color:#188038 !important; }
+  .stage.scenario .cell.on .model.vm  { color:#c5221f !important; }
 
   /* alternative (dimmed fill, solid border = available) */
-  .cell.on.alt { background: var(--gcp-alt-fill); border-style: solid; opacity:.75; box-shadow:none; }
-  /* DBX on other CSPs: orange, italic, dotted */
-  .cell.on.ext { border-style: dashed; font-style: italic; }
+  .cell.on.alt { border-style: solid; opacity:.8; box-shadow:none; }
+  .cell.on.own-gcp.alt { background: var(--gcp-alt-fill); }
+  .cell.on.own-dbx.alt { background: var(--dbx-alt-fill); }
+  /* DBX on other CSPs: dimmed yellow (alternative) + solid border (available) + italic + label */
+  .cell.on.ext { border-style: solid; font-style: italic; opacity:.8; box-shadow:none; }
+  .cell.on.own-dbx.ext { background: var(--dbx-alt-fill); }
   .cell .extlab { display:none; font-size:10.5px; font-weight:600; margin-top:2px; }
   .cell.ext .extlab { display:block; }
-  /* Databricks Preview: solid yellow + dashed border (preview = dotted, not dimmed) */
-  .cell.on.prev { border-style: dashed; box-shadow:none; }
-  /* alternative + upcoming keeps dotted border (dimmed + dotted) */
-  .cell.on.alt.upcoming { border-style: dashed; }
-  .cell .prevlab { display:none; font-size:10.5px; font-weight:600; font-style:italic; margin-top:2px; color:#8a6d00; }
-  .cell.prev .prevlab { display:block; }
-  .cell.on.own-dbx.prev .prevlab { color:#5f4b00; }
+  /* Databricks Preview: solid yellow, preview shown by the * marker (not the border) */
+  .cell.on.prev { box-shadow:none; }
+
 
   /* AI Hypercomputer: always-on foundation, never greyed */
   .row.foundation .row-label { color: var(--gcp-blue); }
@@ -152,7 +157,7 @@
   .sw.def { background:#fff; }
   .ln { width:26px; height:0; border-top-width:2.5px; border-top-style:solid; flex:none; }
   .ln.blue { border-color: var(--gcp-blue); }
-  .ln.altln { border-top-style:dashed; border-color: var(--gcp-blue); opacity:.7;}
+  .ln.altln { border-top-style:dashed; border-color: #8ab4f8; }
   .ln.sync { border-top-style:dashed; border-color: var(--sync-green); }
 
   .footer { padding: 8px 36px 30px; color:#9aa0a6; font-size: 11.5px; line-height:1.5; }
@@ -179,54 +184,52 @@
   <span style="margin-left:10px;"><b>Fill:</b></span>
   <span><span class="sw gcp"></span> solid = primary</span>
   <span><span class="sw alt"></span> dimmed = alternative</span>
-  <span style="margin-left:10px;"><b>Border:</b></span>
-  <span><span class="sw def"></span> solid = available</span>
-  <span><span class="sw def" style="border-style:dashed;"></span> dotted = preview / upcoming</span>
   <span style="margin-left:10px;"><b>Lines:</b></span>
   <span><span class="ln blue"></span> primary</span>
   <span><span class="ln altln"></span> alternative / optional</span>
   <span><span class="ln sync"></span> catalog sync</span>
   <span style="margin-left:10px;"><b>Text:</b></span>
   <span><em>italic ( )</em> = capability</span>
-  <span><b>VM</b> = self-managed</span>
+  <span><span class="model srv" style="margin-top:0;">serverless</span> = serverless / managed service</span>
+  <span><span class="model vm" style="margin-top:0;">self-managed</span> = self-managed compute (VMs)</span>
   <span><em>(other CSPs)</em> = another cloud</span>
+  <span><b style="color:#8a6d00;">*</b> = preview / upcoming</span>
 </div>
 
 <div class="layout">
   <div>
     <div class="stage" id="stage">
       <svg id="wires"></svg>
-      <div class="xclake" id="xclake"><span>Cross-cloud Lakehouse (network)</span></div>
+      <div class="xclake" id="xclake"><span>Cross-cloud Lakehouse &middot; AWS + Azure &middot; interconnect + caching</span></div>
 
       <div class="row">
         <div class="row-label">UX</div>
         <div class="cells">
-          <div class="cell gcp" data-id="ux-bqstudio">BQ Studio <span class="paren">(Agentic)</span></div>
-          <div class="cell gcp" data-id="ux-gemini">Gemini Enterprise + Antigravity <span class="paren">(serverless)</span></div>
-          <div class="cell other" data-id="ux-dbx">DBX<span class="vm">self-managed &middot; VM</span><span class="extlab">(other CSPs)</span></div>
-          <div class="cell other" data-id="ux-3p">3P Agentic Harness<span class="vm">self-managed &middot; VM</span></div>
+          <div class="cell gcp" data-id="ux-bqstudio">BQ Studio <span class="paren">(agentic)</span><span class="model srv">serverless</span></div>
+          <div class="cell gcp" data-id="ux-gemini">Gemini Enterprise + Agent Engine <span class="model srv">serverless</span></div>
+          <div class="cell other" data-id="ux-dbx">DBX<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="ux-3p">3P Agentic Harness<span class="model vm">self-managed</span></div>
         </div>
       </div>
 
       <div class="row">
         <div class="row-label">Engines</div>
         <div class="cells">
-          <div class="cell gcp" data-id="eng-bq">BQ <span class="paren">(serverless)</span></div>
-          <div class="cell gcp" data-id="eng-spark">Spark <span class="paren">(serverless)</span></div>
-          <div class="cell gcp" data-id="eng-pubsub">Pub/Sub <span class="paren">(serverless)</span></div>
-          <div class="cell gcp" data-id="eng-alloydb">AlloyDB <span class="paren">(OLTP)</span></div>
-          <div class="cell other" data-id="eng-dbx">DBX<span class="vm">self-managed &middot; VM</span><span class="extlab">(other CSPs)</span></div>
-          <div class="cell other" data-id="eng-3p">3P Engines<span class="vm">self-managed &middot; VM</span></div>
+          <div class="cell gcp" data-id="eng-bq">BQ <span class="model srv">serverless</span></div>
+          <div class="cell gcp" data-id="eng-spark">Spark <span class="model srv">serverless</span></div>
+          <div class="cell gcp" data-id="eng-pubsub">Pub/Sub <span class="model srv">serverless</span></div>
+          <div class="cell gcp" data-id="eng-alloydb"><span>AlloyDB<span class="pstar">*</span></span> <span class="paren">(OLTP)</span></div>
+          <div class="cell other" data-id="eng-dbx">DBX<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="eng-3p">3P Engines<span class="model vm">self-managed</span></div>
         </div>
       </div>
 
       <div class="row hasband">
         <div class="row-label">Catalog</div>
         <div class="cells">
-          <div class="cell gcp" data-id="cat-kc">Knowledge Catalog <span class="paren">(serverless)</span></div>
-          <div class="cell other" data-id="cat-uc">DBX UC<span class="vm">self-managed &middot; VM</span><span class="extlab">(other CSPs)</span></div>
-          <div class="cell other" data-id="cat-3p">3P catalog</div>
-          <div class="cell other upcoming" data-id="cat-private">Private cloud catalog</div>
+          <div class="cell gcp" data-id="cat-kc">Knowledge Catalog <span class="model srv">serverless</span></div>
+          <div class="cell other" data-id="cat-uc">DBX UC<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="cat-open3p"><span>AWS Glue / 3P / private cloud catalog<span class="pstar">*</span></span></div>
         </div>
       </div>
 
@@ -235,10 +238,9 @@
         <div class="cells wrap">
           <div class="cell gcp" data-id="st-bqnative">BQ native</div>
           <div class="cell gcp" data-id="st-gcs">GCS Iceberg / Delta</div>
-          <div class="cell gcp" data-id="st-gcsiceberg">GCS Iceberg<span class="prevlab">(preview)</span></div>
+          <div class="cell gcp" data-id="st-gcsiceberg"><span>GCS Iceberg<span class="prevstar pstar">*</span></span></div>
           <div class="cell gcp" data-id="st-gcsdelta">GCS Delta</div>
-          <div class="cell other" data-id="st-othercsp">S3 / ADLS Iceberg</div>
-          <div class="cell other upcoming" data-id="st-privatestore">Private-cloud Iceberg</div>
+          <div class="cell other" data-id="st-open3p"><span>AWS S3 / Azure ADLS / private cloud Iceberg<span class="pstar">*</span></span></div>
         </div>
       </div>
 
@@ -271,42 +273,42 @@
 /* ---------- scenario model ----------
    node value = "owner" or "owner|style"
    owner: gcp | dbx
-   style: alt  (dimmed fill + solid border = alternative / available)
-          ext  (dbx on other CSPs: dashed border + italic + "(other CSPs)")
-          prev (solid fill + dashed border = primary + Databricks Preview)
+   style: alt  (dimmed fill = alternative / available)
+          ext  (dbx on other CSPs: dimmed-yellow fill + italic + "(other CSPs)")
+          prev (solid fill = primary + Databricks Preview, marked with *)
 ------------------------------------------------------------------ */
 const S = {
   0: { name:"Overview", tag:"All capabilities", tagcol:"#fff",
-    desc:"The full open data platform. Blue = GCP-native, black = Databricks / 3rd-party. Serverless engines are in italics; DBX &amp; 3P engines are self-managed (run on VMs). The AI Hypercomputer (CPU / GPU / TPU) is the shared foundation everything runs on. Pick a scenario to trace one path &mdash; from Databricks-only (orange) to GCP-native (blue).",
+    desc:"The full open data platform. Blue = GCP-native, black = Databricks / third-party (3P). Serverless / managed services carry a green badge; Databricks &amp; 3P are self-managed (red badge, run on VMs). The AI Hypercomputer (CPU / GPU / TPU) is the shared foundation everything runs on. Pick a scenario to trace one path &mdash; from Databricks-only (orange) to GCP-native (blue).",
     flow:"", nodes:{}, caveat:"" },
 
   1: { name:"DBX full", tag:"All Databricks", tagcol:"#fbc02d", xclake:"off",
-    desc:"The common Databricks starting point on Google Cloud. UX, compute and governance all sit inside Databricks; data lands in GCS as Delta (GA) / Iceberg (Preview) under Unity Catalog. Gemini / Antigravity is already there on our side (dimmed) &mdash; and it all still runs on Google&rsquo;s AI Hypercomputer VMs underneath.",
-    flow:"DBX UX &rarr; DBX engine &rarr; DBX Unity Catalog &rarr; GCS Delta (GA) / Iceberg (Preview)",
-    nodes:{ "ux-dbx":"dbx","ux-gemini":"gcp|alt","eng-dbx":"dbx","cat-uc":"dbx","st-gcsdelta":"dbx","st-gcsiceberg":"dbx|prev","pr-both":"dbx" },
+     desc:"The common Databricks starting point on Google Cloud. UX, compute and governance all sit inside Databricks; data lands in GCS as Delta (GA) / Iceberg (<b>Databricks Preview</b>, marked *) under Unity Catalog. Gemini / Agent Engine is already available on the GCP side (dimmed) &mdash; and it all still runs on Google&rsquo;s AI Hypercomputer VMs underneath.",
+     flow:"Databricks UX &rarr; Databricks engine &rarr; Unity Catalog &rarr; GCS Delta (GA) / Iceberg (Preview)",
+    nodes:{ "ux-dbx":"dbx","ux-gemini":"gcp|alt","ux-3p":"dbx|alt","eng-dbx":"dbx","cat-uc":"dbx","st-gcsdelta":"dbx","st-gcsiceberg":"dbx|prev","pr-both":"dbx" },
     edges:[ ["ux-dbx","eng-dbx","o"],["ux-gemini","eng-dbx","od"],["eng-dbx","cat-uc","o"],["cat-uc","st-gcsdelta","o"],["cat-uc","st-gcsiceberg","od"] ],
-    caveat:"Databricks compute governs data only through Unity Catalog over GCS (Delta is GA; open Iceberg output is <b>Databricks Preview</b>, shown dimmed / dotted). It cannot run on BQ-native storage &mdash; that would be read-only federation. This is the surface we open up." },
+    caveat:"Databricks compute governs data only through Unity Catalog over GCS (Delta is GA; open Iceberg output is <b>Databricks Preview</b>, marked *). It cannot run on BQ-native storage &mdash; that would be read-only federation. This is the surface GCP opens up." },
 
-  2: { name:"DBX led", tag:"Databricks-led, opening up", tagcol:"#ffd54f", xclake:"dim", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"]],
-    desc:"Same Databricks experience up top, but data is written as open Iceberg on GCS (Databricks-Preview, shown yellow / dotted) and Knowledge Catalog &harr; UC sync is switched on, so GCP reads the same tables. GCP serverless engines (BQ, Spark) and KC are available as alternative compute / governance &mdash; a notebook (incl. Databricks, via Spark Connect) could drive them instead.",
-    flow:"DBX UX &rarr; DBX engine + BQ / Spark serverless (alt) &rarr; UC &harr; KC &rarr; GCS Iceberg (Preview)",
+  2: { name:"DBX led", tag:"Databricks-led, opening up", tagcol:"#ffd54f", xclake:"off", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"]],
+     desc:"Same Databricks experience up top, but data is written as open Iceberg on GCS (<b>Databricks Preview</b>, marked *) and Knowledge Catalog &harr; Unity Catalog sync is switched on, so GCP reads the same tables. GCP serverless engines (BigQuery, Serverless for Apache Spark) and Knowledge Catalog are available as alternative compute / governance &mdash; a notebook (incl. Databricks, via Spark Connect) could drive them instead.",
+     flow:"Databricks UX &rarr; Databricks engine + BQ / Serverless for Apache Spark (alt) &rarr; UC &harr; KC &rarr; GCS Iceberg (Preview)",
     nodes:{ "ux-dbx":"dbx","ux-gemini":"gcp|alt","eng-dbx":"dbx","eng-bq":"gcp|alt","eng-spark":"gcp|alt","cat-uc":"dbx","cat-kc":"gcp|alt","st-gcsiceberg":"dbx|prev","pr-both":"dbx" },
     edges:[ ["ux-dbx","eng-dbx","o"],["ux-dbx","eng-bq","bd"],["ux-dbx","eng-spark","bd"],["ux-gemini","eng-dbx","od"],["ux-gemini","eng-bq","bd"],["ux-gemini","eng-spark","bd"],["eng-dbx","cat-uc","o"],["eng-bq","cat-kc","bd"],["eng-spark","cat-kc","bd"],["cat-uc","st-gcsiceberg","od"],["cat-kc","st-gcsiceberg","bd"] ],
-    caveat:"Databricks-written Iceberg on GCS is <b>Databricks Preview</b> (yellow / dotted); GCP reads it via KC. Alternative GCP compute uses <code>dataproc-spark-connect</code> (Spark Connect over gRPC) so a notebook can drive a Serverless Spark session &mdash; works off-GCP with ADC. KC&harr;UC sync = cross-cloud Lakehouse catalog federation (UC external tables; same- or cross-cloud)." },
+    caveat:"Databricks-written Iceberg on GCS is <b>Databricks Preview</b> (yellow, marked *); GCP reads it via KC. Alternative GCP compute uses <code>dataproc-spark-connect</code> (Spark Connect over gRPC) so a notebook can drive a Serverless for Apache Spark session &mdash; works off-GCP with ADC. KC&harr;UC sync = Unity Catalog &harr; Knowledge Catalog federation (same-cloud here; cross-cloud Lakehouse applies when the remote catalog is on another cloud)." },
 
-  3: { name:"GCP led", tag:"GCP-led (engines)", tagcol:"#cfe3ff", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-private","KC \u2194 private"]],
-    desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The Databricks notebook stays a primary UX driving GCP engines; Databricks engine / UC on other clouds read the same data read-only via the Iceberg REST catalog. BQ native and a private-cloud catalog are available too (dimmed).",
-    flow:"DBX UX (primary) + BQ Studio / Gemini (alt) &rarr; BQ / Spark serverless &rarr; KC &rarr; GCS Iceberg &nbsp;&middot;&nbsp; DBX engine + UC = other-CSP readers",
-    nodes:{ "ux-bqstudio":"gcp|alt","ux-gemini":"gcp|alt","ux-dbx":"dbx","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp","eng-dbx":"dbx|ext","cat-kc":"gcp","cat-uc":"dbx|ext","cat-private":"gcp|alt","st-gcsiceberg":"gcp","st-bqnative":"gcp|alt","st-privatestore":"gcp|alt","pr-both":"gcp" },
-    edges:[ ["ux-dbx","eng-bq","b"],["ux-dbx","eng-spark","b"],["ux-bqstudio","eng-bq","bd"],["ux-bqstudio","eng-spark","bd"],["ux-gemini","eng-bq","bd"],["ux-gemini","eng-spark","bd"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["eng-dbx","cat-uc","od"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-bqnative","bd"],["cat-private","st-privatestore","bd"],["cat-uc","st-gcsiceberg","od"] ],
-    caveat:"The GCS Iceberg table is GCP-managed and GA. What is <b>Databricks Preview</b> is Databricks reading it via the Iceberg REST catalog (read-only foreign Iceberg, limited support &mdash; shown dotted). BQ native + a private-cloud catalog are available (dimmed); authoritative read/write + governance stay GCP-side.", preview:true },
+  3: { name:"GCP led", tag:"GCP-led (engines)", tagcol:"#cfe3ff", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-open3p","KC \u2194 3P/private"]],
+     desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The Databricks notebook stays a primary UX driving GCP engines; Databricks engine / Unity Catalog on other clouds read the same data read-only via the Iceberg REST catalog. BQ native, plus a combined AWS Glue / 3P / private-cloud catalog and external Iceberg (AWS S3 / Azure ADLS / private cloud) reachable from Knowledge Catalog, are available too (dimmed); private cloud is upcoming (*).",
+     flow:"Databricks UX (primary) + BQ Studio / Gemini (alt) &rarr; BQ / Serverless for Apache Spark &rarr; Knowledge Catalog &rarr; GCS Iceberg &nbsp;&middot;&nbsp; Databricks engine + UC = other-cloud readers",
+    nodes:{ "ux-bqstudio":"gcp|alt","ux-gemini":"gcp|alt","ux-dbx":"dbx","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp","eng-dbx":"dbx|ext","cat-kc":"gcp","cat-uc":"dbx|ext","cat-open3p":"dbx|alt","st-gcsiceberg":"gcp","st-bqnative":"gcp|alt","st-open3p":"dbx|alt","pr-both":"gcp" },
+    edges:[ ["ux-dbx","eng-bq","b"],["ux-dbx","eng-spark","b"],["ux-bqstudio","eng-bq","bd"],["ux-bqstudio","eng-spark","bd"],["ux-gemini","eng-bq","bd"],["ux-gemini","eng-spark","bd"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["eng-dbx","cat-uc","od"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-bqnative","bd"],["cat-kc","st-open3p","bd"],["cat-open3p","st-open3p","bd"],["cat-uc","st-gcsiceberg","od"] ],
+    caveat:"The GCS Iceberg table is GCP-managed and GA. What is <b>Databricks Preview</b> is Databricks reading it via the Iceberg REST catalog (read-only foreign Iceberg, limited support &mdash; shown as dotted lines). BQ native + the combined AWS Glue / 3P / private-cloud catalog and external Iceberg are available (dimmed; private cloud upcoming, marked *); authoritative read/write + governance stay GCP-side.", preview:true },
 
-  4: { name:"GCP full", tag:"All GCP", tagcol:"#aecbfa", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-private","KC \u2194 private"]],
-    desc:"All-GCP: BigQuery + serverless engines on GCP storage, governed by Knowledge Catalog with Gemini / Antigravity in BQ Studio. AlloyDB (OLTP) is reached from BQ Studio via federated query and from Gemini via agent / MCP. The Iceberg REST catalog stays open outward &mdash; Databricks UC on other clouds still reads the open tables (UC &rarr; GCS Iceberg), and a private-cloud catalog syncs with KC (dimmed). DBX UX / engine remain available on other CSPs. Open by default, no lock-in.",
-    flow:"BQ Studio (Agentic) + Gemini &rarr; BQ / Spark serverless + AlloyDB &rarr; KC &rarr; BQ native + GCS Iceberg &nbsp;( open outward )",
-    nodes:{ "ux-bqstudio":"gcp","ux-gemini":"gcp","ux-dbx":"dbx|ext","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp","eng-alloydb":"gcp","eng-dbx":"dbx|ext","cat-kc":"gcp","cat-uc":"dbx|ext","cat-private":"gcp|alt","st-bqnative":"gcp","st-gcsiceberg":"gcp","st-privatestore":"gcp|alt","pr-both":"gcp" },
-    edges:[ ["ux-bqstudio","eng-bq","b"],["ux-bqstudio","eng-spark","b"],["ux-bqstudio","eng-alloydb","b"],["ux-gemini","eng-bq","b"],["ux-gemini","eng-spark","b"],["ux-gemini","eng-alloydb","b"],["eng-alloydb","cat-kc","b"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["cat-kc","st-bqnative","b"],["cat-kc","st-gcsiceberg","b"],["cat-private","st-privatestore","bd"],["cat-uc","st-gcsiceberg","od"] ],
-    caveat:"BQ-native is exposed to external engines read-only via BigQuery catalog federation (<code>bq://</code> Iceberg REST); managed Iceberg tables interoperate read/write with credential vending. BQ Studio reaches AlloyDB via federated query; Gemini via agent / MCP. Only DBX UC federates the read here (dotted); DBX UX / engine stay on other CSPs (Databricks Preview). Private-cloud catalog + storage are upcoming (dimmed).", preview:true }
+  4: { name:"GCP full", tag:"All GCP", tagcol:"#aecbfa", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-open3p","KC \u2194 3P/private"]],
+     desc:"All-GCP: BigQuery + Serverless for Apache Spark on GCP storage, governed by Knowledge Catalog with Gemini / Agent Engine in BQ Studio. AlloyDB (OLTP) is reached from BQ Studio via GA federated query and from Gemini via agent / MCP; it also reads analytical Iceberg via Lakehouse Federation / BigQuery Views and takes reverse-ETL results back (both <b>Preview</b>, marked *). The Iceberg REST catalog stays open outward &mdash; Databricks (Unity Catalog) on other clouds still reads the open tables (UC &rarr; GCS Iceberg), and a combined AWS Glue / 3P / private-cloud catalog syncs with Knowledge Catalog (dimmed). Databricks UX / engine remain available on other clouds. Open by default, no lock-in.",
+     flow:"BQ Studio (agentic) + Gemini &rarr; BQ / Serverless for Apache Spark + AlloyDB &rarr; Knowledge Catalog &rarr; BQ native + GCS Iceberg &nbsp;( open outward )",
+    nodes:{ "ux-bqstudio":"gcp","ux-gemini":"gcp","ux-dbx":"dbx|ext","ux-3p":"dbx|alt","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp","eng-alloydb":"gcp","eng-dbx":"dbx|ext","eng-3p":"dbx|alt","cat-kc":"gcp","cat-uc":"dbx|ext","cat-open3p":"dbx|alt","st-bqnative":"gcp","st-gcsiceberg":"gcp","st-open3p":"dbx|alt","pr-both":"gcp" },
+    edges:[ ["ux-bqstudio","eng-bq","b"],["ux-bqstudio","eng-spark","b"],["ux-bqstudio","eng-alloydb","b"],["ux-gemini","eng-bq","b"],["ux-gemini","eng-spark","b"],["ux-gemini","eng-alloydb","b"],["eng-alloydb","cat-kc","b"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["cat-kc","st-bqnative","b"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-open3p","bd"],["cat-open3p","st-open3p","bd"],["eng-dbx","cat-uc","od"],["cat-uc","st-gcsiceberg","od"] ],
+    caveat:"BQ-native is exposed to external engines read-only via BigQuery catalog federation (<code>bq://</code> Iceberg REST); managed Iceberg tables interoperate read/write with credential vending. BQ Studio reaches AlloyDB via GA federated query; Gemini via agent / MCP. AlloyDB&harr;Iceberg (Lakehouse Federation / BigQuery Views + reverse-ETL) is <b>Preview</b> (*). Only Unity Catalog federates the Databricks read here (read-only foreign Iceberg); Databricks UX / engine stay on other clouds. The combined AWS Glue / 3P / private-cloud catalog + external Iceberg are dimmed (private cloud upcoming, marked *); cross-cloud federation is <b>Preview</b>.", preview:true }
 };
 
 const HW = ["hw-cpu","hw-gpu","hw-tpu"];
@@ -363,21 +365,22 @@ function render(){
 // Cross-cloud Lakehouse (network) band: spans Catalog -> Storage rows on the right
 function positionBand(scn){
   const band = document.getElementById('xclake');
-  const catRow = cell('cat-private').closest('.row');
-  const stoRow = cell('st-privatestore').closest('.row');
   const s = stage.getBoundingClientRect();
-  const c = catRow.getBoundingClientRect();
-  const st = stoRow.getBoundingClientRect();
-  const top = c.top - s.top;
-  const bottom = st.top - s.top + st.height;
-  band.style.top = top + 'px';
-  band.style.height = (bottom - top) + 'px';
-  band.style.right = '20px';
-  band.style.width = '132px';
+  const catTop = cell('cat-kc').getBoundingClientRect().top - s.top;
+  const stoRect = cell('st-bqnative').getBoundingClientRect();
+  const bottom = stoRect.top - s.top + stoRect.height;
+  // left edge = one normal cell-gap (18px) right of the private-cloud cells;
+  // right edge = flush with the engines row (rightmost matrix cell)
+  const priv = cell('cat-open3p').getBoundingClientRect();
+  const ref = cell('eng-3p').getBoundingClientRect();
+  band.style.top = catTop + 'px';
+  band.style.height = (bottom - catTop) + 'px';
+  band.style.left = (priv.right - s.left + 18) + 'px';
+  band.style.right = (s.right - ref.right) + 'px';
+  band.style.width = 'auto';
   const state = (current===0) ? 'ov' : (scn.xclake || 'off');
-  band.classList.remove('off','dim','on');
+  band.classList.remove('off','on');
   if(state==='off') band.classList.add('off');
-  else if(state==='dim') band.classList.add('dim');
   else if(state==='on') band.classList.add('on');
   // 'ov' (overview) = default white/blue, no modifier
 }
@@ -393,7 +396,8 @@ function drawWires(nodes, scn){
   wires.innerHTML = `<defs>
     <marker id="ar-blue" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1a73e8"/></marker>
     <marker id="ar-orange" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f9a825"/></marker>
-    <marker id="ar-alt" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1a73e8"/></marker>
+    <marker id="ar-altd" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8ab4f8"/></marker>
+    <marker id="ar-extd" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f7cd7a"/></marker>
   </defs>`;
 
   // b=blue solid, o=orange solid, bd=blue dotted (alt), od=orange dotted (ext)
@@ -405,8 +409,8 @@ function drawWires(nodes, scn){
     p.setAttribute("d",`M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`);
     p.setAttribute("fill","none"); p.setAttribute("stroke-width","2.5");
     if(kind==='o'){ p.setAttribute("stroke","#f9a825"); p.setAttribute("marker-end","url(#ar-orange)"); }
-    else if(kind==='bd'){ p.setAttribute("stroke","#1a73e8"); p.setAttribute("stroke-dasharray","5 5"); p.setAttribute("opacity",".7"); p.setAttribute("marker-end","url(#ar-alt)"); }
-    else if(kind==='od'){ p.setAttribute("stroke","#f9a825"); p.setAttribute("stroke-dasharray","5 5"); p.setAttribute("marker-end","url(#ar-orange)"); }
+    else if(kind==='bd'){ p.setAttribute("stroke","#8ab4f8"); p.setAttribute("stroke-dasharray","5 5"); p.setAttribute("opacity",".85"); p.setAttribute("marker-end","url(#ar-altd)"); }
+    else if(kind==='od'){ p.setAttribute("stroke","#f7cd7a"); p.setAttribute("stroke-dasharray","5 5"); p.setAttribute("opacity",".85"); p.setAttribute("marker-end","url(#ar-extd)"); }
     else { p.setAttribute("stroke","#1a73e8"); p.setAttribute("marker-end","url(#ar-blue)"); }
     wires.appendChild(p);
   }
@@ -414,8 +418,9 @@ function drawWires(nodes, scn){
   (scn.edges||[]).forEach(([a,b,kind])=> line(a,b,kind));
 
   // sync links (green dashed arcs above the catalog row), staggered to avoid overlap
+  // no text label: the legend already denotes green = catalog sync
   const syncs = scn.syncs || [];
-  syncs.forEach(([a,b,label],i)=>{
+  syncs.forEach(([a,b],i)=>{
     if(!cell(a) || !cell(b)) return;
     const A=center(cell(a)), B=center(cell(b));
     const y=Math.min(A.top,B.top)-14-(i*16);
@@ -424,12 +429,6 @@ function drawWires(nodes, scn){
     p.setAttribute("fill","none"); p.setAttribute("stroke","#34a853");
     p.setAttribute("stroke-width","2.5"); p.setAttribute("stroke-dasharray","2 4");
     wires.appendChild(p);
-    const t=document.createElementNS(NS,"text");
-    t.setAttribute("x",(A.x+B.x)/2); t.setAttribute("y",y-4);
-    t.setAttribute("text-anchor","middle"); t.setAttribute("font-size","10.5");
-    t.setAttribute("fill","#188038"); t.setAttribute("font-weight","600");
-    t.textContent=label||"sync";
-    wires.appendChild(t);
   });
 }
 
@@ -454,7 +453,7 @@ window.addEventListener('resize', ()=>{ render(); });
 document.getElementById('footer').innerHTML =
   "Illustrative reference &mdash; grounded to Google Cloud &amp; Databricks docs as of 25 Jul 2026. "+
   "Sources: Serverless for Apache Spark (Spark Connect / <code>dataproc-spark-connect</code>), Lakehouse Iceberg REST &amp; catalog federation, "+
-  "Cross-cloud Lakehouse (Unity Catalog), Pub/Sub &rarr; BigQuery Storage Write API.";
+  "Cross-cloud Lakehouse (AWS Glue / Unity Catalog; cross-cloud interconnect + intelligent caching), AlloyDB Lakehouse Federation (Preview), Pub/Sub &rarr; BigQuery Storage Write API.";
 
 render();
 </script>
