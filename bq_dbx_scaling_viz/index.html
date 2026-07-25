@@ -796,7 +796,7 @@
                     <tr>
                         <td><strong>Cost / Billing Shape</strong></td>
                         <td>Multiple clusters may run at once, and early (locked-in) queries can't use a newly added cluster's resources.<sup class="cite"><a href="#ref1">[1]</a></sup></td>
-                        <td>Single pool scales dynamically, but autoscaled slots are billed per second with a 1-minute minimum and round up to 50-slot increments, so you can pay for more slots than a short query uses.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></td>
+                        <td>Single pool scales dynamically and, with <b>Fluid Scaling</b> (GA), is billed <b>per second with no minimum duration</b> &mdash; still rounded up to 50-slot increments. (Standard autoscaling otherwise defaults to a 60-second minimum.)<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref11">[11]</a></sup></td>
                     </tr>
                     <tr>
                         <td><strong>Performance Predictability</strong></td>
@@ -813,7 +813,7 @@
                 <li><strong>Fair Scheduling:</strong> BigQuery allocates slots within a reservation first equally across projects, then equally across each project's running jobs, reassigning them on the fly as queries start/finish ("eventual fairness").<sup class="cite"><a href="#ref4">[4]</a></sup></li>
                 <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).<sup class="cite"><a href="#ref2">[2]</a></sup></li>
                 <li><strong>Slots:</strong> Virtual CPUs in BigQuery that can be dynamically allocated and reallocated during query execution; autoscaling rounds up to the nearest 50-slot increment.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
-                <li><strong>Fluid Scaling (opt-in):</strong> A reservation option that adjusts slots second-to-second and removes autoscaling's one-minute minimum, giving true per-second billing. It still scales in 50-slot increments and may grant a reservation slightly more or fewer idle slots than its exact fair share during rapid demand swings. Enabled per reservation at the admin-project level.<sup class="cite"><a href="#ref4">[4]</a></sup><sup class="cite"><a href="#ref5">[5]</a></sup></li>
+                <li><strong>Fluid Scaling (GA):</strong> BigQuery's per-second autoscaling model &mdash; it adjusts slots second-to-second with <b>no minimum duration</b> (true per-second billing, up to ~34% cost savings for spiky workloads). It still scales in 50-slot increments and may grant a reservation slightly more or fewer idle slots than its exact fair share during rapid demand swings. Enabled per reservation at the admin-project level; standard autoscaling otherwise defaults to a one-minute minimum.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref11">[11]</a></sup></li>
             </ul>
 
             <h3>Caveats & Limitations</h3>
@@ -825,7 +825,7 @@
             <p><strong>BigQuery — "Seamless" isn't unbounded or instant:</strong></p>
             <ul>
                 <li><strong>Discrete scaling steps:</strong> Autoscaling doesn't add capacity slot-by-slot — it scales up rounded to the nearest 50-slot increment, and the autoscaler is reactive and conservative by design.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
-                <li><strong>60-second minimum:</strong> Autoscaled slots are billed per second with a one-minute minimum, and scaled capacity is retained for at least 60 seconds (the scale-down window) &mdash; unless <em>Fluid Scaling</em> is enabled (see Technical Notes).<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></li>
+                <li><strong>Billing granularity:</strong> With <b>Fluid Scaling</b> (GA) slots are billed <b>per second with no minimum duration</b>. Note it's a per-reservation opt-in; standard autoscaling otherwise defaults to a one-minute minimum and retains scaled capacity for a 60-second scale-down window.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></li>
                 <li><strong>Capacity limits:</strong> Fair scheduling redistributes within available capacity, but that capacity is bounded — by a reservation's baseline + <code>autoscale_max_slots</code>, or by the on-demand ceiling of ~2,000 slots per project (20,000 per organization; BigQuery may occasionally exceed this to speed a query). Under contention, queries still wait for slots.<sup class="cite"><a href="#ref4">[4]</a></sup><sup class="cite"><a href="#ref7">[7]</a></sup></li>
             </ul>
 
@@ -906,9 +906,9 @@
                 <li id="ref4">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/slots" target="_blank" rel="noopener">Understand slots</a>
                     <span class="src-what">Fair scheduling (equal across projects, then across each project's jobs; eventual fairness); autoscaling in 50-slot increments; on-demand up to ~2,000 slots/project and 20,000/org.</span></li>
                 <li id="ref5">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/slots-autoscaling-intro" target="_blank" rel="noopener">Introduction to slots autoscaling</a>
-                    <span class="src-what">60-second minimum / scale-down window; optional Fluid Scaling removes the one-minute minimum (50-slot increment still applies).</span></li>
+                    <span class="src-what">Fluid Scaling (GA) gives per-second billing with no minimum duration (50-slot increment still applies); standard autoscaling otherwise defaults to a 60-second minimum / scale-down window.</span></li>
                 <li id="ref6">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/reservations-workload-management" target="_blank" rel="noopener">Understand reservations (workload management)</a>
-                    <span class="src-what">Baseline + <code>autoscale_max_slots</code>; autoscaled slots billed per second with a one-minute minimum.</span></li>
+                    <span class="src-what">Baseline + <code>autoscale_max_slots</code>; per-second billing with no minimum via Fluid Scaling (per-reservation opt-in), else a one-minute minimum by default.</span></li>
                 <li id="ref7">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/quotas" target="_blank" rel="noopener">Quotas &amp; limits</a>
                     <span class="src-what">On-demand concurrent slot quotas (per-project / per-organization).</span></li>
                 <li id="ref8">Google Cloud &mdash; <a href="https://cloud.google.com/dataplex/pricing" target="_blank" rel="noopener">Knowledge Catalog (Dataplex) pricing</a>
@@ -917,6 +917,8 @@
                     <span class="src-what">The Lakehouse runtime catalog is "a fully managed, serverless metastore service" and single source of truth, serving Spark, Flink, Hive &amp; BigQuery via the Apache Iceberg REST catalog.</span></li>
                 <li id="ref10">Google Cloud &mdash; <a href="https://cloud.google.com/dataplex/docs/catalog-overview" target="_blank" rel="noopener">Knowledge Catalog overview</a>
                     <span class="src-what">Managed governance for the open lakehouse: semantic search, lineage, profiling &amp; quality across engines; ingests BigQuery, Iceberg REST (Unity / Glue / Snowflake &mdash; federation Preview), AlloyDB (Preview) &amp; Pub/Sub metadata.</span></li>
+                <li id="ref11">Google Cloud Blog &mdash; <a href="https://cloud.google.com/blog/products/data-analytics/unveiling-new-bigquery-capabilities-for-the-agentic-era" target="_blank" rel="noopener">Unveiling new BigQuery capabilities for the agentic era</a>
+                    <span class="src-what">BigQuery Fluid Scaling is GA &mdash; true per-second billing (no minimum duration), up to ~34% cost savings for variable workloads.</span></li>
             </ol>
         </div>
 
@@ -1126,7 +1128,7 @@
             capEl.innerText = `${slotsPerJob} Slots`;
             equivalentRow.style.display = 'flex';
             equivalentEl.innerText = `${(slotsPerJob / dbuToSlotsRatio).toFixed(2)} DBU`;
-            statusEl.innerHTML = `<b>Granular scaling:</b><br>Job #${jobs} added ~${slotsPerJob} Slots of demand.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>Fair scheduling rebalances</b> running queries as capacity changes (within reservation / on-demand limits).`;
+            statusEl.innerHTML = `<b>Granular scaling:</b><br>Job #${jobs} added ~${slotsPerJob} Slots of demand.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>Fair scheduling rebalances</b> running queries as capacity changes; billed <b>per second</b> with Fluid Scaling (within reservation / on-demand limits).`;
         }
 
         // Agentic metadata — self-managed / coupled catalog: metadata serving and query
