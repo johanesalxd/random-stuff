@@ -373,6 +373,20 @@
 
         .split-bar .seg.query { background: var(--dbx-fill); }
 
+        /* Agentic-metadata layout — in-flow labels/stats prevent overlap */
+        #canvas.meta-mode { flex-direction: column; align-items: flex-start; gap: 40px; }
+        #canvas.meta-mode .cluster-container { height: auto; }
+        #canvas.meta-mode .cluster-label {
+            position: static; top: auto; left: auto;
+            margin: 0 0 10px; white-space: normal; line-height: 1.3;
+        }
+        #canvas.meta-mode .cluster-stats {
+            position: static; bottom: auto; width: auto;
+            text-align: left; margin-top: 12px;
+        }
+        #canvas.meta-mode .bq-pool { margin-top: 0; }
+        #canvas.meta-mode .bq-pool .cluster-label { width: 100%; }
+
         /* Serverless KC metadata calls — small elastic nodes */
         .bq-node.meta-node {
             width: 34px;
@@ -1014,6 +1028,7 @@
 
             totalEl.innerText = jobs;
             canvas.innerHTML = '';
+            canvas.classList.toggle('meta-mode', workload === 'meta');
 
             if (jobs === 0) {
                 capEl.innerText = '--';
