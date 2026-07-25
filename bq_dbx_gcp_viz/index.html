@@ -146,6 +146,8 @@
   .panel p { font-size: 13px; line-height: 1.55; color:#3c4043; margin: 10px 0; }
   .panel .caveat { background:#fff8e1; border:1px solid #ffe082; border-radius:8px; padding:10px 12px; font-size:12px; color:#5f4b00; margin-top:12px; line-height:1.5;}
   .panel .caveat b { color:#3c4043; }
+  .panel .assume { background:#e8f0fe; border-color:#aecbfa; color:#1a3b6b; }
+  .panel .assume b { color:#174ea6; }
   .panel .preview { display:inline-block; background:#e8f0fe; color:#1967d2; border:1px solid #aecbfa; font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:999px; margin-left:6px; }
 
   .legend { display:flex; flex-wrap:wrap; gap:16px 20px; padding: 8px 36px 16px; font-size:12px; color:var(--muted);}
@@ -191,7 +193,7 @@
   <span style="margin-left:10px;"><b>Text:</b></span>
   <span><em>italic ( )</em> = capability</span>
   <span><span class="model srv" style="margin-top:0;">serverless</span> = serverless / managed service</span>
-  <span><span class="model vm" style="margin-top:0;">self-managed</span> = self-managed compute (VMs)</span>
+  <span><span class="model vm" style="margin-top:0;">self-managed</span> = self-managed compute (VMs in your tenant)</span>
   <span><em>(other CSPs)</em> = another cloud</span>
   <span><b style="color:#8a6d00;">*</b> = preview / upcoming</span>
 </div>
@@ -280,7 +282,8 @@
 const S = {
   0: { name:"Overview", tag:"All capabilities", tagcol:"#fff",
     desc:"The full open data platform. Blue = GCP-native, black = Databricks / third-party (3P). Serverless / managed services carry a green badge; Databricks &amp; 3P are self-managed (red badge, run on VMs). The AI Hypercomputer (CPU / GPU / TPU) is the shared foundation everything runs on. Pick a scenario to trace one path &mdash; from Databricks-only (orange) to GCP-native (blue).",
-    flow:"", nodes:{}, caveat:"" },
+    flow:"", nodes:{}, caveat:"",
+    assume:"This map shows what runs inside &mdash; and is owned within &mdash; your Google Cloud tenant. Databricks is therefore modeled as <b>self-managed</b>: classic compute (SQL warehouses / job clusters) provisioned on GCE VMs in your own project / VPC, so you own the capacity, autoscaling policy, networking and cost.<br><br><b>Databricks Serverless is intentionally out of scope.</b> Per Databricks&rsquo; own architecture, serverless compute runs in a Databricks-managed serverless compute plane inside the <b>Databricks account</b> &mdash; not your Google Cloud tenant. Its scaling, capacity and networking are governed by the Databricks control plane, <b>not by you</b>: it isn&rsquo;t a resource you provision, size, or place in your VPC. Since this diagram is about ownership and control on Google Cloud, serverless Databricks falls outside the boundary (its scaling mechanics are covered in the companion scaling viz)." },
 
   1: { name:"DBX full", tag:"All Databricks", tagcol:"#fbc02d", xclake:"off",
      desc:"The common Databricks starting point on Google Cloud. UX, compute and governance all sit inside Databricks; data lands in GCS as Delta (GA) / Iceberg (<b>Databricks Preview</b>, marked *) under Unity Catalog. Gemini / Agent Engine is already available on the GCP side (dimmed) &mdash; and it all still runs on Google&rsquo;s AI Hypercomputer VMs underneath.",
@@ -440,6 +443,7 @@ function renderPanel(){
   html += `<h2>${current===0?"":current+" \u00b7 "}${scn.name}</h2>`;
   if(scn.flow) html += `<div class="flow">${scn.flow}</div>`;
   html += `<p>${scn.desc}</p>`;
+  if(scn.assume) html += `<div class="caveat assume"><b>Assumptions &amp; scope:</b> ${scn.assume}</div>`;
   if(scn.caveat) html += `<div class="caveat"><b>Grounded note:</b> ${scn.caveat}</div>`;
   panel.innerHTML = html;
 }
@@ -453,7 +457,8 @@ window.addEventListener('resize', ()=>{ render(); });
 document.getElementById('footer').innerHTML =
   "Illustrative reference &mdash; grounded to Google Cloud &amp; Databricks docs as of 25 Jul 2026. "+
   "Sources: Serverless for Apache Spark (Spark Connect / <code>dataproc-spark-connect</code>), Lakehouse Iceberg REST &amp; catalog federation, "+
-  "Cross-cloud Lakehouse (AWS Glue / Unity Catalog; cross-cloud interconnect + intelligent caching), AlloyDB Lakehouse Federation (Preview), Pub/Sub &rarr; BigQuery Storage Write API.";
+  "Cross-cloud Lakehouse (AWS Glue / Unity Catalog; cross-cloud interconnect + intelligent caching), AlloyDB Lakehouse Federation (Preview), Pub/Sub &rarr; BigQuery Storage Write API. "+
+  "Databricks compute planes (classic = customer VPC; serverless = Databricks account, out of scope here).";
 
 render();
 </script>
