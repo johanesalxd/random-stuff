@@ -3,15 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scaling Mechanics: Chunk vs. Seamless</title>
+    <title>Scaling Mechanics: Chunky vs. Seamless</title>
     <style>
         :root {
-            --dbx-color: #FF3621;
-            --bq-color: #4285F4;
-            --bg-color: #f8f9fa;
+            /* Aligned to certis_open_data.html (bq_dbx_viz) design system */
+            --gcp-blue: #1a73e8;
+            --gcp-fill: #aecbfa;
+            --gcp-alt-fill: #d7e6fb;
+            --dbx-orange: #f9a825;
+            --dbx-fill: #fbc02d;
+            --sync-green: #34a853;
+            --border: #202124;
+            --grey-fill: #f1f3f4;
+            --line: #5f6368;
+            --bg: #ffffff;
+            --muted: #5f6368;
+
+            /* Distinct amber tint for "slow / locked-in" (avoids clashing with
+               #fce7a8 which the companion file uses for "Databricks Preview") */
+            --slow-fill: #ffe0b2;
+
+            /* Legacy aliases kept so existing markup/JS keeps working */
+            --dbx-color: var(--dbx-orange);
+            --bq-color: var(--gcp-blue);
+            --bg-color: var(--bg);
             --card-bg: #ffffff;
-            --text-color: #333;
-            --warning-color: #ff9800;
+            --text-color: #202124;
+            --warning-color: #f9a825;
         }
 
         * {
@@ -19,7 +37,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: "Google Sans", Roboto, -apple-system, "Segoe UI", Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
@@ -38,11 +56,12 @@
             text-align: center;
             margin-bottom: 10px;
             font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: 600;
         }
 
         .subtitle {
             text-align: center;
-            color: #666;
+            color: var(--muted);
             margin-bottom: 30px;
             font-size: clamp(0.9rem, 2vw, 1.1rem);
         }
@@ -50,8 +69,8 @@
         .controls {
             background: var(--card-bg);
             padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
             margin-bottom: 30px;
             display: flex;
             flex-wrap: wrap;
@@ -63,8 +82,8 @@
         .config-section {
             background: var(--card-bg);
             padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
             margin-bottom: 30px;
         }
 
@@ -72,6 +91,10 @@
             margin-top: 0;
             margin-bottom: 15px;
             font-size: 1.1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--muted);
         }
 
         .slider-container {
@@ -92,8 +115,8 @@
         }
 
         .slider-value {
-            font-weight: bold;
-            color: var(--bq-color);
+            font-weight: 600;
+            color: var(--gcp-blue);
             min-width: 100px;
             text-align: right;
         }
@@ -105,65 +128,79 @@
         }
 
         .size-btn {
-            padding: 8px 16px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            background: white;
+            padding: 9px 15px;
+            border: 1px solid #dadce0;
+            border-radius: 999px;
+            background: #fff;
+            color: #202124;
             cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all .15s;
         }
 
         .size-btn:hover {
-            border-color: var(--dbx-color);
+            background: #f8f9fa;
         }
 
         .size-btn.active {
-            background: var(--dbx-color);
-            color: white;
-            border-color: var(--dbx-color);
+            background: var(--dbx-fill);
+            color: #202124;
+            border-color: var(--border);
+            font-weight: 600;
+            box-shadow: 0 1px 5px rgba(0,0,0,.18);
         }
 
         button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
+            padding: 9px 18px;
+            border: 1px solid #dadce0;
+            border-radius: 999px;
+            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.1s;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: all .15s;
+            font-size: clamp(0.85rem, 2vw, 0.95rem);
+            background: #fff;
+            color: #202124;
         }
 
-        button:active { transform: scale(0.95); }
+        button:hover { background: #f8f9fa; }
+        button:active { transform: scale(0.97); }
 
-        .btn-primary { background-color: #222; color: white; }
-        .btn-reset { background-color: #e0e0e0; color: #333; }
+        .btn-primary { background-color: var(--border); color: #fff; border-color: var(--border); }
+        .btn-primary:hover { background-color: #000; }
+        .btn-reset { background-color: #fff; color: #202124; }
 
         .toggle-group {
             display: flex;
-            background: #eee;
+            background: var(--grey-fill);
             padding: 4px;
-            border-radius: 8px;
+            border-radius: 999px;
+            gap: 4px;
         }
 
         .toggle-btn {
             padding: 8px 16px;
-            border-radius: 6px;
+            border-radius: 999px;
             cursor: pointer;
             user-select: none;
-            font-size: clamp(0.85rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 2vw, 0.95rem);
+            font-weight: 500;
+            color: var(--muted);
+            transition: all .15s;
         }
 
         .toggle-btn.active.dbx {
-            background: white;
-            color: var(--dbx-color);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            background: var(--dbx-fill);
+            color: #202124;
+            font-weight: 600;
+            box-shadow: 0 1px 5px rgba(0,0,0,.18);
         }
 
         .toggle-btn.active.bq {
-            background: white;
-            color: var(--bq-color);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            background: var(--gcp-fill);
+            color: #202124;
+            font-weight: 600;
+            box-shadow: 0 1px 5px rgba(0,0,0,.18);
         }
 
         #canvas {
@@ -178,8 +215,8 @@
         }
 
         .cluster-container {
-            border: 2px dashed #ccc;
-            border-radius: 12px;
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
             padding: 10px;
             width: 100%;
             max-width: 300px;
@@ -192,17 +229,20 @@
         }
 
         .cluster-container.slow {
-            border-color: var(--warning-color);
-            background: rgba(255, 152, 0, 0.05);
+            border-color: var(--dbx-orange);
+            border-style: dashed;
+            background: var(--slow-fill);
         }
 
         .cluster-label {
             position: absolute;
             top: -30px;
             left: 0;
-            font-weight: bold;
-            color: #666;
-            font-size: clamp(0.85rem, 2vw, 1rem);
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            font-size: clamp(0.8rem, 2vw, 0.9rem);
         }
 
         .cluster-stats {
@@ -211,17 +251,17 @@
             width: 100%;
             text-align: center;
             font-size: clamp(0.8rem, 2vw, 0.9rem);
-            color: #666;
+            color: var(--muted);
         }
 
         .dbu-indicator {
-            font-weight: bold;
-            color: var(--dbx-color);
+            font-weight: 600;
+            color: #8a6d00;
         }
 
         .slow-indicator {
-            color: var(--warning-color);
-            font-weight: bold;
+            color: #8a6d00;
+            font-weight: 600;
             font-size: 0.85em;
         }
 
@@ -234,26 +274,27 @@
         }
 
         .job-node {
-            background-color: var(--dbx-color);
+            background-color: var(--dbx-fill);
+            border: 1.5px solid var(--border);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #202124;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
         .job-node.slow {
-            background-color: var(--warning-color);
+            background-color: var(--slow-fill);
+            border-style: dashed;
         }
 
         .bq-pool {
-            border: 2px solid var(--bq-color);
-            background: rgba(66, 133, 244, 0.05);
-            border-radius: 12px;
+            border: 1.5px solid var(--border);
+            background: rgba(26, 115, 232, 0.05);
+            border-radius: 11px;
             padding: 10px;
             min-height: 140px;
             height: auto;
@@ -278,13 +319,14 @@
         .bq-node {
             width: 60px;
             height: 60px;
-            background-color: var(--bq-color);
+            background-color: var(--gcp-fill);
+            border: 1.5px solid var(--border);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: bold;
+            color: #202124;
+            font-weight: 600;
             flex-shrink: 0;
             animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
@@ -298,10 +340,11 @@
             position: fixed;
             bottom: 20px;
             right: 20px;
-            background: white;
+            background: #fbfcfd;
             padding: 15px;
             padding-right: 40px;
-            border-radius: 8px;
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
             width: 90%;
             max-width: 300px;
@@ -333,12 +376,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #666;
+            color: var(--muted);
             transition: transform 0.3s ease;
         }
 
         .metric-toggle:hover {
-            color: #333;
+            color: #202124;
+            background: none;
             transform: scale(1.1);
         }
 
@@ -356,34 +400,36 @@
         .explanation-section {
             background: var(--card-bg);
             padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
             margin-bottom: 30px;
         }
 
         .explanation-section h2 {
             margin-top: 0;
-            color: #222;
-            border-bottom: 2px solid #eee;
+            color: #202124;
+            font-weight: 600;
+            border-bottom: 1.5px solid #e8eaed;
             padding-bottom: 10px;
         }
 
         .explanation-section h3 {
-            color: #444;
+            color: #3c4043;
+            font-weight: 600;
             margin-top: 20px;
         }
 
         .scenario-step {
-            background: #f8f9fa;
+            background: var(--grey-fill);
             padding: 15px;
-            border-left: 4px solid var(--dbx-color);
+            border-left: 4px solid var(--dbx-orange);
             margin: 15px 0;
-            border-radius: 4px;
+            border-radius: 8px;
         }
 
         .scenario-step h4 {
             margin-top: 0;
-            color: var(--dbx-color);
+            color: #8a6d00;
         }
 
         .comparison-table {
@@ -396,11 +442,11 @@
         .comparison-table td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #e8eaed;
         }
 
         .comparison-table th {
-            background: #f8f9fa;
+            background: var(--grey-fill);
             font-weight: 600;
         }
 
@@ -409,14 +455,123 @@
         }
 
         .dbx-highlight {
-            color: var(--dbx-color);
+            color: #8a6d00;
             font-weight: 600;
         }
 
         .bq-highlight {
-            color: var(--bq-color);
+            color: var(--gcp-blue);
             font-weight: 600;
         }
+
+        .caveat-box {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 8px;
+            padding: 14px 16px;
+            color: #5f4b00;
+            line-height: 1.55;
+            margin-top: 12px;
+        }
+
+        .caveat-box b { color: #3c4043; }
+
+        .grounded-note {
+            font-size: 0.85em;
+            color: #5f4b00;
+            font-style: italic;
+            margin: 4px 0 12px;
+        }
+
+        .footer {
+            width: 100%;
+            max-width: 1400px;
+            color: #9aa0a6;
+            font-size: 11.5px;
+            line-height: 1.5;
+            padding: 8px 0 30px;
+        }
+
+        .footer code,
+        .references code {
+            background: var(--grey-fill);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+
+        /* Legend — matches companion file's .sw / .ln swatch convention */
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 20px;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 30px;
+            padding: 14px 18px;
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
+            background: #fbfcfd;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .legend .sw {
+            width: 15px;
+            height: 15px;
+            border-radius: 4px;
+            border: 1.5px solid var(--border);
+            flex: none;
+        }
+
+        .legend .sw.dbx { background: var(--dbx-fill); }
+        .legend .sw.bq { background: var(--gcp-fill); }
+        .legend .sw.slow { background: var(--slow-fill); border-style: dashed; }
+        .legend .sw.def { background: #fff; }
+
+        /* Inline citation markers */
+        .cite {
+            font-size: 0.7em;
+            vertical-align: super;
+            line-height: 0;
+            font-weight: 600;
+        }
+
+        .cite a { color: var(--gcp-blue); text-decoration: none; }
+        .cite a:hover { text-decoration: underline; }
+
+        /* Sources & References card */
+        .references {
+            background: var(--card-bg);
+            padding: 25px;
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
+            margin-bottom: 30px;
+        }
+
+        .references h2 {
+            margin-top: 0;
+            color: #202124;
+            font-weight: 600;
+            border-bottom: 1.5px solid #e8eaed;
+            padding-bottom: 10px;
+        }
+
+        .references ol {
+            margin: 12px 0 0;
+            padding-left: 22px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #3c4043;
+        }
+
+        .references li { margin-bottom: 10px; }
+        .references a { color: var(--gcp-blue); word-break: break-word; }
+        .references .src-what { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
 
         @media (max-width: 768px) {
             body {
@@ -453,7 +608,15 @@
 <body>
     <div class="container">
         <h1>Scaling Mechanics: Chunky vs. Seamless</h1>
-        <p class="subtitle">Comparing Databricks Serverless SQL and BigQuery Autoscaling</p>
+        <p class="subtitle">Comparing Databricks SQL warehouse scaling and BigQuery slot autoscaling</p>
+
+        <div class="legend">
+            <span><span class="sw dbx"></span> Databricks cluster / job</span>
+            <span><span class="sw bq"></span> BigQuery slot</span>
+            <span><span class="sw slow"></span> Locked-in / slow (shared cluster)</span>
+            <span><span class="sw def"></span> Idle / available</span>
+            <span><em>DBU&rarr;Slot ratio &amp; per-query splits are illustrative &mdash; see notes</em></span>
+        </div>
 
         <div class="controls">
             <div class="toggle-group">
@@ -469,17 +632,19 @@
             <div class="slider-container" style="margin-bottom: 20px;">
                 <label>Cluster Size:</label>
                 <div class="size-selector">
-                    <button class="size-btn" onclick="setClusterSize(12)">Small (12 DBU)</button>
-                    <button class="size-btn" onclick="setClusterSize(20)">Medium (20 DBU)</button>
-                    <button class="size-btn active" onclick="setClusterSize(40)">Large (40 DBU)</button>
-                    <button class="size-btn" onclick="setClusterSize(80)">X-Large (80 DBU)</button>
+                    <button class="size-btn" onclick="setClusterSize(12)">Small (~12 DBU/hr)</button>
+                    <button class="size-btn" onclick="setClusterSize(24)">Medium (~24 DBU/hr)</button>
+                    <button class="size-btn active" onclick="setClusterSize(40)">Large (~40 DBU/hr)</button>
+                    <button class="size-btn" onclick="setClusterSize(80)">X-Large (~80 DBU/hr)</button>
                 </div>
             </div>
+            <p class="grounded-note">Sizes shown are approximate serverless DBU/hr <em>billing rates</em> (Small&nbsp;12, Medium&nbsp;24, Large&nbsp;40, X-Large&nbsp;80),<sup class="cite"><a href="#ref2">[2]</a></sup> not a per-query compute budget. DBU is a billing metric; concurrent queries share the cluster's cores/memory rather than each receiving a literal DBU slice.</p>
             <div class="slider-container">
                 <label for="dbu-ratio">DBU to Slots Ratio (1 DBU =</label>
                 <input type="range" id="dbu-ratio" min="1" max="100" value="15" oninput="updateRatio(this.value)">
                 <span class="slider-value"><span id="ratio-value">15</span> Slots)</span>
             </div>
+            <p class="grounded-note">The DBU&rarr;Slot ratio is illustrative only &mdash; there is no official equivalence between Databricks DBUs and BigQuery slots. It exists purely to place both models on a shared axis for comparison.</p>
         </div>
 
         <div id="canvas"></div>
@@ -499,7 +664,7 @@
                     <span>Equivalent:</span>
                     <span id="equivalent-metric">--</span>
                 </div>
-                <div style="margin-top:10px; font-size: 0.8em; color:#666; line-height: 1.4;">
+                <div style="margin-top:10px; font-size: 0.8em; color:var(--muted); line-height: 1.4;">
                     <span id="status-text">Add jobs to start simulation.</span>
                 </div>
             </div>
@@ -508,35 +673,40 @@
         <div class="explanation-section">
             <h2>Scenario Walkthrough: The "1 to 11" Query Problem</h2>
 
+            <div class="caveat-box">
+                <b>Which model is this?</b> The fixed "one cluster per 10 concurrent queries" rule shown below is the documented behavior of <b>classic &amp; pro</b> SQL warehouses. <b>Serverless</b> warehouses instead use Intelligent Workload Management (IWM): a new query is admitted immediately if capacity exists, otherwise it is <em>queued</em>, and the autoscaler adds clusters when <em>queue wait time</em> rises &mdash; there is no hard "query&nbsp;#11 &rarr; new cluster" trigger. The 10-query step model is kept here because it is concrete and easy to visualize; treat the exact threshold as illustrative.
+            </div>
+
             <div class="scenario-step">
                 <h4>Step 1: Single Query Run</h4>
                 <p><strong>Performance:</strong> Maximum (full cluster capacity)</p>
-                <p><strong>Behavior:</strong> The query has exclusive access to the cluster's resources. With the selected cluster size, it gets all available DBUs.</p>
+                <p><strong>Behavior:</strong> The query has exclusive access to the cluster's resources. With the selected cluster size, it runs on the full set of workers/cores in that cluster.</p>
             </div>
 
             <div class="scenario-step">
                 <h4>Step 2: Jobs 2-10 Added</h4>
-                <p><strong>Performance:</strong> Degrades Linearly (Stuffing Effect)</p>
-                <p><strong>Behavior:</strong> Databricks will typically "stuff" these queries into the existing active cluster until it hits a concurrency threshold (often ~10-20 queries depending on cluster size). These jobs now share the same CPU/Memory, so they each get a fraction of the cluster's total DBUs.</p>
+                <p><strong>Performance:</strong> Degrades as concurrency rises (Stuffing Effect)</p>
+                <p><strong>Behavior:</strong> Additional queries are admitted onto the existing active cluster up to its concurrency limit. They now share the same CPU/memory, so each effectively gets a fraction of the cluster's throughput. (The even "DBU&nbsp;&divide;&nbsp;N" split shown is a simplification &mdash; real sharing depends on each query's resource profile, not a fixed per-query DBU quantum.)</p>
             </div>
 
             <div class="scenario-step">
                 <h4>Step 3: 11th Job Added</h4>
                 <p><strong>Performance:</strong> Split Experience</p>
-                <p><strong>Behavior:</strong> The system detects the first cluster is full (or queue depth exceeds limit) and spins up Cluster #2.</p>
+                <p><strong>Behavior:</strong> The cluster is full (classic/pro) or the queue wait time crosses IWM's threshold (serverless), so a second cluster is provisioned.</p>
                 <ul>
                     <li><strong>The 11th Query:</strong> Routed to Cluster #2 and gets full speed (full cluster capacity).</li>
-                    <li><strong>The First 10 Queries:</strong> REMAIN on Cluster #1, continuing to run slowly with shared resources. They are not moved or rebalanced.</li>
+                    <li><strong>The First 10 Queries:</strong> REMAIN on Cluster #1, continuing to run with shared resources. Running queries are not moved or rebalanced onto the new cluster.</li>
                 </ul>
             </div>
 
             <h3>Key Insight: Locked-In vs. Dynamic Rebalancing</h3>
-            <p>Once a query starts on a Databricks cluster, it stays there for its entire execution. Even with Intelligent Workload Management (IWM), running queries cannot migrate to new clusters. This leads to:</p>
+            <p>In the SQL warehouse model, a query runs to completion on the cluster it was admitted to; when the autoscaler adds clusters, those new clusters take on queued/new queries rather than rebalancing in-flight ones.<sup class="cite"><a href="#ref1">[1]</a></sup> Practical consequences <em>can</em> include:</p>
             <ul>
-                <li>Higher costs (paying for multiple clusters)</li>
-                <li>Uneven performance (early queries remain slow)</li>
-                <li>Resource inefficiency (new clusters can't help existing queries)</li>
+                <li>Higher cost when several clusters run concurrently</li>
+                <li>Uneven experience &mdash; queries admitted during a busy period may run slower than later ones</li>
+                <li>Newly added clusters don't speed up queries already in progress</li>
             </ul>
+            <p>BigQuery differs here: fair scheduling reassigns slots to in-flight queries as capacity changes, within the reservation's / project's limits.<sup class="cite"><a href="#ref4">[4]</a></sup></p>
 
             <h2>Comparison: "Chunky" vs. "Seamless" Scaling</h2>
 
@@ -544,68 +714,103 @@
                 <thead>
                     <tr>
                         <th>Aspect</th>
-                        <th class="dbx-highlight">Databricks Serverless SQL</th>
+                        <th class="dbx-highlight">Databricks SQL Warehouse</th>
                         <th class="bq-highlight">Google BigQuery</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><strong>Scaling Unit</strong></td>
-                        <td>Clusters (Chunky) - Adds entire virtual machines with fixed capacity (12-80 DBU per cluster depending on size)</td>
-                        <td>Slots (Seamless) - Adds granular units of CPU processing power instantly</td>
+                        <td>Clusters (chunky) &mdash; the autoscaler adds or removes whole clusters of the chosen fixed size (e.g., Small, Large, X-Large).<sup class="cite"><a href="#ref1">[1]</a></sup></td>
+                        <td>Slots (granular) &mdash; reservations autoscale slot capacity up/down, rounded up to the nearest 50-slot increment; on-demand draws from a shared pool.<sup class="cite"><a href="#ref4">[4]</a></sup></td>
                     </tr>
                     <tr>
                         <td><strong>Running Queries</strong></td>
-                        <td>Locked-in - Once a query starts on a cluster, it stays there. No resource updates during runtime.</td>
-                        <td>Dynamic/Rebalanced - BigQuery uses "Fair Scheduling." As new slots become available, they can be instantly applied to running stages of existing queries.</td>
+                        <td>Locked-in &mdash; a query runs to completion on its assigned cluster; newly added clusters serve queued/new queries rather than in-flight ones.<sup class="cite"><a href="#ref1">[1]</a></sup></td>
+                        <td>Dynamic / rebalanced &mdash; BigQuery uses fair scheduling within a reservation, so slots are reassigned on the fly to running queries as capacity frees up or is added ("eventual fairness").<sup class="cite"><a href="#ref4">[4]</a></sup></td>
                     </tr>
                     <tr>
                         <td><strong>The "Stuffing" Effect</strong></td>
-                        <td>High - Queries share a fixed cluster size. Performance drops linearly as you add concurrency (e.g., 10 queries on a 40 DBU cluster = 4 DBU each) until the next cluster boots.</td>
-                        <td>Low - Resources are distributed across a massive shared pool. You rarely hit a "hard wall" of a single machine's limits.</td>
+                        <td>Can be pronounced &mdash; concurrent queries share a fixed cluster until the next cluster boots, so per-query throughput tends to drop as concurrency rises.<sup class="cite"><a href="#ref1">[1]</a></sup></td>
+                        <td>Usually milder &mdash; fair scheduling spreads work across a shared slot pool, so per-query impact is smoothed rather than bounded by one cluster's size.<sup class="cite"><a href="#ref4">[4]</a></sup></td>
                     </tr>
                     <tr>
-                        <td><strong>Cost Efficiency</strong></td>
-                        <td>Lower - Multiple clusters needed, but early queries can't use new cluster resources</td>
-                        <td>Higher - Single pool scales dynamically, all queries benefit from added capacity</td>
+                        <td><strong>Cost / Billing Shape</strong></td>
+                        <td>Multiple clusters may run at once, and early (locked-in) queries can't use a newly added cluster's resources.<sup class="cite"><a href="#ref1">[1]</a></sup></td>
+                        <td>Single pool scales dynamically, but autoscaled slots are billed per second with a 1-minute minimum and round up to 50-slot increments, so you can pay for more slots than a short query uses.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></td>
                     </tr>
                     <tr>
                         <td><strong>Performance Predictability</strong></td>
-                        <td>Variable - Depends on when query arrives (before or after cluster scaling)</td>
-                        <td>Consistent - Fair scheduling ensures even distribution as capacity changes</td>
+                        <td>Variable &mdash; depends on when a query arrives (before or after cluster scaling).<sup class="cite"><a href="#ref1">[1]</a></sup></td>
+                        <td>Can be more consistent &mdash; fair scheduling evens out distribution, but the autoscaler is reactive and bounded by reservation limits (or ~2,000 slots/project, 20,000/org, on-demand).<sup class="cite"><a href="#ref4">[4]</a></sup></td>
                     </tr>
                 </tbody>
             </table>
 
             <h3>Technical Notes</h3>
             <ul>
-                <li><strong>IWM (Intelligent Workload Management):</strong> Databricks' ML-powered system that predicts resource needs and manages cluster provisioning. However, it cannot migrate running queries between clusters.</li>
-                <li><strong>Fair Scheduling:</strong> BigQuery's algorithm that continuously redistributes slots across projects and queries, even while queries are running.</li>
-                <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).</li>
-                <li><strong>Slots:</strong> Virtual compute units in BigQuery that can be dynamically allocated and reallocated during query execution.</li>
+                <li><strong>IWM (Intelligent Workload Management):</strong> Databricks' ML-powered system for serverless warehouses. It predicts a query's resource needs, admits it immediately if capacity exists (otherwise queues it), and autoscales clusters when queue wait times rise.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+                <li><strong>Classic/Pro concurrency rule:</strong> Classic and pro warehouses have a fixed limit of one cluster per 10 concurrent queries — this is the concrete rule the step model above mirrors.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+                <li><strong>Fair Scheduling:</strong> BigQuery allocates slots within a reservation first equally across projects, then equally across each project's running jobs, reassigning them on the fly as queries start/finish ("eventual fairness").<sup class="cite"><a href="#ref4">[4]</a></sup></li>
+                <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).<sup class="cite"><a href="#ref2">[2]</a></sup></li>
+                <li><strong>Slots:</strong> Virtual CPUs in BigQuery that can be dynamically allocated and reallocated during query execution; autoscaling rounds up to the nearest 50-slot increment.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
             </ul>
 
             <h3>Caveats & Limitations</h3>
-            <p><strong>About This Visualization:</strong></p>
+            <p><strong>Databricks — About This Visualization:</strong></p>
             <ul>
-                <li><strong>Fixed 10-Query Limit:</strong> This visualization uses a fixed limit of 10 queries per cluster for simplicity and educational purposes. In reality, Databricks Serverless with IWM may trigger scaling earlier or later based on query complexity, resource requirements, and queue depth.</li>
-                <li><strong>IWM Dynamic Behavior:</strong> Serverless SQL warehouses use ML models to predict when to scale. A cluster might spawn at query #5 if IWM detects high resource demands, or wait until query #15 for lighter workloads. The 10-query threshold shown here is illustrative.</li>
-                <li><strong>Locked-In Queries:</strong> Regardless of when scaling occurs, running queries remain locked to their original cluster. New clusters only help new queries—they cannot rescue slow-running queries already in progress.</li>
+                <li><strong>Fixed 10-Query Limit:</strong> This visualization uses a fixed limit of 10 queries per cluster for simplicity. That threshold is exactly right for classic/pro warehouses, but serverless with IWM may trigger scaling earlier or later based on query complexity, resource requirements, and queue depth.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+                <li><strong>IWM Dynamic Behavior:</strong> Serverless SQL warehouses use ML models to predict when to scale, driven by queue wait time. A cluster might spawn sooner under heavy demand, or later for lighter workloads. The 10-query threshold shown here is illustrative.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+                <li><strong>Locked-In Queries:</strong> An in-flight query completes on its assigned cluster; newly added clusters take on queued/new queries rather than rescuing queries already in progress.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+            </ul>
+
+            <p><strong>BigQuery — "Seamless" isn't unbounded or instant:</strong></p>
+            <ul>
+                <li><strong>Discrete scaling steps:</strong> Autoscaling doesn't add capacity slot-by-slot — it scales up rounded to the nearest 50-slot increment, and the autoscaler is reactive and conservative by design.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
+                <li><strong>60-second minimum:</strong> Autoscaled slots are billed per second with a one-minute minimum, and scaled capacity is retained for at least 60 seconds (the scale-down window). The optional <em>Fluid Scaling</em> removes the one-minute minimum, but the 50-slot increment still applies.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></li>
+                <li><strong>Capacity limits:</strong> Fair scheduling redistributes within available capacity, but that capacity is bounded — by a reservation's baseline + <code>autoscale_max_slots</code>, or by the on-demand ceiling of ~2,000 slots per project (20,000 per organization; BigQuery may occasionally exceed this to speed a query). Under contention, queries still wait for slots.<sup class="cite"><a href="#ref4">[4]</a></sup><sup class="cite"><a href="#ref7">[7]</a></sup></li>
             </ul>
 
             <p><strong>Cluster Startup Times:</strong></p>
             <ul>
-                <li><strong>Classic/Pro SQL Warehouses:</strong> Provisioning new VMs from cloud providers typically takes 2-5 minutes, depending on cluster size and cloud service provider (CSP) capacity availability. Larger clusters (e.g., X-Large with 32+ workers) take longer to provision.</li>
-                <li><strong>Serverless SQL Warehouses:</strong> Databricks maintains pre-warmed pools of VMs in their managed compute plane. When capacity is available in the pool, startup is near-instantaneous (seconds to ~1 minute). However, during peak demand or for less common cluster sizes, the pool may be exhausted, requiring new VM provisioning (2-5 minutes).</li>
-                <li><strong>Pre-Warming Architecture:</strong> Serverless uses a shared pool of pre-booted VMs. When you request compute, a VM is assigned exclusively to your workload (not shared with other customers). After use, the VM is sanitized and returned to the pool for the next customer. Pool capacity is finite and shared across all customers in a region.</li>
+                <li><strong>Serverless SQL Warehouses:</strong> Databricks maintains pre-warmed compute in its managed compute plane, so serverless warehouses typically start within seconds.<sup class="cite"><a href="#ref3">[3]</a></sup> During peak demand or for less common sizes, the pool may need to provision new VMs, which takes longer.</li>
+                <li><strong>Classic/Pro SQL Warehouses:</strong> These provision VMs from the cloud provider on demand, so cold starts are on the order of minutes (a common rule-of-thumb is ~2–5 minutes), depending on size and CSP capacity. Larger clusters take longer.</li>
+                <li><strong>Pre-Warming Architecture:</strong> Serverless uses a shared pool of pre-booted VMs; a VM is assigned exclusively to your workload, then sanitized and returned to the pool after use. Pool capacity is finite and shared across customers in a region.<sup class="cite"><a href="#ref3">[3]</a></sup></li>
             </ul>
 
             <p><strong>Cloud Provider Dependencies:</strong></p>
             <ul>
-                <li><strong>CSP Capacity:</strong> Scaling is subject to cloud provider compute availability. During high-demand periods (e.g., regional outages, peak usage times), VM provisioning can be delayed or fail entirely.</li>
-                <li><strong>Not Truly Instantaneous:</strong> While marketed as "instant," serverless scaling depends on pre-warmed pool availability. If the pool is exhausted, you experience the same 2-5 minute delays as Classic/Pro warehouses.</li>
-                <li><strong>Regional Variations:</strong> Availability and performance vary by cloud region. Some regions have larger pre-warmed pools and better CSP capacity than others.</li>
+                <li><strong>CSP Capacity:</strong> Scaling is subject to cloud provider compute availability. During high-demand periods, VM provisioning can be delayed.</li>
+                <li><strong>Not truly instantaneous:</strong> Serverless startup depends on pre-warmed pool availability; if the pool is exhausted, new capacity must be provisioned and startup slows accordingly.<sup class="cite"><a href="#ref3">[3]</a></sup></li>
+                <li><strong>Regional Variations:</strong> Availability and performance vary by cloud region.</li>
             </ul>
+        </div>
+
+        <div class="references" id="references">
+            <h2>Sources &amp; References</h2>
+            <p style="font-size:13px;color:#3c4043;margin:6px 0 0;">Grounded to Google Cloud &amp; Databricks documentation as of 25 Jul 2026. Numbers in brackets throughout the page link here.</p>
+            <ol>
+                <li id="ref1">Databricks &mdash; <a href="https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-behavior" target="_blank" rel="noopener">SQL warehouse sizing, scaling, and queuing behavior</a>
+                    <span class="src-what">Intelligent Workload Management &amp; autoscaling; one cluster per 10 concurrent queries (classic/pro); queue-based autoscaling; 1,000 max queued queries; cluster size &rarr; driver/worker counts; 5X-Large preview.</span></li>
+                <li id="ref2">Databricks &mdash; <a href="https://www.databricks.com/product/pricing/databricks-sql" target="_blank" rel="noopener">Databricks SQL pricing</a>
+                    <span class="src-what">Per-size serverless DBU/hr billing rates (Small&nbsp;12, Medium&nbsp;24, Large&nbsp;40, X-Large&nbsp;80); DBU as a billing metric.</span></li>
+                <li id="ref3">Databricks &mdash; <a href="https://docs.databricks.com/aws/en/compute/serverless/" target="_blank" rel="noopener">Serverless compute</a>
+                    <span class="src-what">Managed compute plane with pre-warmed capacity; rapid (seconds) serverless startup; VM assigned then sanitized/returned to the pool.</span></li>
+                <li id="ref4">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/slots" target="_blank" rel="noopener">Understand slots</a>
+                    <span class="src-what">Fair scheduling (equal across projects, then across each project's jobs; eventual fairness); autoscaling in 50-slot increments; on-demand up to ~2,000 slots/project and 20,000/org.</span></li>
+                <li id="ref5">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/slots-autoscaling-intro" target="_blank" rel="noopener">Introduction to slots autoscaling</a>
+                    <span class="src-what">60-second minimum / scale-down window; optional Fluid Scaling removes the one-minute minimum (50-slot increment still applies).</span></li>
+                <li id="ref6">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/docs/reservations-workload-management" target="_blank" rel="noopener">Understand reservations (workload management)</a>
+                    <span class="src-what">Baseline + <code>autoscale_max_slots</code>; autoscaled slots billed per second with a one-minute minimum.</span></li>
+                <li id="ref7">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/quotas" target="_blank" rel="noopener">Quotas &amp; limits</a>
+                    <span class="src-what">On-demand concurrent slot quotas (per-project / per-organization).</span></li>
+            </ol>
+        </div>
+
+        <div class="footer">
+            Illustrative reference &mdash; grounded to Google Cloud &amp; Databricks docs as of 25 Jul 2026 (see <a href="#references">Sources &amp; References</a>).
+            Companion to the <em>Open Data Platform</em> reference (bq_dbx_viz), which maps platform ownership; this page focuses on scaling mechanics.
+            The DBU&rarr;Slot ratio and even per-query splits are illustrative abstractions, not official equivalences.
         </div>
     </div>
 
@@ -735,8 +940,8 @@
                     equivalentRow.style.display = 'flex';
                     equivalentEl.innerText = `${slotsPerJob} Slots`;
 
-                    if (jobs > 10 && c > 1) {
-                        statusEl.innerHTML = `<b>The Scaling Event:</b><br>Job #${jobs} triggered Cluster ${c}.<br>It gets full ${clusterDBU} DBU (${clusterDBU * dbuToSlotsRatio} slots).<br>Jobs 1-10 are <b>locked-in</b> to Cluster 1 at ${(clusterDBU/10).toFixed(1)} DBU (${((clusterDBU/10) * dbuToSlotsRatio).toFixed(0)} slots).`;
+                    if (jobs > CLUSTER_LIMIT && c > 1) {
+                        statusEl.innerHTML = `<b>The Scaling Event:</b><br>Job #${jobs} triggered Cluster ${c}.<br>It gets full ${clusterDBU} DBU (${clusterDBU * dbuToSlotsRatio} slots).<br>Jobs 1-${CLUSTER_LIMIT} are <b>locked-in</b> to Cluster 1 at ${(clusterDBU/CLUSTER_LIMIT).toFixed(1)} DBU (${((clusterDBU/CLUSTER_LIMIT) * dbuToSlotsRatio).toFixed(0)} slots).`;
                     } else if (jobs > 1) {
                         statusEl.innerHTML = `<b>Stuffing Effect:</b><br>Cluster is fixed at ${clusterDBU} DBU.<br>Resources divided by ${jobsInThisCluster}.<br>Each job: ${slotsPerJob} slots equivalent.`;
                     } else {
@@ -769,7 +974,7 @@
             capEl.innerText = `${slotsPerJob} Slots`;
             equivalentRow.style.display = 'flex';
             equivalentEl.innerText = `${(slotsPerJob / dbuToSlotsRatio).toFixed(2)} DBU`;
-            statusEl.innerHTML = `<b>Linear Scaling:</b><br>Job #${jobs} added +${slotsPerJob} Slots.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>All queries rebalanced</b> - performance is constant.`;
+            statusEl.innerHTML = `<b>Granular scaling:</b><br>Job #${jobs} added ~${slotsPerJob} Slots of demand.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>Fair scheduling rebalances</b> running queries as capacity changes (within reservation / on-demand limits).`;
         }
 
         function toggleMetrics() {
