@@ -336,6 +336,59 @@
             to { transform: scale(1); }
         }
 
+        /* Workload toggle (query vs agentic metadata) — neutral dark active state */
+        .toggle-btn.active.wl {
+            background: var(--border);
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 1px 5px rgba(0,0,0,.18);
+        }
+
+        /* Agentic-metadata: shared-warehouse split bar (query vs metadata serving) */
+        .split-bar {
+            display: flex;
+            flex-direction: column;
+            height: 230px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .split-bar .seg {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: #202124;
+            overflow: hidden;
+            transition: height 0.4s ease;
+        }
+
+        .split-bar .seg.meta {
+            background: var(--slow-fill);
+            border-bottom: 1.5px dashed var(--dbx-orange);
+        }
+
+        .split-bar .seg.query { background: var(--dbx-fill); }
+
+        /* Serverless KC metadata calls — small elastic nodes */
+        .bq-node.meta-node {
+            width: 34px;
+            height: 34px;
+            font-size: 10px;
+        }
+
+        .bq-node.meta-more {
+            width: auto;
+            height: 34px;
+            padding: 0 14px;
+            border-radius: 999px;
+            background: var(--gcp-alt-fill);
+            font-size: 12px;
+        }
+
         .metric-box {
             position: fixed;
             bottom: 20px;
@@ -608,22 +661,27 @@
 <body>
     <div class="container">
         <h1>Scaling Mechanics: Chunky vs. Seamless</h1>
-        <p class="subtitle">Comparing Databricks SQL warehouse scaling and BigQuery slot autoscaling</p>
+        <p class="subtitle">Serverless vs self-managed scaling &mdash; query compute and, in the agentic era, catalog metadata</p>
 
         <div class="legend">
-            <span><span class="sw dbx"></span> Databricks cluster / job</span>
-            <span><span class="sw bq"></span> BigQuery slot</span>
-            <span><span class="sw slow"></span> Locked-in / slow (shared cluster)</span>
+            <span><span class="sw dbx"></span> Databricks / self-managed</span>
+            <span><span class="sw bq"></span> BigQuery / serverless KC</span>
+            <span><span class="sw slow"></span> Locked-in / metadata-bound</span>
             <span><span class="sw def"></span> Idle / available</span>
-            <span><em>DBU&rarr;Slot ratio &amp; per-query splits are illustrative &mdash; see notes</em></span>
+            <span id="legend-query"><em>DBU&rarr;Slot ratio &amp; per-query splits are illustrative &mdash; see notes</em></span>
+            <span id="legend-meta" style="display:none;"><em>Calls-per-agent, DCU &amp; cost are illustrative &mdash; see notes</em></span>
         </div>
 
         <div class="controls">
-            <div class="toggle-group">
-                <div class="toggle-btn active dbx" onclick="setMode('dbx')">Databricks Mode</div>
-                <div class="toggle-btn bq" onclick="setMode('bq')">BigQuery Mode</div>
+            <div class="toggle-group" id="workload-group">
+                <div class="toggle-btn wl active" id="wl-query" onclick="setWorkload('query')">Query workload</div>
+                <div class="toggle-btn wl" id="wl-meta" onclick="setWorkload('meta')">Agentic metadata</div>
             </div>
-            <button class="btn-primary" onclick="addJob()">+ Add Job</button>
+            <div class="toggle-group" id="mode-group">
+                <div class="toggle-btn dbx active" id="mode-dbx" onclick="setMode('dbx')">Databricks Mode</div>
+                <div class="toggle-btn bq" id="mode-bq" onclick="setMode('bq')">BigQuery Mode</div>
+            </div>
+            <button class="btn-primary" id="add-btn" onclick="addJob()">+ Add Job</button>
             <button class="btn-reset" onclick="reset()">Reset</button>
         </div>
 
@@ -639,12 +697,13 @@
                 </div>
             </div>
             <p class="grounded-note">Sizes shown are approximate serverless DBU/hr <em>billing rates</em> (Small&nbsp;12, Medium&nbsp;24, Large&nbsp;40, X-Large&nbsp;80),<sup class="cite"><a href="#ref2">[2]</a></sup> not a per-query compute budget. DBU is a billing metric; concurrent queries share the cluster's cores/memory rather than each receiving a literal DBU slice.</p>
-            <div class="slider-container">
+            <div class="slider-container" id="ratio-config">
                 <label for="dbu-ratio">DBU to Slots Ratio (1 DBU =</label>
                 <input type="range" id="dbu-ratio" min="1" max="100" value="15" oninput="updateRatio(this.value)">
                 <span class="slider-value"><span id="ratio-value">15</span> Slots)</span>
             </div>
-            <p class="grounded-note">The DBU&rarr;Slot ratio is illustrative only &mdash; there is no official equivalence between Databricks DBUs and BigQuery slots. It exists purely to place both models on a shared axis for comparison.</p>
+            <p class="grounded-note" id="ratio-note">The DBU&rarr;Slot ratio is illustrative only &mdash; there is no official equivalence between Databricks DBUs and BigQuery slots. It exists purely to place both models on a shared axis for comparison.</p>
+            <p class="grounded-note" id="meta-note" style="display:none;">In <b>Agentic metadata</b> mode the warehouse size sets the fixed catalog/metadata headroom of a <em>self-managed</em> catalog. Each agent fans out ~<span id="cpa-value">18</span> metadata calls per NL2SQL task (list &rarr; describe &rarr; lineage &rarr; profile &rarr; policy &rarr; semantic search) &mdash; an <em>illustrative</em> figure to place both catalogs on a shared axis.</p>
         </div>
 
         <div id="canvas"></div>
@@ -653,15 +712,15 @@
             <button class="metric-toggle" onclick="toggleMetrics()" title="Toggle metrics">▼</button>
             <div class="metric-content">
                 <div class="metric-row">
-                    <span>Total Jobs:</span>
+                    <span id="lbl-total">Total Jobs:</span>
                     <span id="total-jobs">0</span>
                 </div>
                 <div class="metric-row">
-                    <span>Last Job Capacity:</span>
+                    <span id="lbl-capacity">Last Job Capacity:</span>
                     <span id="capacity-metric">--</span>
                 </div>
                 <div class="metric-row" id="equivalent-row" style="display:none;">
-                    <span>Equivalent:</span>
+                    <span id="lbl-equivalent">Equivalent:</span>
                     <span id="equivalent-metric">--</span>
                 </div>
                 <div style="margin-top:10px; font-size: 0.8em; color:var(--muted); line-height: 1.4;">
@@ -785,6 +844,55 @@
             </ul>
         </div>
 
+        <div class="explanation-section">
+            <h2>Agentic Era: The Catalog Gets Hammered</h2>
+            <p>Flip the workload toggle to <b>Agentic metadata</b>. The scaling story above is about <em>compute</em> &mdash; but in the agentic era the <b>catalog</b> becomes a hot path too. Every agent task, especially <b>NL2SQL</b>, fans out into a burst of metadata calls <em>before a single row is scanned</em>: <em>list tables &rarr; describe schema &rarr; check lineage &rarr; read column stats / profiles &rarr; resolve permissions / policy &rarr; semantic search</em>. Multiply that by many concurrent agents and metadata QPS explodes &mdash; the catalog, not the query, becomes the bottleneck.</p>
+
+            <h3>Serverless KC vs. self-managed catalog</h3>
+            <p>This is where a <b>serverless catalog</b> earns its keep. With <b>Knowledge Catalog</b>, metadata serving is a <b>fully managed, serverless</b> service<sup class="cite"><a href="#ref9">[9]</a></sup> &mdash; metered <b>per API call</b> (pay-as-you-go, DCU-based)<sup class="cite"><a href="#ref8">[8]</a></sup> and <b>decoupled from query compute</b>. Agent fan-out scales elastically and your query slots stay free. With a <b>self-managed / coupled catalog</b>, metadata serving shares the same fixed warehouse compute &mdash; so under agentic load, <b>CPU cycles go to serving metadata instead of running queries</b>, and the metadata tier throttles or queues.</p>
+
+            <div class="caveat-box">
+                <b>Grounded note &mdash; the honest version.</b> Databricks-managed <b>Unity Catalog is itself a managed control-plane service</b>; it does not literally burn <em>your</em> cluster CPU. The "cycles stolen from query" effect applies most directly to <b>Hive Metastore, self-hosted / OSS Unity Catalog, and the metadata fetched during query planning on a fixed warehouse</b>, plus catalog <b>API rate limits</b> under high QPS. The contrast shown is an <em>independently-scaling, per-call serverless</em> metadata service (KC) vs a <em>fixed-capacity, compute-coupled</em> one. Calls-per-agent, DCU and cost figures are <b>illustrative</b> &mdash; a shared axis for comparison, not official equivalences.
+            </div>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Aspect</th>
+                        <th class="dbx-highlight">Self-managed / coupled catalog</th>
+                        <th class="bq-highlight">Knowledge Catalog (serverless)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Scaling unit</strong></td>
+                        <td>Fixed metadata tier &mdash; sized and scaled by you, bounded by the warehouse it runs on.</td>
+                        <td>Elastic, per-request &mdash; a managed serverless metastore that scales metadata serving on demand.<sup class="cite"><a href="#ref9">[9]</a></sup></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Effect on query compute</strong></td>
+                        <td>Contends &mdash; metadata serving competes for the same cores; heavy agent QPS starves queries.</td>
+                        <td>Decoupled &mdash; metadata is a separate service, so query slots stay free.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Agentic fan-out (NL2SQL)</strong></td>
+                        <td>Rate-limited &mdash; bursts of list / describe / lineage / policy calls hit throttling and queueing.</td>
+                        <td>Absorbed &mdash; built for high-QPS discovery, lineage, profiling &amp; semantic search across engines.<sup class="cite"><a href="#ref10">[10]</a></sup></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Billing shape</strong></td>
+                        <td>Bundled into cluster / warehouse cost whether or not metadata is the bottleneck.</td>
+                        <td>Metered per API call + metadata storage (pay-as-you-go, DCU).<sup class="cite"><a href="#ref8">[8]</a></sup></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Reach</strong></td>
+                        <td>Typically one engine / one catalog's tables.</td>
+                        <td>Federates BigQuery, Iceberg REST (Unity / Glue / Snowflake &mdash; federation Preview), AlloyDB &amp; Pub/Sub metadata in one governed surface.<sup class="cite"><a href="#ref10">[10]</a></sup></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <div class="references" id="references">
             <h2>Sources &amp; References</h2>
             <p style="font-size:13px;color:#3c4043;margin:6px 0 0;">Grounded to Google Cloud &amp; Databricks documentation as of 25 Jul 2026. Numbers in brackets throughout the page link here.</p>
@@ -803,31 +911,70 @@
                     <span class="src-what">Baseline + <code>autoscale_max_slots</code>; autoscaled slots billed per second with a one-minute minimum.</span></li>
                 <li id="ref7">BigQuery &mdash; <a href="https://cloud.google.com/bigquery/quotas" target="_blank" rel="noopener">Quotas &amp; limits</a>
                     <span class="src-what">On-demand concurrent slot quotas (per-project / per-organization).</span></li>
+                <li id="ref8">Google Cloud &mdash; <a href="https://cloud.google.com/dataplex/pricing" target="_blank" rel="noopener">Knowledge Catalog (Dataplex) pricing</a>
+                    <span class="src-what">Pay-as-you-go: processing metered by DCU-hour; metadata storage per GiB/month; API calls billed per 100,000 (first 1M/month free) &mdash; a serverless, per-use metadata service.</span></li>
+                <li id="ref9">Google Cloud &mdash; <a href="https://cloud.google.com/lakehouse/docs/about-lakehouse-catalogs" target="_blank" rel="noopener">About Lakehouse catalogs</a>
+                    <span class="src-what">The Lakehouse runtime catalog is "a fully managed, serverless metastore service" and single source of truth, serving Spark, Flink, Hive &amp; BigQuery via the Apache Iceberg REST catalog.</span></li>
+                <li id="ref10">Google Cloud &mdash; <a href="https://cloud.google.com/dataplex/docs/catalog-overview" target="_blank" rel="noopener">Knowledge Catalog overview</a>
+                    <span class="src-what">Managed governance for the open lakehouse: semantic search, lineage, profiling &amp; quality across engines; ingests BigQuery, Iceberg REST (Unity / Glue / Snowflake &mdash; federation Preview), AlloyDB (Preview) &amp; Pub/Sub metadata.</span></li>
             </ol>
         </div>
 
         <div class="footer">
             Illustrative reference &mdash; grounded to Google Cloud &amp; Databricks docs as of 25 Jul 2026 (see <a href="#references">Sources &amp; References</a>).
-            Companion to the <em>Open Data Platform</em> reference (bq_dbx_viz), which maps platform ownership; this page focuses on scaling mechanics.
-            The DBU&rarr;Slot ratio and even per-query splits are illustrative abstractions, not official equivalences.
+            Companion to the <em>Open Data Platform</em> reference (bq_dbx_viz), which maps platform ownership; this page focuses on scaling mechanics for both <b>query compute</b> and &mdash; in the agentic era &mdash; <b>catalog metadata serving</b>.
+            The DBU&rarr;Slot ratio, per-query splits, calls-per-agent, DCU and cost figures are illustrative abstractions, not official equivalences.
         </div>
     </div>
 
     <script>
-        let mode = 'dbx';
-        let jobs = 0;
+        let workload = 'query';   // 'query' (compute) | 'meta' (agentic catalog)
+        let mode = 'dbx';         // query: dbx|bq ; meta: dbx = self-managed catalog, bq = serverless KC
+        let jobs = 0;             // query: concurrent queries ; meta: concurrent agents
         const CLUSTER_LIMIT = 10;
         let clusterDBU = 40;
         let dbuToSlotsRatio = 15;
+        const CALLS_PER_AGENT = 18;   // illustrative metadata calls per agent NL2SQL task
 
         function setMode(newMode) {
             mode = newMode;
-            document.querySelectorAll('.toggle-btn').forEach(btn => {
-                btn.classList.remove('active', 'dbx', 'bq');
-            });
-            const activeBtn = document.querySelector(`.toggle-btn:nth-child(${mode === 'dbx' ? 1 : 2})`);
-            activeBtn.classList.add('active', mode);
+            document.getElementById('mode-dbx').classList.toggle('active', mode === 'dbx');
+            document.getElementById('mode-bq').classList.toggle('active', mode === 'bq');
             reset();
+        }
+
+        function setWorkload(w) {
+            workload = w;
+            document.getElementById('wl-query').classList.toggle('active', w === 'query');
+            document.getElementById('wl-meta').classList.toggle('active', w === 'meta');
+            syncModeLabels();
+            syncWorkloadUI();
+            reset();
+        }
+
+        function syncModeLabels() {
+            const dbxBtn = document.getElementById('mode-dbx');
+            const bqBtn = document.getElementById('mode-bq');
+            if (workload === 'meta') {
+                dbxBtn.textContent = 'UC (self-managed)';
+                bqBtn.textContent = 'Knowledge Catalog (serverless)';
+            } else {
+                dbxBtn.textContent = 'Databricks Mode';
+                bqBtn.textContent = 'BigQuery Mode';
+            }
+        }
+
+        function syncWorkloadUI() {
+            const meta = workload === 'meta';
+            document.getElementById('add-btn').textContent = meta ? '+ Add Agent' : '+ Add Job';
+            document.getElementById('lbl-total').textContent = meta ? 'Agents:' : 'Total Jobs:';
+            document.getElementById('lbl-capacity').textContent = meta ? 'Metadata calls:' : 'Last Job Capacity:';
+            document.getElementById('lbl-equivalent').textContent = meta ? 'Cost (per-call):' : 'Equivalent:';
+            document.getElementById('ratio-config').style.display = meta ? 'none' : '';
+            document.getElementById('ratio-note').style.display = meta ? 'none' : '';
+            document.getElementById('meta-note').style.display = meta ? '' : 'none';
+            document.getElementById('legend-query').style.display = meta ? 'none' : '';
+            document.getElementById('legend-meta').style.display = meta ? '' : 'none';
         }
 
         function setClusterSize(dbu) {
@@ -869,11 +1016,17 @@
             if (jobs === 0) {
                 capEl.innerText = '--';
                 equivalentRow.style.display = 'none';
-                statusEl.innerText = 'Ready to start.';
+                statusEl.innerText = workload === 'meta' ? 'Add agents to start simulation.' : 'Ready to start.';
                 return;
             }
 
-            if (mode === 'dbx') {
+            if (workload === 'meta') {
+                if (mode === 'dbx') {
+                    renderDbxMeta(canvas, capEl, statusEl, equivalentEl, equivalentRow);
+                } else {
+                    renderKcMeta(canvas, capEl, statusEl, equivalentEl, equivalentRow);
+                }
+            } else if (mode === 'dbx') {
                 renderDatabricks(canvas, capEl, statusEl, equivalentEl, equivalentRow);
             } else {
                 renderBigQuery(canvas, capEl, statusEl, equivalentEl, equivalentRow);
@@ -976,6 +1129,88 @@
             statusEl.innerHTML = `<b>Granular scaling:</b><br>Job #${jobs} added ~${slotsPerJob} Slots of demand.<br>Total Capacity: ${totalSlots.toLocaleString()}.<br><b>Fair scheduling rebalances</b> running queries as capacity changes (within reservation / on-demand limits).`;
         }
 
+        // Agentic metadata — self-managed / coupled catalog: metadata serving and query
+        // compute share one fixed warehouse, so agent fan-out starves the queries.
+        function renderDbxMeta(canvas, capEl, statusEl, equivalentEl, equivalentRow) {
+            const agents = jobs;
+            const totalCalls = agents * CALLS_PER_AGENT;
+            const metaCapacity = clusterDBU * 5;               // illustrative fixed headroom
+            const metaPct = Math.min(100, (totalCalls / metaCapacity) * 100);
+            const queryPct = Math.max(0, 100 - metaPct);
+            const saturated = totalCalls >= metaCapacity;
+            const queued = Math.max(0, totalCalls - metaCapacity);
+
+            const box = document.createElement('div');
+            box.className = 'cluster-container' + (saturated ? ' slow' : '');
+            box.style.maxWidth = '340px';
+            box.innerHTML = `
+                <div class="cluster-label">Shared warehouse + catalog (${clusterDBU} DBU, fixed)</div>
+                <div class="split-bar">
+                    <div class="seg meta" style="height:${metaPct}%">${metaPct > 12 ? 'metadata serving' : ''}</div>
+                    <div class="seg query" style="height:${queryPct}%">${queryPct > 12 ? 'query compute' : ''}</div>
+                </div>
+                <div class="cluster-stats">
+                    <span class="dbu-indicator">${totalCalls}</span> metadata calls &middot; query headroom <b>${queryPct.toFixed(0)}%</b>
+                    ${saturated ? `<br><span class="slow-indicator">⚠ Metadata-bound: ${queued} calls queued / throttled</span>` : ''}
+                </div>`;
+            canvas.appendChild(box);
+
+            capEl.innerText = `${totalCalls} calls`;
+            equivalentRow.style.display = 'flex';
+            equivalentEl.innerText = `bundled in cluster`;
+
+            if (saturated) {
+                statusEl.innerHTML = `<b>Metadata-bound:</b><br>${agents} agents &times; ${CALLS_PER_AGENT} calls = ${totalCalls} metadata calls.<br>The fixed warehouse can't serve them all &mdash; <b>query compute is starved</b> and calls queue / throttle.`;
+            } else if (agents > 1) {
+                statusEl.innerHTML = `<b>Stealing cycles:</b><br>${agents} agents fan out ${totalCalls} metadata calls.<br>Metadata now takes <b>${metaPct.toFixed(0)}%</b> of the shared warehouse &mdash; CPU that isn't running queries.`;
+            } else {
+                statusEl.innerHTML = `One agent fans out ~${CALLS_PER_AGENT} metadata calls (list, describe, lineage, policy, semantic search) for NL2SQL grounding.`;
+            }
+        }
+
+        // Agentic metadata — serverless Knowledge Catalog: metadata serving is a separate
+        // elastic service, billed per API call; query compute is untouched.
+        function renderKcMeta(canvas, capEl, statusEl, equivalentEl, equivalentRow) {
+            const agents = jobs;
+            const totalCalls = agents * CALLS_PER_AGENT;
+            const dcu = (totalCalls / 1000).toFixed(2);                 // illustrative DCU
+            const dollars = (totalCalls / 100000 * 10).toFixed(2);     // illustrative $ (per-call rate)
+
+            // 1) Query compute stays full — no metadata contention.
+            const qbox = document.createElement('div');
+            qbox.className = 'cluster-container';
+            qbox.style.maxWidth = '260px';
+            qbox.innerHTML = `
+                <div class="cluster-label">Query compute (unaffected)</div>
+                <div class="split-bar"><div class="seg query" style="height:100%;background:var(--gcp-fill)">full &mdash; no metadata contention</div></div>
+                <div class="cluster-stats">Metadata serving is a <b>separate</b> service &mdash; query slots stay free.</div>`;
+            canvas.appendChild(qbox);
+
+            // 2) Elastic KC metadata pool grows per call.
+            const pool = document.createElement('div');
+            pool.className = 'bq-pool';
+            pool.style.maxWidth = (window.innerWidth - 100) + 'px';
+            pool.innerHTML = `<div class="cluster-label" style="color:var(--bq-color)">Knowledge Catalog &mdash; serverless (${totalCalls.toLocaleString()} calls)</div>`;
+            const shown = Math.min(totalCalls, 120);                   // cap nodes for perf
+            for (let i = 1; i <= shown; i++) {
+                const n = document.createElement('div');
+                n.className = 'bq-node meta-node';
+                pool.appendChild(n);
+            }
+            if (totalCalls > shown) {
+                const more = document.createElement('div');
+                more.className = 'bq-node meta-more';
+                more.innerText = '+' + (totalCalls - shown);
+                pool.appendChild(more);
+            }
+            canvas.appendChild(pool);
+
+            capEl.innerText = `${totalCalls} calls`;
+            equivalentRow.style.display = 'flex';
+            equivalentEl.innerHTML = `~$${dollars} &middot; ${dcu} DCU`;
+            statusEl.innerHTML = `<b>Decoupled &amp; elastic:</b><br>${agents} agents &rarr; ${totalCalls} metadata calls absorbed by KC.<br>Billed <b>per API call</b> (pay-as-you-go); query compute is untouched.`;
+        }
+
         function toggleMetrics() {
             const metricBox = document.getElementById('metric-box');
             const toggleBtn = metricBox.querySelector('.metric-toggle');
@@ -991,6 +1226,8 @@
             }
         }
 
+        syncModeLabels();
+        syncWorkloadUI();
         render();
     </script>
 </body>
