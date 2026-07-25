@@ -25,7 +25,7 @@ A **workload toggle** switches the page between two stories:
 - Scales slot capacity in increments (rounded up to the nearest 50 slots)
 - Uses fair scheduling to reassign slots to running queries on the fly
 - Running queries benefit from newly added capacity
-- More consistent — but the autoscaler is reactive, has a 60-second minimum billing window, and is bounded by reservation limits (or ~2,000 slots/project on-demand)
+- More consistent — with **Fluid Scaling** (GA) autoscaled slots are billed **per second with no minimum duration** (standard autoscaling otherwise defaults to a 60-second minimum). Still reactive and bounded by reservation limits (or ~2,000 slots/project on-demand)
 
 ## Features
 
@@ -78,7 +78,7 @@ The visualization includes a comprehensive "Caveats & Limitations" section that 
 - **Cluster Startup Times**: Classic/Pro warehouses take 2-5 minutes to provision new VMs. Serverless warehouses use pre-warmed pools for near-instant startup (seconds to ~1 minute), but pool exhaustion can result in similar delays.
 - **Cloud Provider Dependencies**: Scaling is subject to CSP capacity availability. During peak demand, VM provisioning can be delayed or fail.
 - **Locked-In Queries**: Regardless of when scaling occurs, running queries remain locked to their original cluster and cannot benefit from newly provisioned resources.
-- **BigQuery isn't unbounded or instant**: Autoscaling moves in 50-slot increments, is reactive/conservative, carries a 60-second minimum billing window, and is capped by reservation limits (or ~2,000 slots/project on-demand). Fair scheduling rebalances only within available capacity.
+- **BigQuery isn't unbounded or instant**: Autoscaling moves in 50-slot increments and is reactive/conservative. Billing is **per second with no minimum** under **Fluid Scaling** (GA, per-reservation opt-in); standard autoscaling otherwise defaults to a 60-second minimum. Capacity is capped by reservation limits (or ~2,000 slots/project on-demand), and fair scheduling rebalances only within available capacity.
 
 These caveats ensure users understand the real-world behavior beyond the simplified demonstration.
 
@@ -120,12 +120,13 @@ Grounded to Google Cloud & Databricks documentation as of 25 Jul 2026. Each clai
 2. Databricks — [Databricks SQL pricing](https://www.databricks.com/product/pricing/databricks-sql) — per-size serverless DBU/hr rates (Small 12, Medium 24, Large 40, X-Large 80).
 3. Databricks — [Serverless compute](https://docs.databricks.com/aws/en/compute/serverless/) — managed compute plane, pre-warmed capacity, rapid startup.
 4. BigQuery — [Understand slots](https://cloud.google.com/bigquery/docs/slots) — fair scheduling (project → job, eventual fairness); 50-slot autoscale increments; on-demand ~2,000 slots/project, 20,000/org.
-5. BigQuery — [Introduction to slots autoscaling](https://cloud.google.com/bigquery/docs/slots-autoscaling-intro) — 60-second scale-down window; Fluid Scaling.
+5. BigQuery — [Introduction to slots autoscaling](https://cloud.google.com/bigquery/docs/slots-autoscaling-intro) — Fluid Scaling (GA): per-second billing, no minimum duration; standard autoscaling otherwise defaults to a 60-second scale-down window.
 6. BigQuery — [Understand reservations (workload management)](https://cloud.google.com/bigquery/docs/reservations-workload-management) — baseline + `autoscale_max_slots`; per-second, one-minute-minimum billing.
 7. BigQuery — [Quotas & limits](https://cloud.google.com/bigquery/quotas) — on-demand concurrent slot quotas.
 8. Google Cloud — [Knowledge Catalog (Dataplex) pricing](https://cloud.google.com/dataplex/pricing) — pay-as-you-go: DCU-hour processing, metadata storage per GiB/month, API calls per 100,000 (first 1M/month free) — a serverless, per-use metadata service.
 9. Google Cloud — [About Lakehouse catalogs](https://cloud.google.com/lakehouse/docs/about-lakehouse-catalogs) — the Lakehouse runtime catalog is "a fully managed, serverless metastore service" serving Spark, Flink, Hive & BigQuery via the Apache Iceberg REST catalog.
 10. Google Cloud — [Knowledge Catalog overview](https://cloud.google.com/dataplex/docs/catalog-overview) — managed governance for the open lakehouse: semantic search, lineage, profiling & quality across engines; ingests BigQuery, Iceberg REST (Unity/Glue/Snowflake — federation Preview), AlloyDB (Preview) & Pub/Sub metadata.
+11. Google Cloud Blog — [Unveiling new BigQuery capabilities for the agentic era](https://cloud.google.com/blog/products/data-analytics/unveiling-new-bigquery-capabilities-for-the-agentic-era) — BigQuery Fluid Scaling GA: true per-second billing (no minimum duration), up to ~34% cost savings for variable workloads.
 
 ## License
 
