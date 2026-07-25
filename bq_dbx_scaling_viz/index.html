@@ -754,20 +754,19 @@
                 <li><strong>Fair Scheduling:</strong> BigQuery allocates slots within a reservation first equally across projects, then equally across each project's running jobs, reassigning them on the fly as queries start/finish ("eventual fairness").<sup class="cite"><a href="#ref4">[4]</a></sup></li>
                 <li><strong>DBU (Databricks Unit):</strong> A billing metric, not a fixed resource allocation. Actual compute depends on cluster size (workers/cores).<sup class="cite"><a href="#ref2">[2]</a></sup></li>
                 <li><strong>Slots:</strong> Virtual CPUs in BigQuery that can be dynamically allocated and reallocated during query execution; autoscaling rounds up to the nearest 50-slot increment.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
+                <li><strong>Fluid Scaling (opt-in):</strong> A reservation option that adjusts slots second-to-second and removes autoscaling's one-minute minimum, giving true per-second billing. It still scales in 50-slot increments and may grant a reservation slightly more or fewer idle slots than its exact fair share during rapid demand swings. Enabled per reservation at the admin-project level.<sup class="cite"><a href="#ref4">[4]</a></sup><sup class="cite"><a href="#ref5">[5]</a></sup></li>
             </ul>
 
             <h3>Caveats & Limitations</h3>
             <p><strong>Databricks — About This Visualization:</strong></p>
             <ul>
-                <li><strong>Fixed 10-Query Limit:</strong> This visualization uses a fixed limit of 10 queries per cluster for simplicity. That threshold is exactly right for classic/pro warehouses, but serverless with IWM may trigger scaling earlier or later based on query complexity, resource requirements, and queue depth.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
-                <li><strong>IWM Dynamic Behavior:</strong> Serverless SQL warehouses use ML models to predict when to scale, driven by queue wait time. A cluster might spawn sooner under heavy demand, or later for lighter workloads. The 10-query threshold shown here is illustrative.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
-                <li><strong>Locked-In Queries:</strong> An in-flight query completes on its assigned cluster; newly added clusters take on queued/new queries rather than rescuing queries already in progress.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
+                <li><strong>Illustrative threshold:</strong> The fixed 10-queries-per-cluster rule is exact for classic/pro warehouses; serverless with IWM scales earlier or later based on query complexity and queue wait time, so treat the number as illustrative.<sup class="cite"><a href="#ref1">[1]</a></sup></li>
             </ul>
 
             <p><strong>BigQuery — "Seamless" isn't unbounded or instant:</strong></p>
             <ul>
                 <li><strong>Discrete scaling steps:</strong> Autoscaling doesn't add capacity slot-by-slot — it scales up rounded to the nearest 50-slot increment, and the autoscaler is reactive and conservative by design.<sup class="cite"><a href="#ref4">[4]</a></sup></li>
-                <li><strong>60-second minimum:</strong> Autoscaled slots are billed per second with a one-minute minimum, and scaled capacity is retained for at least 60 seconds (the scale-down window). The optional <em>Fluid Scaling</em> removes the one-minute minimum, but the 50-slot increment still applies.<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></li>
+                <li><strong>60-second minimum:</strong> Autoscaled slots are billed per second with a one-minute minimum, and scaled capacity is retained for at least 60 seconds (the scale-down window) &mdash; unless <em>Fluid Scaling</em> is enabled (see Technical Notes).<sup class="cite"><a href="#ref5">[5]</a></sup><sup class="cite"><a href="#ref6">[6]</a></sup></li>
                 <li><strong>Capacity limits:</strong> Fair scheduling redistributes within available capacity, but that capacity is bounded — by a reservation's baseline + <code>autoscale_max_slots</code>, or by the on-demand ceiling of ~2,000 slots per project (20,000 per organization; BigQuery may occasionally exceed this to speed a query). Under contention, queries still wait for slots.<sup class="cite"><a href="#ref4">[4]</a></sup><sup class="cite"><a href="#ref7">[7]</a></sup></li>
             </ul>
 
