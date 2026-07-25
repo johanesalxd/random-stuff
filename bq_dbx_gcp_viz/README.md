@@ -17,7 +17,7 @@ The core message: **data lands once as open Iceberg on GCS, governed by an open 
 1. **DBX full** — Native Databricks on Google Cloud: Workspace, Compute and Unity Catalog govern Delta (GA) / Iceberg (Databricks Preview, marked `*`) on GCS (still on Google's AI Hypercomputer VMs).
 2. **DBX led** — Same Databricks experience, but data is written as open Iceberg on GCS with Knowledge Catalog ↔ Unity Catalog sync; GCP serverless engines are available as alternative compute (reachable from a notebook via Spark Connect).
 3. **GCP led** — GCP runs the engine layer (BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog); the Databricks Workspace stays a primary UX, and DBX Compute/UC on other clouds read the same data read-only via the Iceberg REST catalog.
-4. **GCP full** — All-GCP: BigQuery + serverless engines + AlloyDB, governed by Knowledge Catalog with Gemini/Agent Engine in BQ Studio; AlloyDB also reads analytical Iceberg via Lakehouse Federation / BigQuery Views (Preview); the Iceberg REST catalog stays open outward so Databricks on other clouds can still read.
+4. **GCP full** — All-GCP: BigQuery + serverless engines + AlloyDB, governed by Knowledge Catalog with Gemini/Agent Engine in BQ Studio; AlloyDB also reads analytical Iceberg via Lakehouse Federation / BigQuery Views (Preview); the Iceberg REST catalog stays open outward so Databricks and other-cloud catalogs (AWS Glue / 3P) can still read.
 
 ## Assumptions & scope
 
@@ -63,7 +63,7 @@ Illustrative reference — grounded to Google Cloud & Databricks documentation a
 - **BigQuery ↔ AlloyDB federated query** via `EXTERNAL_QUERY` + the BigQuery Connection API (BQ Studio path, GA); Gemini reaches AlloyDB via agent / MCP.
 - **AlloyDB ↔ Iceberg** via Lakehouse Federation / BigQuery Views (AlloyDB reads analytical Iceberg) and BigQuery reverse-ETL back into AlloyDB are **Preview** (marked `*`).
 - **Serverless for Apache Spark** interactive sessions via **Spark Connect** (`dataproc-spark-connect`) let a notebook (including Databricks) drive GCP compute — works off-GCP with ADC.
-- **Cross-cloud Lakehouse** connects Google Cloud to **remote Iceberg REST catalogs — AWS Glue and Databricks Unity Catalog** — to query other-cloud data (AWS S3 / Azure ADLS) without copying, via cross-cloud interconnect + intelligent caching; bidirectional federation is **Preview**. Databricks reading GCP's open Iceberg is **read-only foreign Iceberg** (still **Databricks Preview**, marked `*`).
+- **Cross-cloud Lakehouse** connects Google Cloud to **remote Iceberg REST catalogs — AWS Glue and Databricks Unity Catalog** — to query other-cloud data (AWS S3 / Azure ADLS) without copying, via cross-cloud interconnect + intelligent caching; bidirectional federation is **Preview**. Databricks (UC) and AWS Glue / 3P reading GCP's open Iceberg is **read-only foreign Iceberg** (still **Preview**, marked `*`).
 - **Pub/Sub → BigQuery Storage Write API** streams into managed Iceberg tables.
 - **Knowledge Catalog** is the current name for the governance/catalog layer (formerly Dataplex Universal Catalog).
 - **Databricks compute planes**: classic compute runs in the **customer VPC** (self-managed, in scope); **serverless** compute runs in a **Databricks-managed plane inside the Databricks account** ([docs](https://docs.databricks.com/aws/en/getting-started/high-level-architecture)) — not the customer's tenant, so it's out of scope for this ownership map.
