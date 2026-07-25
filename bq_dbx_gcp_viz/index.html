@@ -159,7 +159,6 @@
   .sw.gcp { background: var(--gcp-fill); }
   .sw.dbx { background: var(--dbx-fill); }
   .sw.alt { background: var(--gcp-alt-fill); }
-  .sw.def { background:#fff; }
   .ln { width:26px; height:0; border-top-width:2.5px; border-top-style:solid; flex:none; }
   .ln.blue { border-color: var(--gcp-blue); }
   .ln.altln { border-top-style:dashed; border-color: #8ab4f8; }
@@ -191,7 +190,7 @@
   <span><span class="sw alt"></span> dimmed = alternative</span>
   <span style="margin-left:10px;"><b>Lines:</b></span>
   <span><span class="ln blue"></span> primary</span>
-  <span><span class="ln altln"></span> alternative / optional</span>
+  <span><span class="ln altln"></span> alternative / preview</span>
   <span><span class="ln sync"></span> catalog sync</span>
   <span style="margin-left:10px;"><b>Text:</b></span>
   <span><em>italic ( )</em> = capability</span>
@@ -304,7 +303,7 @@ const S = {
     caveat:"Databricks-written Iceberg on GCS is <b>Databricks Preview</b> (yellow, marked *); GCP reads it via KC. Alternative GCP compute uses <code>dataproc-spark-connect</code> (Spark Connect over gRPC) so a notebook can drive a Serverless for Apache Spark session &mdash; works off-GCP with ADC. KC&harr;UC sync = Unity Catalog &harr; Knowledge Catalog federation (same-cloud here; cross-cloud Lakehouse applies when the remote catalog is on another cloud)." },
 
   3: { name:"GCP led", tag:"GCP-led (engines)", tagcol:"#cfe3ff", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-open3p","KC \u2194 3P/private"]],
-     desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The Databricks notebook and Gemini stay primary UX driving GCP engines, with BQ Studio available as an alternative; DBX Compute / Unity Catalog on other clouds read the same data read-only via the Iceberg REST catalog. BQ native, plus a combined AWS Glue / 3P / private-cloud catalog and external Iceberg (AWS S3 / Azure ADLS / private cloud) reachable from Knowledge Catalog, are available too (dimmed); private cloud is upcoming (*).",
+     desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The DBX Workspace and Gemini stay primary UX driving GCP engines, with BQ Studio available as an alternative; DBX Compute / Unity Catalog on other clouds read the same data read-only via the Iceberg REST catalog. BQ native, plus a combined AWS Glue / 3P / private-cloud catalog and external Iceberg (AWS S3 / Azure ADLS / private cloud) reachable from Knowledge Catalog, are available too (dimmed); private cloud is upcoming (*).",
      flow:"DBX Workspace + Gemini (primary) + BQ Studio (alt) &rarr; BQ / Serverless for Apache Spark &rarr; Knowledge Catalog &rarr; GCS Iceberg &nbsp;&middot;&nbsp; DBX Compute + UC = other-cloud readers",
     nodes:{ "ux-bqstudio":"gcp|alt","ux-gemini":"gcp","ux-dbx":"dbx","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp|alt","eng-dbx":"dbx|ext","cat-kc":"gcp","cat-uc":"dbx|ext","cat-open3p":"dbx|alt","st-gcsiceberg":"gcp","st-bqnative":"gcp|alt","st-open3p":"dbx|alt","pr-both":"gcp" },
     edges:[ ["ux-dbx","eng-bq","b"],["ux-dbx","eng-spark","b"],["ux-bqstudio","eng-bq","bd"],["ux-bqstudio","eng-spark","bd"],["ux-gemini","eng-bq","b"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["eng-dbx","cat-uc","od"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-bqnative","bd"],["cat-kc","st-open3p","bd"],["cat-open3p","st-open3p","bd"],["cat-uc","st-gcsiceberg","od"] ],
@@ -362,7 +361,7 @@ function render(){
       if(style==='ext') c.classList.add('ext');
       if(style==='prev') c.classList.add('prev');
     });
-    drawWires(nodes, scn);
+    drawWires(scn);
   }
   positionBand(scn);
   renderPanel();
@@ -398,7 +397,7 @@ function center(el){
   return { x: r.left - s.left + r.width/2, top: r.top - s.top, bottom: r.top - s.top + r.height };
 }
 
-function drawWires(nodes, scn){
+function drawWires(scn){
   const NS="http://www.w3.org/2000/svg";
   wires.innerHTML = `<defs>
     <marker id="ar-blue" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1a73e8"/></marker>

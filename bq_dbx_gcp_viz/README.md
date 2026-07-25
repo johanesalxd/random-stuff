@@ -27,7 +27,7 @@ This map shows **what runs inside — and is owned within — your Google Cloud 
 
 **The same control-plane boundary applies to Databricks' Workspace and governance.** The Databricks **Workspace** (the web-app UI) is *"in the control plane"* and the **Unity Catalog** metastore is *"hosted as a multi-tenant service in the Databricks control plane"* ([UC architecture](https://docs.databricks.com/gcp/en/lakehouse-architecture/deployment-guide/unity-catalog)) — both run in the **Databricks account**, so they carry the orange **DBX-managed** badge. Only **DBX Compute** (the classic engine, in your VPC) and your **data** (in GCS) actually sit in your Google Cloud tenant — that's the one cell that keeps the red **self-managed** badge.
 
-## The visual encoding (2×2 + color)
+## The visual encoding
 
 | Axis | Meaning |
 | :--- | :--- |
@@ -39,7 +39,7 @@ This map shows **what runs inside — and is owned within — your Google Cloud 
 
 Preview / upcoming items are marked with a trailing `*` (e.g. Databricks Iceberg output, AlloyDB↔Iceberg, private-cloud catalog/storage) rather than a border style — every box uses a solid border.
 
-A vertical **Cross-cloud Lakehouse · AWS + Azure · interconnect + caching** band spans Catalog→Storage to represent the connectivity layer (off in DBX-full and DBX-led — no other cloud is active — and dimmed-blue "alternative" in the GCP scenarios).
+A vertical **Cross-cloud Lakehouse (interconnect + caching\*)** band spans Catalog→Storage to represent the connectivity layer (off in DBX-full and DBX-led — no other cloud is active — and dimmed-blue "alternative" in the GCP scenarios).
 
 ## Features
 
