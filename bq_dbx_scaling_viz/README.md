@@ -1,6 +1,6 @@
 # BigQuery vs Databricks Scaling Visualization
 
-An interactive visualization comparing the scaling mechanics of **Databricks Serverless SQL** and **Google BigQuery**.
+An interactive visualization comparing **serverless vs self-managed scaling** across two workloads: **query compute** (Databricks SQL warehouses vs BigQuery slots) and — in the agentic era — **catalog metadata serving** (self-managed catalog vs serverless Knowledge Catalog).
 
 ## Live Demo
 
@@ -8,7 +8,10 @@ An interactive visualization comparing the scaling mechanics of **Databricks Ser
 
 ## Overview
 
-This visualization demonstrates the fundamental difference between "chunky" cluster-based scaling (Databricks) and "seamless" slot-based scaling (BigQuery).
+A **workload toggle** switches the page between two stories:
+
+- **Query workload** — the fundamental difference between "chunky" cluster-based scaling (Databricks) and "seamless" slot-based scaling (BigQuery).
+- **Agentic metadata** — why a **serverless catalog** matters when AI agents hammer the catalog for metadata (NL2SQL grounding, discovery, lineage, policy). A self-managed / coupled catalog shares fixed warehouse compute, so metadata serving *steals cycles from queries*; serverless Knowledge Catalog serves metadata as a decoupled, per-call elastic service.
 
 ### Key Concepts
 
@@ -26,24 +29,26 @@ This visualization demonstrates the fundamental difference between "chunky" clus
 
 ## Features
 
-- **Interactive Simulation**: Add jobs to see how each platform scales
-- **Configurable Cluster Sizes**: Choose from Small (~12 DBU/hr), Medium (~24 DBU/hr), Large (~40 DBU/hr), or X-Large (~80 DBU/hr) — approximate serverless billing rates, not per-query compute budgets
-- **DBU-to-Slots Ratio**: Adjust the conversion ratio (default 1:15)
-- **Visual Indicators**: Orange highlighting shows "locked-in" slow queries in Databricks mode
+- **Two workloads**: A top-level toggle switches between *Query workload* (compute scaling) and *Agentic metadata* (catalog scaling)
+- **Interactive Simulation**: Add jobs (queries) or agents (metadata fan-out) to see how each platform scales
+- **Configurable Cluster Sizes**: Choose from Small (~12 DBU/hr), Medium (~24 DBU/hr), Large (~40 DBU/hr), or X-Large (~80 DBU/hr) — approximate serverless billing rates, not per-query compute budgets. In *Agentic metadata* mode, size sets the fixed catalog/metadata headroom of a self-managed catalog.
+- **DBU-to-Slots Ratio**: Adjust the conversion ratio (default 1:15; query workload only)
+- **Visual Indicators**: Orange highlighting shows "locked-in" slow queries and "metadata-bound" starved warehouses
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Detailed Explanations**: Includes scenario walkthrough, comparison table, and caveats section
-- **Technical Accuracy**: Documents IWM behavior, cluster startup times, and cloud provider dependencies
+- **Detailed Explanations**: Scenario walkthrough, two comparison tables (compute + catalog), and caveats
+- **Technical Accuracy**: Documents IWM behavior, cluster startup times, cloud provider dependencies, and serverless-catalog metering
 
 ## How to Use
 
-1. **Select Mode**: Toggle between Databricks and BigQuery modes
-2. **Configure Settings**:
-   - Choose cluster size (Databricks only)
-   - Adjust DBU-to-Slots ratio
-3. **Add Jobs**: Click "+ Add Job" to simulate concurrent queries
-4. **Observe Behavior**:
-   - Databricks: Watch the "stuffing effect" and cluster scaling
-   - BigQuery: See linear, seamless scaling
+1. **Select Workload**: Toggle between *Query workload* and *Agentic metadata*
+2. **Select Mode**: In query workload → Databricks vs BigQuery; in agentic metadata → UC (self-managed) vs Knowledge Catalog (serverless)
+3. **Configure Settings**:
+   - Choose cluster / warehouse size
+   - Adjust DBU-to-Slots ratio (query workload only)
+4. **Add Jobs / Agents**: Click "+ Add Job" (or "+ Add Agent") to simulate load
+5. **Observe Behavior**:
+   - Databricks / self-managed: Watch the "stuffing effect", cluster scaling, and metadata starving queries
+   - BigQuery / KC: See seamless slot scaling and decoupled, per-call metadata serving
 
 ## The "1 to 11" Query Problem
 
@@ -55,6 +60,15 @@ This visualization demonstrates a key scenario (modeled on the classic/pro one-c
 4. **Result**: Queries 1-10 remain slow, locked to first cluster
 
 In BigQuery, running queries benefit from added capacity through fair-scheduling rebalancing (within reservation / on-demand limits).
+
+## Agentic Era: The Catalog Gets Hammered
+
+In the agentic era the catalog — not just the compute engine — becomes a hot path. Every agent task (especially **NL2SQL**) fans out into a burst of metadata calls before a single row is scanned: *list tables → describe schema → check lineage → read profiles → resolve policy → semantic search*. At high concurrency the catalog becomes the bottleneck.
+
+- **Self-managed / coupled catalog** (Hive Metastore, self-hosted/OSS Unity Catalog, or metadata fetched during planning on a fixed warehouse): metadata serving competes for the same fixed cores, so agent QPS **starves query compute** and hits API rate limits.
+- **Serverless Knowledge Catalog**: metadata serving is a **fully managed, serverless** metastore, metered **per API call** (pay-as-you-go, DCU-based) and **decoupled** from query compute — agent fan-out scales elastically while query slots stay free.
+
+**Honest framing (grounded note in the page):** Databricks-managed Unity Catalog is itself a managed control-plane service; it does not literally burn your cluster CPU. The "stolen cycles" effect applies most directly to Hive Metastore / OSS-UC / query-planning metadata overhead + catalog API rate limits. Calls-per-agent, DCU and cost figures on the page are illustrative — a shared axis for comparison, not official equivalences.
 
 ## Important Caveats
 
@@ -109,6 +123,9 @@ Grounded to Google Cloud & Databricks documentation as of 25 Jul 2026. Each clai
 5. BigQuery — [Introduction to slots autoscaling](https://cloud.google.com/bigquery/docs/slots-autoscaling-intro) — 60-second scale-down window; Fluid Scaling.
 6. BigQuery — [Understand reservations (workload management)](https://cloud.google.com/bigquery/docs/reservations-workload-management) — baseline + `autoscale_max_slots`; per-second, one-minute-minimum billing.
 7. BigQuery — [Quotas & limits](https://cloud.google.com/bigquery/quotas) — on-demand concurrent slot quotas.
+8. Google Cloud — [Knowledge Catalog (Dataplex) pricing](https://cloud.google.com/dataplex/pricing) — pay-as-you-go: DCU-hour processing, metadata storage per GiB/month, API calls per 100,000 (first 1M/month free) — a serverless, per-use metadata service.
+9. Google Cloud — [About Lakehouse catalogs](https://cloud.google.com/lakehouse/docs/about-lakehouse-catalogs) — the Lakehouse runtime catalog is "a fully managed, serverless metastore service" serving Spark, Flink, Hive & BigQuery via the Apache Iceberg REST catalog.
+10. Google Cloud — [Knowledge Catalog overview](https://cloud.google.com/dataplex/docs/catalog-overview) — managed governance for the open lakehouse: semantic search, lineage, profiling & quality across engines; ingests BigQuery, Iceberg REST (Unity/Glue/Snowflake — federation Preview), AlloyDB (Preview) & Pub/Sub metadata.
 
 ## License
 
