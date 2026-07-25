@@ -14,9 +14,9 @@ The core message: **data lands once as open Iceberg on GCS, governed by an open 
 
 ### The four scenarios (orange → blue)
 
-1. **DBX full** — Native Databricks on Google Cloud: UX, compute and Unity Catalog govern Delta (GA) / Iceberg (Databricks Preview, marked `*`) on GCS (still on Google's AI Hypercomputer VMs).
+1. **DBX full** — Native Databricks on Google Cloud: Workspace, Compute and Unity Catalog govern Delta (GA) / Iceberg (Databricks Preview, marked `*`) on GCS (still on Google's AI Hypercomputer VMs).
 2. **DBX led** — Same Databricks experience, but data is written as open Iceberg on GCS with Knowledge Catalog ↔ Unity Catalog sync; GCP serverless engines are available as alternative compute (reachable from a notebook via Spark Connect).
-3. **GCP led** — GCP runs the engine layer (BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog); Databricks stays a primary UX, and Databricks engine/UC on other clouds read the same data read-only via the Iceberg REST catalog.
+3. **GCP led** — GCP runs the engine layer (BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog); the Databricks Workspace stays a primary UX, and DBX Compute/UC on other clouds read the same data read-only via the Iceberg REST catalog.
 4. **GCP full** — All-GCP: BigQuery + serverless engines + AlloyDB, governed by Knowledge Catalog with Gemini/Agent Engine in BQ Studio; AlloyDB also reads analytical Iceberg via Lakehouse Federation / BigQuery Views (Preview); the Iceberg REST catalog stays open outward so Databricks on other clouds can still read.
 
 ## Assumptions & scope
@@ -25,6 +25,8 @@ This map shows **what runs inside — and is owned within — your Google Cloud 
 
 **Databricks Serverless is intentionally out of scope.** Per Databricks' own [high-level architecture](https://docs.databricks.com/aws/en/getting-started/high-level-architecture), serverless compute runs in a **Databricks-managed serverless compute plane inside the Databricks account** — not your Google Cloud tenant. Its scaling, capacity, and networking are governed by the **Databricks control plane, not by you**: it isn't a resource you provision, size, or place in your VPC. Because this diagram is about **ownership and control on Google Cloud**, serverless Databricks falls outside the boundary. (Its scaling mechanics are covered in the companion **scaling viz**.)
 
+**The same control-plane boundary applies to Databricks' Workspace and governance.** The Databricks **Workspace** (the web-app UI) is *"in the control plane"* and the **Unity Catalog** metastore is *"hosted as a multi-tenant service in the Databricks control plane"* ([UC architecture](https://docs.databricks.com/gcp/en/lakehouse-architecture/deployment-guide/unity-catalog)) — both run in the **Databricks account**, so they carry the orange **DBX-managed** badge. Only **DBX Compute** (the classic engine, in your VPC) and your **data** (in GCS) actually sit in your Google Cloud tenant — that's the one cell that keeps the red **self-managed** badge.
+
 ## The visual encoding (2×2 + color)
 
 | Axis | Meaning |
@@ -32,7 +34,7 @@ This map shows **what runs inside — and is owned within — your Google Cloud 
 | **Color** | blue = GCP · yellow = Databricks / non-GCP |
 | **Fill** | solid = primary · dimmed = alternative |
 | **Lines** | solid = primary flow · dotted = alternative / optional · green dashed = catalog sync |
-| **Badges** | green **serverless** = serverless / managed service · red **self-managed** = self-managed compute (VMs in your tenant) |
+| **Badges** | green **serverless** = serverless / managed service · orange **DBX-managed** = Databricks-managed service (Databricks control plane / account) · red **self-managed** = self-managed compute (VMs in your tenant) |
 | **Text** | *italic ( )* = capability · `*` = preview / upcoming · *(other CSPs)* = another cloud |
 
 Preview / upcoming items are marked with a trailing `*` (e.g. Databricks Iceberg output, AlloyDB↔Iceberg, private-cloud catalog/storage) rather than a border style — every box uses a solid border.
@@ -65,6 +67,7 @@ Illustrative reference — grounded to Google Cloud & Databricks documentation a
 - **Pub/Sub → BigQuery Storage Write API** streams into managed Iceberg tables.
 - **Knowledge Catalog** is the current name for the governance/catalog layer (formerly Dataplex Universal Catalog).
 - **Databricks compute planes**: classic compute runs in the **customer VPC** (self-managed, in scope); **serverless** compute runs in a **Databricks-managed plane inside the Databricks account** ([docs](https://docs.databricks.com/aws/en/getting-started/high-level-architecture)) — not the customer's tenant, so it's out of scope for this ownership map.
+- **Databricks control-plane services (DBX-managed)**: the **workspace web app (UX)** is *"in the control plane"* ([high-level architecture](https://docs.databricks.com/aws/en/getting-started/high-level-architecture)) and the **Unity Catalog metastore** is *"hosted as a multi-tenant service in the Databricks control plane"* ([UC architecture](https://docs.databricks.com/gcp/en/lakehouse-architecture/deployment-guide/unity-catalog)) — both run in the **Databricks account**, not the customer tenant. UC metadata (schemas, permissions, lineage) lives in a Databricks-managed store; the classic cluster still accesses **your** GCS data directly via short-lived credentials vended by UC.
 - Private-cloud catalog/storage are shown as **upcoming** (`*`); these are directional, not commitments.
 
 ## Technical Details

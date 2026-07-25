@@ -103,6 +103,8 @@
   .model { font-size:10px; font-weight:700; letter-spacing:.02em; margin-top:3px; text-transform:uppercase; }
   .model.srv { color:#188038; }
   .model.vm  { color:#c5221f; }
+  /* DBX-managed: runs in the Databricks control plane / account (not your tenant) */
+  .model.mgd { color:#c2410c; }
   /* preview / upcoming text marker: asterisk (works even with a solid border) */
   .cell .pstar, .xclake .pstar { color:#8a6d00; font-weight:700; }
   .cell .prevstar { display:none; }
@@ -119,6 +121,7 @@
   /* keep the green/red model badges visible on active cells */
   .stage.scenario .cell.on .model.srv { color:#188038 !important; }
   .stage.scenario .cell.on .model.vm  { color:#c5221f !important; }
+  .stage.scenario .cell.on .model.mgd { color:#c2410c !important; }
 
   /* alternative (dimmed fill, solid border = available) */
   .cell.on.alt { border-style: solid; opacity:.8; box-shadow:none; }
@@ -194,6 +197,7 @@
   <span><em>italic ( )</em> = capability</span>
   <span><span class="model srv" style="margin-top:0;">serverless</span> = serverless / managed service</span>
   <span><span class="model vm" style="margin-top:0;">self-managed</span> = self-managed compute (VMs in your tenant)</span>
+  <span><span class="model mgd" style="margin-top:0;">DBX-managed</span> = Databricks-managed service (runs in the Databricks account / control plane)</span>
   <span><em>(other CSPs)</em> = another cloud</span>
   <span><b style="color:#8a6d00;">*</b> = preview / upcoming</span>
 </div>
@@ -209,7 +213,7 @@
         <div class="cells">
           <div class="cell gcp" data-id="ux-bqstudio">BQ Studio <span class="paren">(agentic)</span><span class="model srv">serverless</span></div>
           <div class="cell gcp" data-id="ux-gemini">Gemini Enterprise + Agent Engine <span class="model srv">serverless</span></div>
-          <div class="cell other" data-id="ux-dbx">DBX<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="ux-dbx">DBX Workspace<span class="model mgd">DBX-managed</span><span class="extlab">(other CSPs)</span></div>
           <div class="cell other" data-id="ux-3p">3P Agentic Harness<span class="model vm">self-managed</span></div>
         </div>
       </div>
@@ -221,7 +225,7 @@
           <div class="cell gcp" data-id="eng-spark">Spark <span class="model srv">serverless</span></div>
           <div class="cell gcp" data-id="eng-pubsub">Pub/Sub <span class="model srv">serverless</span></div>
           <div class="cell gcp" data-id="eng-alloydb">AlloyDB <span class="paren">(OLTP / Iceberg<span class="pstar">*</span>)</span></div>
-          <div class="cell other" data-id="eng-dbx">DBX<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="eng-dbx">DBX Compute<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
           <div class="cell other" data-id="eng-3p">3P Engines<span class="model vm">self-managed</span></div>
         </div>
       </div>
@@ -230,7 +234,7 @@
         <div class="row-label">Catalog</div>
         <div class="cells">
           <div class="cell gcp" data-id="cat-kc">Knowledge Catalog <span class="model srv">serverless</span></div>
-          <div class="cell other" data-id="cat-uc">DBX UC<span class="model vm">self-managed</span><span class="extlab">(other CSPs)</span></div>
+          <div class="cell other" data-id="cat-uc">DBX UC<span class="model mgd">DBX-managed</span><span class="extlab">(other CSPs)</span></div>
           <div class="cell other" data-id="cat-open3p"><span>AWS Glue / 3P / private cloud catalog<span class="pstar">*</span></span></div>
         </div>
       </div>
@@ -281,37 +285,37 @@
 ------------------------------------------------------------------ */
 const S = {
   0: { name:"Overview", tag:"All capabilities", tagcol:"#fff",
-    desc:"The full open data platform. Blue = GCP-native, black = Databricks / third-party (3P). Serverless / managed services carry a green badge; Databricks &amp; 3P are self-managed (red badge, run on VMs). The AI Hypercomputer (CPU / GPU / TPU) is the shared foundation everything runs on. Pick a scenario to trace one path &mdash; from Databricks-only (orange) to GCP-native (blue).",
+    desc:"The full open data platform. Blue = GCP-native, black = Databricks / third-party (3P). Badges show the deployment model: green = serverless / managed GCP service; orange = <b>DBX-managed</b> (Databricks Workspace &amp; Unity Catalog, run in the Databricks control plane); red = self-managed compute (DBX Compute / 3P engines, VMs in your tenant). The AI Hypercomputer (CPU / GPU / TPU) is the shared foundation everything runs on. Pick a scenario to trace one path &mdash; from Databricks-only (orange) to GCP-native (blue).",
     flow:"", nodes:{}, caveat:"",
-    assume:"This map shows what runs inside &mdash; and is owned within &mdash; your Google Cloud tenant. Databricks is therefore modeled as <b>self-managed</b>: classic compute (SQL warehouses / job clusters) provisioned on GCE VMs in your own project / VPC, so you own the capacity, autoscaling policy, networking and cost.<br><br><b>Databricks Serverless is intentionally out of scope.</b> Per Databricks&rsquo; own architecture, serverless compute runs in a Databricks-managed serverless compute plane inside the <b>Databricks account</b> &mdash; not your Google Cloud tenant. Its scaling, capacity and networking are governed by the Databricks control plane, <b>not by you</b>: it isn&rsquo;t a resource you provision, size, or place in your VPC. Since this diagram is about ownership and control on Google Cloud, serverless Databricks falls outside the boundary (its scaling mechanics are covered in the companion scaling viz)." },
+    assume:"This map shows what runs inside &mdash; and is owned within &mdash; your Google Cloud tenant. Databricks is therefore modeled as <b>self-managed</b>: classic compute (SQL warehouses / job clusters) provisioned on GCE VMs in your own project / VPC, so you own the capacity, autoscaling policy, networking and cost.<br><br><b>Databricks Serverless is intentionally out of scope.</b> Per Databricks&rsquo; own architecture, serverless compute runs in a Databricks-managed serverless compute plane inside the <b>Databricks account</b> &mdash; not your Google Cloud tenant. Its scaling, capacity and networking are governed by the Databricks control plane, <b>not by you</b>: it isn&rsquo;t a resource you provision, size, or place in your VPC. Since this diagram is about ownership and control on Google Cloud, serverless Databricks falls outside the boundary (its scaling mechanics are covered in the companion scaling viz).<br><br>The same control-plane boundary applies to Databricks&rsquo; own governance and interface: the <b>Workspace</b> (the web-app UI) and <b>Unity Catalog</b> metastore are <b>DBX-managed</b> services hosted in the Databricks control plane / account (orange badge), not your tenant. Only <b>DBX Compute</b> (the classic engine) and your <b>data</b> (in GCS) actually sit in your Google Cloud project &mdash; which is why only DBX Compute keeps the red self-managed badge." },
 
   1: { name:"DBX full", tag:"All Databricks", tagcol:"#fbc02d", xclake:"off",
-     desc:"The common Databricks starting point on Google Cloud. UX, compute and governance all sit inside Databricks; data lands in GCS as Delta (GA) / Iceberg (<b>Databricks Preview</b>, marked *) under Unity Catalog. Gemini / Agent Engine is already available on the GCP side (dimmed) &mdash; and it all still runs on Google&rsquo;s AI Hypercomputer VMs underneath.",
-     flow:"Databricks UX &rarr; Databricks engine &rarr; Unity Catalog &rarr; GCS Delta (GA) / Iceberg (Preview)",
+     desc:"The common Databricks starting point on Google Cloud. Workspace, Compute and governance all sit inside Databricks; data lands in GCS as Delta (GA) / Iceberg (<b>Databricks Preview</b>, marked *) under Unity Catalog. Gemini / Agent Engine is already available on the GCP side (dimmed) &mdash; and it all still runs on Google&rsquo;s AI Hypercomputer VMs underneath.",
+     flow:"DBX Workspace &rarr; DBX Compute &rarr; Unity Catalog &rarr; GCS Delta (GA) / Iceberg (Preview)",
     nodes:{ "ux-dbx":"dbx","ux-gemini":"gcp|alt","eng-dbx":"dbx","cat-uc":"dbx","st-gcsdelta":"dbx","st-gcsiceberg":"dbx|prev","pr-both":"dbx" },
     edges:[ ["ux-dbx","eng-dbx","o"],["ux-gemini","eng-dbx","od"],["eng-dbx","cat-uc","o"],["cat-uc","st-gcsdelta","o"],["cat-uc","st-gcsiceberg","od"] ],
     caveat:"Databricks compute governs data only through Unity Catalog over GCS (Delta is GA; open Iceberg output is <b>Databricks Preview</b>, marked *). It cannot run on BQ-native storage &mdash; that would be read-only federation. This is the surface GCP opens up." },
 
   2: { name:"DBX led", tag:"Databricks-led, opening up", tagcol:"#ffd54f", xclake:"off", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"]],
      desc:"Same Databricks experience up top, but data is written as open Iceberg on GCS (<b>Databricks Preview</b>, marked *) and Knowledge Catalog &harr; Unity Catalog sync is switched on, so GCP reads the same tables. GCP serverless engines (BigQuery, Serverless for Apache Spark) and Knowledge Catalog are available as alternative compute / governance &mdash; a notebook (incl. Databricks, via Spark Connect) could drive them instead.",
-     flow:"Databricks UX &rarr; Databricks engine + BQ / Serverless for Apache Spark (alt) &rarr; UC &harr; KC &rarr; GCS Iceberg (Preview)",
+     flow:"DBX Workspace &rarr; DBX Compute + BQ / Serverless for Apache Spark (alt) &rarr; UC &harr; KC &rarr; GCS Iceberg (Preview)",
     nodes:{ "ux-dbx":"dbx","ux-gemini":"gcp|alt","eng-dbx":"dbx","eng-bq":"gcp|alt","eng-spark":"gcp|alt","cat-uc":"dbx","cat-kc":"gcp|alt","st-gcsiceberg":"dbx|prev","pr-both":"dbx" },
     edges:[ ["ux-dbx","eng-dbx","o"],["ux-dbx","eng-bq","bd"],["ux-dbx","eng-spark","bd"],["ux-gemini","eng-dbx","od"],["ux-gemini","eng-bq","bd"],["eng-dbx","cat-uc","o"],["eng-bq","cat-kc","bd"],["eng-spark","cat-kc","bd"],["cat-uc","st-gcsiceberg","od"],["cat-kc","st-gcsiceberg","bd"] ],
     caveat:"Databricks-written Iceberg on GCS is <b>Databricks Preview</b> (yellow, marked *); GCP reads it via KC. Alternative GCP compute uses <code>dataproc-spark-connect</code> (Spark Connect over gRPC) so a notebook can drive a Serverless for Apache Spark session &mdash; works off-GCP with ADC. KC&harr;UC sync = Unity Catalog &harr; Knowledge Catalog federation (same-cloud here; cross-cloud Lakehouse applies when the remote catalog is on another cloud)." },
 
   3: { name:"GCP led", tag:"GCP-led (engines)", tagcol:"#cfe3ff", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-open3p","KC \u2194 3P/private"]],
-     desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The Databricks notebook and Gemini stay primary UX driving GCP engines, with BQ Studio available as an alternative; Databricks engine / Unity Catalog on other clouds read the same data read-only via the Iceberg REST catalog. BQ native, plus a combined AWS Glue / 3P / private-cloud catalog and external Iceberg (AWS S3 / Azure ADLS / private cloud) reachable from Knowledge Catalog, are available too (dimmed); private cloud is upcoming (*).",
-     flow:"Databricks UX + Gemini (primary) + BQ Studio (alt) &rarr; BQ / Serverless for Apache Spark &rarr; Knowledge Catalog &rarr; GCS Iceberg &nbsp;&middot;&nbsp; Databricks engine + UC = other-cloud readers",
+     desc:"GCP now runs the workload at the engine layer &mdash; BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog (streaming via Pub/Sub, batch via Dataproc / BQ, both on GCP). The Databricks notebook and Gemini stay primary UX driving GCP engines, with BQ Studio available as an alternative; DBX Compute / Unity Catalog on other clouds read the same data read-only via the Iceberg REST catalog. BQ native, plus a combined AWS Glue / 3P / private-cloud catalog and external Iceberg (AWS S3 / Azure ADLS / private cloud) reachable from Knowledge Catalog, are available too (dimmed); private cloud is upcoming (*).",
+     flow:"DBX Workspace + Gemini (primary) + BQ Studio (alt) &rarr; BQ / Serverless for Apache Spark &rarr; Knowledge Catalog &rarr; GCS Iceberg &nbsp;&middot;&nbsp; DBX Compute + UC = other-cloud readers",
     nodes:{ "ux-bqstudio":"gcp|alt","ux-gemini":"gcp","ux-dbx":"dbx","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp|alt","eng-dbx":"dbx|ext","cat-kc":"gcp","cat-uc":"dbx|ext","cat-open3p":"dbx|alt","st-gcsiceberg":"gcp","st-bqnative":"gcp|alt","st-open3p":"dbx|alt","pr-both":"gcp" },
     edges:[ ["ux-dbx","eng-bq","b"],["ux-dbx","eng-spark","b"],["ux-bqstudio","eng-bq","bd"],["ux-bqstudio","eng-spark","bd"],["ux-gemini","eng-bq","b"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["eng-dbx","cat-uc","od"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-bqnative","bd"],["cat-kc","st-open3p","bd"],["cat-open3p","st-open3p","bd"],["cat-uc","st-gcsiceberg","od"] ],
     caveat:"The GCS Iceberg table is GCP-managed and GA. What is <b>Databricks Preview</b> is Databricks reading it via the Iceberg REST catalog (read-only foreign Iceberg, limited support &mdash; shown as dotted lines). BQ native + the combined AWS Glue / 3P / private-cloud catalog and external Iceberg are available (dimmed; private cloud upcoming, marked *); authoritative read/write + governance stay GCP-side.", preview:true },
 
   4: { name:"GCP full", tag:"All GCP", tagcol:"#aecbfa", xclake:"on", syncs:[["cat-kc","cat-uc","KC \u2194 UC sync"],["cat-kc","cat-open3p","KC \u2194 3P/private"]],
-     desc:"All-GCP: BigQuery + Serverless for Apache Spark on GCP storage, governed by Knowledge Catalog with Gemini / Agent Engine in BQ Studio. AlloyDB (OLTP) is reached from BQ Studio via GA federated query and from Gemini via agent / MCP; it also reads analytical Iceberg via Lakehouse Federation / BigQuery Views and takes reverse-ETL results back (both <b>Preview</b>, marked *). The Iceberg REST catalog stays open outward &mdash; Databricks (Unity Catalog) on other clouds still reads the open tables (UC &rarr; GCS Iceberg), and a combined AWS Glue / 3P / private-cloud catalog syncs with Knowledge Catalog (dimmed). Databricks UX / engine remain available on other clouds. Open by default, no lock-in.",
+     desc:"All-GCP: BigQuery + Serverless for Apache Spark on GCP storage, governed by Knowledge Catalog with Gemini / Agent Engine in BQ Studio. AlloyDB (OLTP) is reached from BQ Studio via GA federated query and from Gemini via agent / MCP; it also reads analytical Iceberg via Lakehouse Federation / BigQuery Views and takes reverse-ETL results back (both <b>Preview</b>, marked *). The Iceberg REST catalog stays open outward &mdash; Databricks (Unity Catalog) on other clouds still reads the open tables (UC &rarr; GCS Iceberg), and a combined AWS Glue / 3P / private-cloud catalog syncs with Knowledge Catalog (dimmed). DBX Workspace / Compute remain available on other clouds. Open by default, no lock-in.",
      flow:"BQ Studio (agentic) + Gemini &rarr; BQ / Serverless for Apache Spark + AlloyDB &rarr; Knowledge Catalog &rarr; BQ native + GCS Iceberg &nbsp;( open outward )",
     nodes:{ "ux-bqstudio":"gcp","ux-gemini":"gcp","ux-dbx":"dbx|ext","ux-3p":"dbx|alt","eng-bq":"gcp","eng-spark":"gcp","eng-pubsub":"gcp|alt","eng-alloydb":"gcp|alt","eng-dbx":"dbx|ext","eng-3p":"dbx|alt","cat-kc":"gcp","cat-uc":"dbx|ext","cat-open3p":"dbx|alt","st-bqnative":"gcp","st-gcsiceberg":"gcp","st-open3p":"dbx|alt","pr-both":"gcp" },
     edges:[ ["ux-bqstudio","eng-bq","b"],["ux-bqstudio","eng-spark","b"],["ux-bqstudio","eng-alloydb","bd"],["ux-gemini","eng-bq","b"],["ux-gemini","eng-alloydb","bd"],["eng-alloydb","cat-kc","bd"],["eng-bq","cat-kc","b"],["eng-spark","cat-kc","b"],["cat-kc","st-bqnative","b"],["cat-kc","st-gcsiceberg","b"],["cat-kc","st-open3p","bd"],["cat-open3p","st-open3p","bd"],["eng-dbx","cat-uc","od"],["cat-uc","st-gcsiceberg","od"] ],
-    caveat:"BQ-native is exposed to external engines read-only via BigQuery catalog federation (<code>bq://</code> Iceberg REST); managed Iceberg tables interoperate read/write with credential vending. BQ Studio reaches AlloyDB via GA federated query; Gemini via agent / MCP. AlloyDB&harr;Iceberg (Lakehouse Federation / BigQuery Views + reverse-ETL) is <b>Preview</b> (*). Only Unity Catalog federates the Databricks read here (read-only foreign Iceberg); Databricks UX / engine stay on other clouds. The combined AWS Glue / 3P / private-cloud catalog + external Iceberg are dimmed (private cloud upcoming, marked *); cross-cloud federation is <b>Preview</b>.", preview:true }
+    caveat:"BQ-native is exposed to external engines read-only via BigQuery catalog federation (<code>bq://</code> Iceberg REST); managed Iceberg tables interoperate read/write with credential vending. BQ Studio reaches AlloyDB via GA federated query; Gemini via agent / MCP. AlloyDB&harr;Iceberg (Lakehouse Federation / BigQuery Views + reverse-ETL) is <b>Preview</b> (*). Only Unity Catalog federates the Databricks read here (read-only foreign Iceberg); DBX Workspace / Compute stay on other clouds. The combined AWS Glue / 3P / private-cloud catalog + external Iceberg are dimmed (private cloud upcoming, marked *); cross-cloud federation is <b>Preview</b>.", preview:true }
 };
 
 const HW = ["hw-cpu","hw-gpu","hw-tpu"];
@@ -458,7 +462,8 @@ document.getElementById('footer').innerHTML =
   "Illustrative reference &mdash; grounded to Google Cloud &amp; Databricks docs as of 25 Jul 2026. "+
   "Sources: Serverless for Apache Spark (Spark Connect / <code>dataproc-spark-connect</code>), Lakehouse Iceberg REST &amp; catalog federation, "+
   "Cross-cloud Lakehouse (AWS Glue / Unity Catalog; cross-cloud interconnect + intelligent caching), AlloyDB Lakehouse Federation (Preview), Pub/Sub &rarr; BigQuery Storage Write API. "+
-  "Databricks compute planes (classic = customer VPC; serverless = Databricks account, out of scope here).";
+  "Databricks compute planes (classic = customer VPC; serverless = Databricks account, out of scope here); "+
+  "Unity Catalog metastore &amp; workspace web app run in the Databricks control plane (DBX-managed, in the Databricks account).";
 
 render();
 </script>
