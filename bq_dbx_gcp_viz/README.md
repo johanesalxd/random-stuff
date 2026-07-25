@@ -10,14 +10,14 @@ An interactive visualization of how **Databricks and open engines run on Google 
 
 The diagram is a layered capability matrix (UX → Engines → Catalog → Storage → Process, on the shared AI Hypercomputer foundation). Selecting a scenario traces one path through the layers, showing who owns each step and how the open catalog (Knowledge Catalog / Iceberg REST) keeps data portable across engines and clouds.
 
-The core message: **data lands once as open Iceberg on GCS, governed by an open catalog, so any engine — BigQuery, Serverless Spark, or Databricks — can attach to the same tables.** Value can progressively move to GCP-native (BigQuery) while the storage and catalog stay open.
+The core message: **data lands once as open Iceberg on GCS, governed by an open catalog, so any engine — BigQuery, Serverless for Apache Spark, or Databricks — can attach to the same tables.** Value can progressively move to GCP-native (BigQuery) while the storage and catalog stay open.
 
 ### The four scenarios (orange → blue)
 
-1. **DBX full** — Native Databricks on Google Cloud: UX, compute and Unity Catalog govern Delta/Iceberg on GCS (still on Google's AI Hypercomputer VMs).
+1. **DBX full** — Native Databricks on Google Cloud: UX, compute and Unity Catalog govern Delta (GA) / Iceberg (Databricks Preview, marked `*`) on GCS (still on Google's AI Hypercomputer VMs).
 2. **DBX led** — Same Databricks experience, but data is written as open Iceberg on GCS with Knowledge Catalog ↔ Unity Catalog sync; GCP serverless engines are available as alternative compute (reachable from a notebook via Spark Connect).
-3. **GCP led** — GCP runs the engine layer (BigQuery + Serverless Spark on open Iceberg, governed by Knowledge Catalog); Databricks stays a primary UX, and Databricks engine/UC on other clouds read the same data read-only via the Iceberg REST catalog.
-4. **GCP full** — All-GCP: BigQuery + serverless engines + AlloyDB, governed by Knowledge Catalog with Gemini/Antigravity in BQ Studio; the Iceberg REST catalog stays open outward so Databricks on other clouds can still read.
+3. **GCP led** — GCP runs the engine layer (BigQuery + Serverless for Apache Spark on open Iceberg, governed by Knowledge Catalog); Databricks stays a primary UX, and Databricks engine/UC on other clouds read the same data read-only via the Iceberg REST catalog.
+4. **GCP full** — All-GCP: BigQuery + serverless engines + AlloyDB, governed by Knowledge Catalog with Gemini/Agent Engine in BQ Studio; AlloyDB also reads analytical Iceberg via Lakehouse Federation / BigQuery Views (Preview); the Iceberg REST catalog stays open outward so Databricks on other clouds can still read.
 
 ## The visual encoding (2×2 + color)
 
@@ -25,11 +25,13 @@ The core message: **data lands once as open Iceberg on GCS, governed by an open 
 | :--- | :--- |
 | **Color** | blue = GCP · yellow = Databricks / non-GCP |
 | **Fill** | solid = primary · dimmed = alternative |
-| **Border** | solid = available (GA) · dotted = preview / upcoming |
 | **Lines** | solid = primary flow · dotted = alternative / optional · green dashed = catalog sync |
-| **Text** | *italic ( )* = capability (e.g. serverless) · **VM** = self-managed · *(other CSPs)* = another cloud |
+| **Badges** | green **serverless** = serverless / managed service · red **self-managed** = self-managed compute (VMs) |
+| **Text** | *italic ( )* = capability · `*` = preview / upcoming · *(other CSPs)* = another cloud |
 
-A vertical **Cross-cloud Lakehouse (network)** band spans Catalog→Storage to represent the connectivity layer (off in DBX-full, dimmed in DBX-led, on in the GCP scenarios).
+Preview / upcoming items are marked with a trailing `*` (e.g. Databricks Iceberg output, AlloyDB↔Iceberg, private-cloud catalog/storage) rather than a border style — every box uses a solid border.
+
+A vertical **Cross-cloud Lakehouse · AWS + Azure · interconnect + caching** band spans Catalog→Storage to represent the connectivity layer (off in DBX-full and DBX-led — no other cloud is active — and dimmed-blue "alternative" in the GCP scenarios).
 
 ## Features
 
@@ -49,12 +51,14 @@ A vertical **Cross-cloud Lakehouse (network)** band spans Catalog→Storage to r
 
 Illustrative reference — grounded to Google Cloud & Databricks documentation as of **25 Jul 2026**. Key facts encoded in the diagram:
 
-- **BigQuery managed Iceberg (V2) tables are GA**; the BigQuery Iceberg REST catalog / catalog federation (`bq://`) is **read-only** for external OSS engines (Spark, Trino, Databricks).
-- **BigQuery ↔ AlloyDB federated query** via `EXTERNAL_QUERY` + the BigQuery Connection API (BQ Studio path); Gemini reaches AlloyDB via agent / MCP.
+- **BigQuery managed Iceberg (V2) tables are GA**; the BigQuery Iceberg REST catalog / catalog federation (`bq://`) is **read-only** for external OSS engines (Spark, Trino, Databricks), read-write from BigQuery.
+- **BigQuery ↔ AlloyDB federated query** via `EXTERNAL_QUERY` + the BigQuery Connection API (BQ Studio path, GA); Gemini reaches AlloyDB via agent / MCP.
+- **AlloyDB ↔ Iceberg** via Lakehouse Federation / BigQuery Views (AlloyDB reads analytical Iceberg) and BigQuery reverse-ETL back into AlloyDB are **Preview** (marked `*`).
 - **Serverless for Apache Spark** interactive sessions via **Spark Connect** (`dataproc-spark-connect`) let a notebook (including Databricks) drive GCP compute — works off-GCP with ADC.
-- **Cross-cloud Lakehouse** federates **Databricks Unity Catalog** (metadata sync, UC external tables); Databricks reading foreign Iceberg is **read-only with limited support**, and the UC catalog-federation connector for Google Cloud Lakehouse is **Preview** (hence the dotted "Databricks Preview" edges).
+- **Cross-cloud Lakehouse** connects Google Cloud to **remote Iceberg REST catalogs — AWS Glue and Databricks Unity Catalog** — to query other-cloud data (AWS S3 / Azure ADLS) without copying, via cross-cloud interconnect + intelligent caching; bidirectional federation is **Preview**. Databricks reading GCP's open Iceberg is **read-only foreign Iceberg** (still **Databricks Preview**, marked `*`).
 - **Pub/Sub → BigQuery Storage Write API** streams into managed Iceberg tables.
-- Private-cloud catalog/storage are shown as **upcoming** (dotted); these are directional, not commitments.
+- **Knowledge Catalog** is the current name for the governance/catalog layer (formerly Dataplex Universal Catalog).
+- Private-cloud catalog/storage are shown as **upcoming** (`*`); these are directional, not commitments.
 
 ## Technical Details
 
