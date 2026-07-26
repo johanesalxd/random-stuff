@@ -1,0 +1,38 @@
+[project]
+name = "bq-pykx-copy"
+version = "0.1.0"
+description = "kdb+ HDB -> Parquet -> BigQuery migration PoC using PyKX (free tooling only)."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "pykx>=2.5.0",
+    "pyarrow>=15.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.26.0",
+    "google-cloud-storage>=2.16.0",
+    "google-cloud-bigquery>=3.20.0",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "pip-audit>=2.7.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Numbered entry-point scripts import `config` first for license side-effects.
+"0*.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
