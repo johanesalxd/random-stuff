@@ -1,0 +1,21 @@
+# --- Secrets / licenses (NEVER commit) ---
+.env
+kc.lic
+k4.lic
+*.lic
+
+# --- Local reference data derived from private sources (NOT for publication) ---
+schema_ref/
+
+# --- Python venv & caches ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+.python-version
+
+# --- Generated artefacts (HDB, parquet, logs) ---
+data/
+*.parquet
+*.log
+metrics_*.json
