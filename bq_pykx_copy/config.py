@@ -74,7 +74,7 @@ def resolve_gcp_project() -> str:
 GCS_BUCKET = os.getenv("GCS_BUCKET", "").strip()
 GCS_PREFIX = os.getenv("GCS_PREFIX", "kdb_migration_poc").strip("/")
 BQ_DATASET = os.getenv("BQ_DATASET", "kdb_migration_poc").strip()
-BQ_TABLE = os.getenv("BQ_TABLE", "firm_orderbook").strip()
+BQ_TABLE = os.getenv("BQ_TABLE", "firm_orderbook_poc").strip()
 BQ_LOCATION = os.getenv("BQ_LOCATION", "US").strip()
 
 # --------------------------------------------------------------------------- #

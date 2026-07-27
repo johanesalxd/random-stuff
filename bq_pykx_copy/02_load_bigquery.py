@@ -44,16 +44,22 @@ def upload_to_gcs() -> list[str]:
         raise SystemExit("Set GCS_BUCKET in .env first.")
     client = storage.Client(project=PROJECT)
     bucket = client.bucket(config.GCS_BUCKET)
+    parquet_files = [
+        config.PARQUET_DIR / f"{config.BQ_TABLE}__{day}.parquet"
+        for day in config.POC_DATES
+    ]
+    missing = [path.name for path in parquet_files if not path.is_file()]
+    if missing:
+        raise SystemExit(f"Missing Parquet files: {', '.join(missing)}")
+
     uris = []
-    for pq_file in sorted(config.PARQUET_DIR.glob(f"{config.BQ_TABLE}__*.parquet")):
+    for pq_file in parquet_files:
         blob_name = f"{config.GCS_PREFIX}/{pq_file.name}"
         logger.info(
             "uploading %s -> gs://%s/%s", pq_file.name, config.GCS_BUCKET, blob_name
         )
         bucket.blob(blob_name).upload_from_filename(str(pq_file))
         uris.append(f"gs://{config.GCS_BUCKET}/{blob_name}")
-    if not uris:
-        raise SystemExit("No parquet files found - run 01_kdb_to_parquet.py first.")
     return uris
 
 
@@ -90,7 +96,7 @@ def load(uris: list[str]) -> None:
         ),
         clustering_fields=bq_clustering_columns(),
     )
-    logger.info("loading %s file(s) -> %s", len(uris), table_id)
+    logger.info("replacing PoC table %s from %s file(s)", table_id, len(uris))
     bq.load_table_from_uri(uris, table_id, job_config=job_config).result()
 
     table = bq.get_table(table_id)

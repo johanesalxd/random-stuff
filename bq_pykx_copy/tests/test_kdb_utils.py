@@ -5,10 +5,20 @@ conversion decisions: symbol-null handling, nanosecond INT64 timestamps, and
 microsecond ingestion timestamps.
 """
 
+from types import SimpleNamespace
+
+import numpy as np
 import pyarrow as pa
 import pytest
 
-from kdb_utils import arrow_align, arrow_schema, chunk_ranges
+import kdb_utils
+from kdb_utils import (
+    arrow_align,
+    arrow_schema,
+    chunk_ranges,
+    peak_rss_mb,
+    q_timestamp_raw_to_arrow,
+)
 from schema import Column
 
 
@@ -45,6 +55,7 @@ def test_arrow_align_ingestion_timestamp_is_microsecond():
     result = arrow_align(table, schema)
 
     assert result.schema.field("inserted_ts").type == pa.timestamp("us")
+    assert result.column("inserted_ts").cast(pa.int64()).to_pylist() == [1_000_000]
 
 
 def test_arrow_align_preserves_numeric_nulls_and_order():
@@ -111,3 +122,56 @@ def test_chunk_ranges_rejects_non_positive_chunk():
     """A non-positive chunk size is a programming error, not a silent no-op."""
     with pytest.raises(ValueError):
         chunk_ranges(100, 0)
+
+
+def test_q_timestamp_raw_to_arrow_preserves_nanos_and_nulls():
+    """Raw q timestamps receive the Unix epoch offset without losing nulls."""
+    raw = np.array([0, 123_456_789, np.iinfo(np.int64).min], dtype=np.int64)
+
+    result = q_timestamp_raw_to_arrow(raw, preserve_nanoseconds=True)
+
+    assert result.to_pylist() == [
+        946_684_800_000_000_000,
+        946_684_800_123_456_789,
+        None,
+    ]
+
+
+def test_q_timestamp_raw_to_arrow_rejects_unsupported_values():
+    """Infinity and epoch overflow fail instead of becoming incorrect dates."""
+    with pytest.raises(ValueError, match="infinities"):
+        q_timestamp_raw_to_arrow(
+            np.array([np.iinfo(np.int64).max]), preserve_nanoseconds=True
+        )
+
+    overflow = np.iinfo(np.int64).max - kdb_utils._Q_TO_UNIX_EPOCH_NS + 1
+    with pytest.raises(ValueError, match="outside"):
+        q_timestamp_raw_to_arrow(np.array([overflow]), preserve_nanoseconds=True)
+
+
+def test_q_timestamp_raw_to_arrow_truncates_to_microseconds():
+    """Regular timestamps intentionally truncate sub-microsecond digits."""
+    result = q_timestamp_raw_to_arrow(
+        np.array([1_999, -1_999]), preserve_nanoseconds=False
+    )
+
+    assert result.cast(pa.int64()).to_pylist() == [
+        946_684_800_000_001,
+        946_684_799_999_999,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("platform", "rss", "expected"),
+    [("darwin", 10 * 1024**2, 10.0), ("linux", 10 * 1024, 10.0)],
+)
+def test_peak_rss_mb_handles_platform_units(monkeypatch, platform, rss, expected):
+    """Peak RSS accounts for macOS bytes and Linux KiB."""
+    monkeypatch.setattr(kdb_utils.sys, "platform", platform)
+    monkeypatch.setattr(
+        kdb_utils.resource,
+        "getrusage",
+        lambda _: SimpleNamespace(ru_maxrss=rss),
+    )
+
+    assert peak_rss_mb() == expected
