@@ -118,7 +118,15 @@ def generate_partition(db, day: str, n: int) -> None:
 def main() -> None:
     """Generate all configured partitions and print a per-partition row count."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    shutil.rmtree(config.HDB_DIR)
+    # Safety: step 0 only ever recreates the generated demo HDB under data/.
+    # Never delete an arbitrary path (e.g. a real customer HDB) via misconfig.
+    if config.HDB_DIR != config.DATA_DIR / "hdb":
+        raise SystemExit(
+            f"Refusing to delete {config.HDB_DIR}: step 0 only manages the "
+            f"generated demo HDB at {config.DATA_DIR / 'hdb'}."
+        )
+    if config.HDB_DIR.exists():
+        shutil.rmtree(config.HDB_DIR)
     config.HDB_DIR.mkdir(parents=True)
     logger.info("Generating synthetic HDB at: %s", config.HDB_DIR)
     logger.info(
