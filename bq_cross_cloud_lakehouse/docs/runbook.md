@@ -30,7 +30,7 @@ sequenceDiagram
 
 ## Phase 1 — Tooling + guardrails (prep)
 
-- Install AWS CLI v2 and run `aws login` for temporary browser-based credentials.
+- Install AWS CLI v2 and run `aws configure sso` then `aws sso login` for temporary credentials.
 - `./aws/01_verify.sh` → confirms account + region.
 - AWS guardrails (console, as root): root MFA, a **Zero-spend** budget, a **$1**
   monthly budget with email alerts, and **Cost Anomaly Detection** enabled.
@@ -111,15 +111,19 @@ Keep the AWS budget and anomaly alerts active for a few days after teardown.
   synced (Phase 3) and everything is in `us-east4`; as a fallback, `SELECT` the
   `sales_history` rows into a `us-east4` staging table and train on that.
 - **DataScan rejects the payload (`gcp/06`)** — preview API shapes can change.
-  The script follows the current v1 shape with `tableType=OBJECT_TABLE` and
-  `unstructuredDataEventsConfig.enabled=true`; check the current Google Cloud
-  documentation if the API rejects it.
+  The live v1 discovery API expects `bigqueryPublishingConfig.tableType=BIGLAKE`
+  plus `storageConfig.unstructuredDataOptions.semanticInferenceEnabled=true`
+  (verified against the v1 discovery document; `OBJECT_TABLE`,
+  `unstructuredDataEventsConfig`, and `entity_inference_enabled` are all rejected
+  as unknown). Check the current Google Cloud documentation if the API rejects it.
 - **`datascans run` fails with `INVALID_ARGUMENT: ... does not exist` (`gcp/06`)** —
   create is async; the scan is `state=CREATING` for a bit and `describe` succeeds
   before it's runnable. Wait until `state=ACTIVE` (the script now polls for this)
   before running.
 - **Discovery job fails "unable to acquire necessary resources" (`gcp/06`)** —
-  transient regional capacity error; rerun the optional script later.
+  transient regional capacity error; the script auto-retries once, and the
+  object table often publishes even while the job keeps running, so re-running
+  the optional script later is safe.
 - **No "Extract with SQL" in the Insights tab (`gcp/06`)** — semantic extraction is
   console-only and region-gated in preview (e.g. `us-east4` shows only *Manage
   discovery scan settings* / *Generate insights*). The object table is still
