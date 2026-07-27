@@ -12,6 +12,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
+ATHENA_WORKGROUP="${ATHENA_WORKGROUP:-primary}"
+ATHENA_TIMEOUT_SECONDS="${ATHENA_TIMEOUT_SECONDS:-300}"
 ATHENA_OUTPUT="s3://${S3_BUCKET}/athena-results/"
 LOYALTY_LOC="s3://${S3_BUCKET}/warehouse/${FROYO_LOYALTY_TABLE}"
 SALES_LOC="s3://${S3_BUCKET}/warehouse/${FROYO_SALES_TABLE}"
@@ -19,24 +21,37 @@ SALES_LOC="s3://${S3_BUCKET}/warehouse/${FROYO_SALES_TABLE}"
 # Submit a query, poll to completion, print the QueryExecutionId on stdout.
 # All human-readable progress goes to stderr so stdout stays capturable.
 _athena_run() {
-  local sql="$1" qid state
+  local deadline qid sql state
+  sql="$1"
   qid="$(aws athena start-query-execution \
     --query-string "${sql}" \
+    --work-group "${ATHENA_WORKGROUP}" \
+    --region "${AWS_REGION}" \
     --query-execution-context "Database=${GLUE_DATABASE}" \
     --result-configuration "OutputLocation=${ATHENA_OUTPUT}" \
     --query QueryExecutionId --output text)"
   echo "  submitted ${qid}" >&2
+  deadline=$((SECONDS + ATHENA_TIMEOUT_SECONDS))
   while true; do
     state="$(aws athena get-query-execution --query-execution-id "${qid}" \
-      --query 'QueryExecution.Status.State' --output text)"
+      --region "${AWS_REGION}" --query 'QueryExecution.Status.State' --output text)"
     case "${state}" in
       SUCCEEDED) echo "  SUCCEEDED" >&2; break ;;
       FAILED|CANCELLED)
         echo "  ${state}:" >&2
         aws athena get-query-execution --query-execution-id "${qid}" \
+          --region "${AWS_REGION}" \
           --query 'QueryExecution.Status.StateChangeReason' --output text >&2
         exit 1 ;;
-      *) sleep 2 ;;
+      *)
+        if ((SECONDS >= deadline)); then
+          echo "  TIMED OUT after ${ATHENA_TIMEOUT_SECONDS}s; cancelling ${qid}." >&2
+          aws athena stop-query-execution --query-execution-id "${qid}" \
+            --region "${AWS_REGION}" >/dev/null
+          exit 1
+        fi
+        sleep 2
+        ;;
     esac
   done
   echo "${qid}"
@@ -49,6 +64,7 @@ run_athena() { _athena_run "$1" >/dev/null; }
 athena_scalar() {
   local qid; qid="$(_athena_run "$1")"
   aws athena get-query-results --query-execution-id "${qid}" \
+    --region "${AWS_REGION}" \
     --query 'ResultSet.Rows[1].Data[0].VarCharValue' --output text
 }
 
@@ -121,7 +137,8 @@ if [[ "${SALES_ROWS}" == "0" ]]; then
           40
         + 0.04 * date_diff('day', DATE '2024-07-01', dt)          -- upward trend
         + 12   * sin(2 * pi() * day_of_week(dt) / 7.0)            -- weekly seasonality
-        + 8    * (rand() - 0.5)                                    -- noise
+        + (mod(date_diff('day', DATE '2024-07-01', dt) * 17
+            + CASE r WHEN 'APAC' THEN 3 WHEN 'EMEA' THEN 5 ELSE 7 END, 9) - 4)
         + (CASE r WHEN 'APAC' THEN 20 WHEN 'EMEA' THEN 10 ELSE 0 END)
       )) AS integer) AS u
     FROM UNNEST(sequence(DATE '2024-07-01', DATE '2026-06-30', INTERVAL '1' day)) AS t(dt)

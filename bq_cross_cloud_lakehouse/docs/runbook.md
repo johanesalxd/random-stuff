@@ -30,12 +30,12 @@ sequenceDiagram
 
 ## Phase 1 — Tooling + guardrails (prep)
 
-- Install AWS CLI v2, `aws configure` (region `us-east-1`, output `json`).
+- Install AWS CLI v2 and run `aws login` for temporary browser-based credentials.
 - `./aws/01_verify.sh` → confirms account + region.
 - AWS guardrails (console, as root): root MFA, a **Zero-spend** budget, a **$1**
   monthly budget with email alerts, and **Cost Anomaly Detection** enabled.
 - GCP guardrails: a budget + alert; enable APIs with
-  `gcloud services enable biglake.googleapis.com bigquery.googleapis.com`;
+  `gcloud services enable --project=<PROJECT> biglake.googleapis.com bigquery.googleapis.com`;
   confirm Preview access with
   `gcloud alpha biglake iceberg catalogs list --project=<PROJECT>`.
 
@@ -64,9 +64,9 @@ until `froyo_lakehouse` and both tables appear.
 
 ```bash
 ./gcp/05_seed_native_bq.sh          # deterministic allergen/recipe/product knowledge
-# ./gcp/06_knowledge_catalog.sh     # OPTIONAL: real Dataplex PDF extraction (no Spark, ~20m)
+# ./gcp/06_knowledge_catalog.sh     # OPTIONAL: preview semantic inference (~20m)
 ./gcp/40_query_froyo.sh             # allergen find + cross-cloud target list
-./gcp/50_forecast_bqml.sh           # BQML ARIMA_PLUS Q3 forecast on AWS-resident data
+./gcp/50_forecast_bqml.sh 92        # BQML ARIMA_PLUS Q3 forecast on AWS-resident data
 ```
 
 ## Demo talk-track (~6 min)
@@ -74,15 +74,15 @@ until `froyo_lakehouse` and both tables appear.
 1. **The problem — dark data.** "Midnight Swirl is trending. Is it safe? Search
    the recipe PDF for *soy* → nothing. But the allergen is hidden in a *supplier*
    datasheet, buried across hundreds of PDFs."
-2. **Knowledge Catalog.** Run `gcp/05` (or the live `gcp/06`). "AI extracted the
-   supplier datasheets into BigQuery. `Q2` shows Midnight Base 204 → **Soy**, with
-   the exact source document — knowledge no keyword search would surface."
+2. **Knowledge Catalog.** Run `gcp/05` for the reliable PDF-grounded seed, or
+   show a previously successful `gcp/06` semantic-inference run. "The supplier
+   evidence resolves Midnight Base 204 → **Soy**, with the exact source document."
 3. **Cross-cloud target list (`Q3`).** "Now the payoff: our customer-loyalty data
    physically lives in **AWS S3** as Iceberg. This is a single BigQuery query
    joining GCP-native allergen knowledge with AWS-resident loyalty data — building
    a Midnight Swirl campaign list that **excludes soy-sensitive customers**."
-   - "No data moved. No AWS keys in Google Cloud — BigLake assumes an AWS IAM role
-     over OIDC and reads S3 with short-lived vended credentials."
+    - "No persistent copy or ETL. BigLake assumes an AWS IAM role over OIDC and
+      reads S3 over the public internet with short-lived vended credentials."
 4. **Forecast (`gcp/50`).** "Finally, BigQuery ML `ARIMA_PLUS` — trained *directly
    on the AWS-resident* `sales_history` — projects Q3 revenue per region. Raw,
    multi-cloud data to a forecast, in SQL."
@@ -92,13 +92,13 @@ until `froyo_lakehouse` and both tables appear.
 ## Phase 5 — Teardown (optional; only when you want to stop spend)
 
 ```bash
-./gcp/90_teardown.sh   # native dataset + BQML model, DataScan, connection, PDF bucket, catalog
-./aws/90_teardown.sh   # Iceberg tables, Glue DB, S3 bucket, IAM role
+./gcp/90_teardown.sh --dry-run
+./aws/90_teardown.sh --dry-run
 ```
 
-Then, to fully stop spend / rotate the demo credential: delete the demo IAM user
-(commands printed by `aws/90_teardown.sh`), keep the AWS budget + anomaly alerts a
-few days, and confirm `$0` in AWS Cost Explorer the next day.
+Review the inventory before running either script with `--execute`. Shared S3
+buckets are retained and only the two Froyo warehouse prefixes are targeted.
+Keep the AWS budget and anomaly alerts active for a few days after teardown.
 
 ## Troubleshooting
 
@@ -110,16 +110,16 @@ few days, and confirm `$0` in AWS Cost Explorer the next day.
 - **BQML forecast fails to read the federated table** — confirm the catalog is
   synced (Phase 3) and everything is in `us-east4`; as a fallback, `SELECT` the
   `sales_history` rows into a `us-east4` staging table and train on that.
-- **DataScan rejects the payload (`gcp/06`)** — preview API shapes vary. The live
-  v1 discovery API expects `bigqueryPublishingConfig.tableType=BIGLAKE` +
-  `storageConfig.unstructuredDataOptions.semanticInferenceEnabled=true` (not
-  `OBJECT_TABLE` / `unstructuredDataEventsConfig`, and not `entity_inference_enabled`).
+- **DataScan rejects the payload (`gcp/06`)** — preview API shapes can change.
+  The script follows the current v1 shape with `tableType=OBJECT_TABLE` and
+  `unstructuredDataEventsConfig.enabled=true`; check the current Google Cloud
+  documentation if the API rejects it.
 - **`datascans run` fails with `INVALID_ARGUMENT: ... does not exist` (`gcp/06`)** —
   create is async; the scan is `state=CREATING` for a bit and `describe` succeeds
   before it's runnable. Wait until `state=ACTIVE` (the script now polls for this)
   before running.
 - **Discovery job fails "unable to acquire necessary resources" (`gcp/06`)** —
-  transient regional capacity error; just rerun. The script auto-retries once.
+  transient regional capacity error; rerun the optional script later.
 - **No "Extract with SQL" in the Insights tab (`gcp/06`)** — semantic extraction is
   console-only and region-gated in preview (e.g. `us-east4` shows only *Manage
   discovery scan settings* / *Generate insights*). The object table is still

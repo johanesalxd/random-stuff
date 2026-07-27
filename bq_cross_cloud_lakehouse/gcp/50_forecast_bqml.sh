@@ -15,7 +15,7 @@ source ./config.local.env
 
 SALES="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_SALES_TABLE}"
 MODEL="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}.midnight_swirl_arima"
-HORIZON="${1:-90}"   # forecast horizon in days (~ one quarter)
+HORIZON="${1:-92}"   # Q3 2026 contains 92 days.
 
 bq_query() { bq --location="${GCP_REGION}" --project_id="${GCP_PROJECT}" query --use_legacy_sql=false "$1"; }
 

@@ -1,32 +1,72 @@
 #!/usr/bin/env bash
-# Phase 5 (AWS): remove all demo resources to stop any spend.
-# Run AFTER the demo. Idempotent; ignores "not found" errors.
-set -uo pipefail
+# Preview or execute removal of the AWS demo resources.
+set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
-echo "== Drop Glue tables + database =="
-aws glue delete-table --database-name "${GLUE_DATABASE}" --name "${FROYO_LOYALTY_TABLE}" 2>/dev/null || true
-aws glue delete-table --database-name "${GLUE_DATABASE}" --name "${FROYO_SALES_TABLE}" 2>/dev/null || true
-aws glue delete-database --name "${GLUE_DATABASE}" 2>/dev/null || true
+MODE="${1:---dry-run}"
+if [[ "${MODE}" != "--dry-run" && "${MODE}" != "--execute" ]]; then
+  echo "Usage: $0 [--dry-run|--execute]" >&2
+  exit 2
+fi
 
-echo "== Empty + delete S3 bucket ${S3_BUCKET} =="
-aws s3 rm "s3://${S3_BUCKET}" --recursive 2>/dev/null || true
-aws s3api delete-bucket --bucket "${S3_BUCKET}" --region "${AWS_REGION}" 2>/dev/null || true
+run() {
+  printf "  "
+  printf "%q " "$@"
+  printf "\n"
+  if [[ "${MODE}" == "--execute" ]]; then
+    "$@"
+  fi
+}
 
-echo "== Delete IAM role policy + role =="
-aws iam delete-role-policy --role-name "${AWS_ROLE_NAME}" --policy-name "${AWS_POLICY_NAME}" 2>/dev/null || true
-aws iam delete-role --role-name "${AWS_ROLE_NAME}" 2>/dev/null || true
+echo "AWS teardown ${MODE}."
+[[ "${MODE}" == "--dry-run" ]] && echo "No resources will be changed."
 
-echo "== Remove locally-rendered policy/trust artifacts =="
-rm -rf .generated 2>/dev/null || true
+case "${S3_BUCKET_MODE:-}" in
+  dedicated|shared) ;;
+  *)
+    echo "ERROR: Set S3_BUCKET_MODE to dedicated or shared in config.local.env." >&2
+    exit 1
+    ;;
+esac
 
-echo
-echo "OPTIONAL (removes the demo CLI identity entirely = rotates the leaked key):"
-echo "  # list + delete access keys, then the user:"
-echo "  aws iam list-access-keys --user-name ${AWS_IAM_USER}"
-echo "  aws iam delete-access-key --user-name ${AWS_IAM_USER} --access-key-id <ID>"
-echo "  aws iam detach-user-policy --user-name ${AWS_IAM_USER} --policy-arn arn:aws:iam::aws:policy/AdministratorAccess"
-echo "  aws iam delete-user --user-name ${AWS_IAM_USER}"
-echo
-echo "AWS teardown complete (core resources removed)."
+echo "== Glue =="
+for table in "${FROYO_LOYALTY_TABLE}" "${FROYO_SALES_TABLE}"; do
+  if aws glue get-table --database-name "${GLUE_DATABASE}" --name "${table}" \
+      --region "${AWS_REGION}" >/dev/null 2>&1; then
+    run aws glue delete-table --database-name "${GLUE_DATABASE}" \
+      --name "${table}" --region "${AWS_REGION}"
+  fi
+done
+if aws glue get-database --name "${GLUE_DATABASE}" --region "${AWS_REGION}" \
+    >/dev/null 2>&1; then
+  run aws glue delete-database --name "${GLUE_DATABASE}" --region "${AWS_REGION}"
+fi
+
+echo "== S3 =="
+if aws s3api head-bucket --bucket "${S3_BUCKET}" --region "${AWS_REGION}" \
+    >/dev/null 2>&1; then
+  if [[ "${S3_BUCKET_MODE}" == "shared" ]]; then
+    run aws s3 rm "s3://${S3_BUCKET}/warehouse/${FROYO_LOYALTY_TABLE}/" \
+      --recursive --region "${AWS_REGION}"
+    run aws s3 rm "s3://${S3_BUCKET}/warehouse/${FROYO_SALES_TABLE}/" \
+      --recursive --region "${AWS_REGION}"
+    echo "  Shared bucket and unrelated prefixes will be retained."
+  else
+    run aws s3 rm "s3://${S3_BUCKET}" --recursive --region "${AWS_REGION}"
+    run aws s3api delete-bucket --bucket "${S3_BUCKET}" --region "${AWS_REGION}"
+  fi
+fi
+
+echo "== IAM =="
+if aws iam get-role --role-name "${AWS_ROLE_NAME}" >/dev/null 2>&1; then
+  if aws iam get-role-policy --role-name "${AWS_ROLE_NAME}" \
+      --policy-name "${AWS_POLICY_NAME}" >/dev/null 2>&1; then
+    run aws iam delete-role-policy --role-name "${AWS_ROLE_NAME}" \
+      --policy-name "${AWS_POLICY_NAME}"
+  fi
+  run aws iam delete-role --role-name "${AWS_ROLE_NAME}"
+fi
+run rm -rf .generated
+
+echo "AWS teardown ${MODE} complete."

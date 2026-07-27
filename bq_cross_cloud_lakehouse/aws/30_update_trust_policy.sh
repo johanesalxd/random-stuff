@@ -15,8 +15,13 @@ if [[ -z "${BIGLAKE_SA_ID}" ]]; then
   echo "            --project=${GCP_PROJECT} --format='value(biglake-service-account-id)'" >&2
   exit 1
 fi
+if [[ ! "${BIGLAKE_SA_ID}" =~ ^[0-9]{10,30}$ ]]; then
+  echo "ERROR: BigLake service-account ID must contain only 10-30 digits." >&2
+  exit 1
+fi
 
 # This rendered file contains the SA ID -> git-ignored on purpose.
+mkdir -p .generated
 cat > .generated/trust_policy_comprehensive.json <<EOF
 {
   "Version": "2012-10-17",

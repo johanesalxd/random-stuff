@@ -7,7 +7,7 @@
 #       CROSS-JOINED with customer loyalty that physically lives in AWS S3/Glue.
 #
 # Q3 is the payoff: a single BigQuery SQL statement spanning GCP-native tables
-# and an AWS-resident Iceberg table, with no data movement and no AWS keys.
+# and an AWS-resident Iceberg table, with no persistent copy and no AWS keys.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env

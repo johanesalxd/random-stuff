@@ -1,32 +1,81 @@
 #!/usr/bin/env bash
-# Phase 5 (GCP): delete the federated catalog. Run AFTER the demo.
-set -uo pipefail
+# Preview or execute removal of the GCP demo resources.
+set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
-echo "== Delete native BigQuery dataset ${FROYO_NATIVE_DATASET} (tables + BQML model) =="
-bq --project_id="${GCP_PROJECT}" rm -r -f --dataset "${GCP_PROJECT}:${FROYO_NATIVE_DATASET}" 2>/dev/null || true
-
-echo "== Delete Knowledge Catalog DataScan (if created) =="
-gcloud dataplex datascans delete "${DATASCAN_ID}" --location="${GCP_REGION}" --quiet 2>/dev/null || true
-
-echo "== Revoke + delete BigQuery Cloud Resource connection (if created) =="
-CONN="${GCP_PROJECT}.${GCP_REGION}.${BQ_CONNECTION_ID}"
-CONN_SA="$(bq --project_id="${GCP_PROJECT}" --format=json show --connection "${CONN}" 2>/dev/null \
-  | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["cloudResource"]["serviceAccountId"])' 2>/dev/null || true)"
-if [[ -n "${CONN_SA:-}" ]]; then
-  for ROLE in roles/bigquery.user roles/bigquery.dataEditor roles/aiplatform.user roles/dataplex.discoveryPublishingServiceAgent; do
-    gcloud projects remove-iam-policy-binding "${GCP_PROJECT}" \
-      --member="serviceAccount:${CONN_SA}" --role="${ROLE}" --condition=None --quiet >/dev/null 2>&1 || true
-  done
+MODE="${1:---dry-run}"
+if [[ "${MODE}" != "--dry-run" && "${MODE}" != "--execute" ]]; then
+  echo "Usage: $0 [--dry-run|--execute]" >&2
+  exit 2
 fi
-bq --project_id="${GCP_PROJECT}" rm --connection --force "${CONN}" 2>/dev/null || true
 
-echo "== Delete GCS PDF bucket (if created) =="
-gcloud storage rm --recursive "gs://${GCS_PDF_BUCKET}" --quiet 2>/dev/null || true
+run() {
+  printf "  "
+  printf "%q " "$@"
+  printf "\n"
+  if [[ "${MODE}" == "--execute" ]]; then
+    "$@"
+  fi
+}
 
-echo "== Delete federated catalog ${FEDERATED_CATALOG} =="
-gcloud alpha biglake iceberg catalogs delete "${FEDERATED_CATALOG}" \
-  --project="${GCP_PROJECT}" --quiet 2>/dev/null || true
+CONN="${GCP_PROJECT}.${GCP_REGION}.${BQ_CONNECTION_ID}"
 
-echo "Done. (BigQuery shows the federated catalog automatically; no separate BQ dataset to delete for it.)"
+case "${GCS_PDF_BUCKET_MODE:-}" in
+  dedicated|shared) ;;
+  *)
+    echo "ERROR: Set GCS_PDF_BUCKET_MODE to dedicated or shared in config.local.env." >&2
+    exit 1
+    ;;
+esac
+
+echo "GCP teardown ${MODE}."
+[[ "${MODE}" == "--dry-run" ]] && echo "No resources will be changed."
+
+echo "== Optional Knowledge Catalog resources =="
+if gcloud dataplex datascans describe "${DATASCAN_ID}" \
+    --project="${GCP_PROJECT}" --location="${GCP_REGION}" >/dev/null 2>&1; then
+  run gcloud dataplex datascans delete "${DATASCAN_ID}" \
+    --project="${GCP_PROJECT}" --location="${GCP_REGION}" --quiet
+fi
+if [[ -n "${DISCOVERY_DATASET:-}" ]] && bq --project_id="${GCP_PROJECT}" \
+    show --dataset "${GCP_PROJECT}:${DISCOVERY_DATASET}" >/dev/null 2>&1; then
+  run bq --project_id="${GCP_PROJECT}" rm -r -f --dataset \
+    "${GCP_PROJECT}:${DISCOVERY_DATASET}"
+fi
+if bq --project_id="${GCP_PROJECT}" show --connection "${CONN}" >/dev/null 2>&1; then
+  connection_sa="$(bq --project_id="${GCP_PROJECT}" --format=json show \
+    --connection "${CONN}" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["cloudResource"]["serviceAccountId"])')"
+  connection_role="$(gcloud projects get-iam-policy "${GCP_PROJECT}" \
+    --flatten='bindings[].members' \
+    --filter="bindings.members:serviceAccount:${connection_sa} AND bindings.role:roles/aiplatform.user" \
+    --format='value(bindings.role)')"
+  if [[ "${connection_role}" == "roles/aiplatform.user" ]]; then
+    run gcloud projects remove-iam-policy-binding "${GCP_PROJECT}" \
+      --member="serviceAccount:${connection_sa}" --role=roles/aiplatform.user \
+      --condition=None --quiet
+  fi
+  run bq --project_id="${GCP_PROJECT}" rm --connection --force "${CONN}"
+fi
+if gcloud storage buckets describe "gs://${GCS_PDF_BUCKET}" >/dev/null 2>&1; then
+  if [[ "${GCS_PDF_BUCKET_MODE}" == "shared" ]]; then
+    echo "  Shared PDF bucket will be retained."
+  else
+    run gcloud storage rm --recursive "gs://${GCS_PDF_BUCKET}" --quiet
+  fi
+fi
+
+echo "== Federated catalog and native dataset =="
+if gcloud alpha biglake iceberg catalogs describe "${FEDERATED_CATALOG}" \
+    --project="${GCP_PROJECT}" >/dev/null 2>&1; then
+  run gcloud alpha biglake iceberg catalogs delete "${FEDERATED_CATALOG}" \
+    --project="${GCP_PROJECT}" --quiet
+fi
+if bq --project_id="${GCP_PROJECT}" show --dataset \
+    "${GCP_PROJECT}:${FROYO_NATIVE_DATASET}" >/dev/null 2>&1; then
+  run bq --project_id="${GCP_PROJECT}" rm -r -f --dataset \
+    "${GCP_PROJECT}:${FROYO_NATIVE_DATASET}"
+fi
+
+echo "GCP teardown ${MODE} complete."

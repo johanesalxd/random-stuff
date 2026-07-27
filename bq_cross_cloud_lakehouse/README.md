@@ -17,18 +17,19 @@ inspiration, not a dependency.
 
 ## The story (Froyo "Midnight Swirl")
 
-1. **Dark data → knowledge.** Recipe & supplier PDFs sit in Cloud Storage. The
-   Knowledge Catalog extracts structured allergen/ingredient data into BigQuery —
-   revealing that *Midnight Base 204* (an ingredient of Midnight Swirl) hides a
-   **Soy** allergen, buried in a supplier datasheet.
+1. **Dark data → knowledge.** Recipe and supplier PDFs sit in Cloud Storage. The
+   reliable scripted path seeds PDF-grounded allergen data into BigQuery; the
+   optional Knowledge Catalog path catalogs the PDFs and runs semantic inference.
+   Both reveal that *Midnight Base 204* hides a **Soy** allergen.
 2. **Cross-cloud target list.** BigQuery joins that native allergen knowledge with
    **customer-loyalty data that physically lives in AWS S3/Glue** to build a
    Midnight Swirl campaign list — excluding soy-sensitive customers — in a single
-   query, with no data movement and no AWS keys stored in Google Cloud.
+   query, with no persistent replication and no AWS keys stored in Google Cloud.
 3. **Forecast.** BigQuery ML `ARIMA_PLUS`, trained directly on the **AWS-resident**
    `sales_history` Iceberg table, projects Q3 revenue per region.
 
-Beat 1 uses Knowledge Catalog (no Spark). Beats 2–3 run entirely in BigQuery.
+The reliable Beat 1 path uses PDF-grounded seed tables; Knowledge Catalog is an
+optional preview path. Beats 2–3 run entirely in BigQuery.
 The Serverless Spark / Lightning Engine version of the pipeline + forecast is a
 later fidelity upgrade — see [Roadmap](#roadmap).
 
@@ -52,10 +53,11 @@ flowchart LR
         S3[("S3<br/>Iceberg data + metadata")]
     end
     CAT -->|"AssumeRoleWithWebIdentity (no stored keys)"| ROLE --> GLUE -.-> S3
-    BQ ==>|"read AWS data w/ short-lived vended creds"| S3
+    BQ ==>|"read AWS data over public internet<br/>with short-lived vended creds"| S3
 ```
 
-- **Metadata discovery, not migration** — BigLake syncs Glue/Iceberg metadata; files stay in S3.
+- **Metadata discovery, not migration** — BigLake syncs Glue/Iceberg metadata;
+  files stay in S3, while query bytes cross clouds over the public internet.
 - **Keyless auth (OIDC)** — GCP's BigLake SA assumes an AWS IAM role via `sts:AssumeRoleWithWebIdentity`; no long-lived AWS keys in Google Cloud.
 - **Credential vending** — the catalog hands BigQuery short-lived, downscoped S3 creds at query time.
 - **Single query surface** — native BQ tables and AWS-federated Iceberg tables join in one `us-east4` query (BigQuery can't join across regions, so the native side is co-located in `us-east4`).
@@ -63,14 +65,20 @@ flowchart LR
 
 ## Quick start
 
-Prereqs: `gcloud` (with `alpha`), `bq`, AWS CLI v2, `python3`, an allowlisted GCP
-project, and AWS credentials in `~/.aws`. Full run ~10–15 min (mostly IAM +
-metadata propagation). Cost < $5.
+Prereqs: `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`, an
+allowlisted and billed GCP project, and temporary AWS credentials from `aws login`
+or IAM Identity Center. The GCP operator needs BigLake Admin, BigQuery Data Editor,
+BigQuery Job User, Dataplex DataScan Editor, Dataplex Catalog Editor, and Service
+Usage Admin. Query users need BigLake Viewer, BigQuery Data Viewer, and BigQuery
+Job User. Full run is approximately 10–15 minutes. Cost is less than $5.
 
 ```bash
 cd bq_cross_cloud_lakehouse
 cp config.example.env config.local.env     # edit with your real values
-gcloud services enable biglake.googleapis.com bigquery.googleapis.com
+source config.local.env
+aws login                                  # temporary browser-based credentials
+gcloud services enable --project="$GCP_PROJECT" \
+  biglake.googleapis.com bigquery.googleapis.com
 
 # AWS: bucket + Glue DB + two Iceberg tables (global_loyalty, sales_history) + IAM role
 ./aws/01_verify.sh
@@ -79,7 +87,7 @@ gcloud services enable biglake.googleapis.com bigquery.googleapis.com
 ./aws/20_iam_role.sh
 
 # GCP: create federated catalog, finalize AWS trust with the printed SA id
-SA_ID=$(./gcp/10_create_federated_catalog.sh | tail -1)
+SA_ID=$(./gcp/10_create_federated_catalog.sh)
 ./aws/30_update_trust_policy.sh "$SA_ID"
 sleep 120                                   # let AWS IAM propagate
 
@@ -87,9 +95,9 @@ sleep 120                                   # let AWS IAM propagate
 ./gcp/20_enable_refresh.sh
 ./gcp/30_verify.sh                          # expect namespace: froyo_lakehouse + both tables
 ./gcp/05_seed_native_bq.sh                  # allergen/recipe/product knowledge (deterministic)
-# ./gcp/06_knowledge_catalog.sh             # OPTIONAL: real Dataplex PDF extraction
+# ./gcp/06_knowledge_catalog.sh             # OPTIONAL: preview semantic inference
 ./gcp/40_query_froyo.sh                     # allergen find + cross-cloud target list
-./gcp/50_forecast_bqml.sh                   # BQML ARIMA_PLUS Q3 forecast on AWS data
+./gcp/50_forecast_bqml.sh 92                # BQML ARIMA_PLUS Q3 forecast on AWS data
 ```
 
 ## Run order
@@ -105,7 +113,7 @@ sleep 120                                   # let AWS IAM propagate
 | 7 | `gcp/20_enable_refresh.sh` | Enable 300s metadata refresh (after propagation) | 5s |
 | 8 | `gcp/30_verify.sh` | Confirm refresh + `froyo_lakehouse` tables queryable | ~2m |
 | 9 | `gcp/05_seed_native_bq.sh` | Seed native allergen/recipe/product knowledge | 15s |
-| 10 | `gcp/06_knowledge_catalog.sh` | **Optional:** real Dataplex PDF extraction (no Spark) | ~20m |
+| 10 | `gcp/06_knowledge_catalog.sh` | **Optional:** PDF discovery + semantic inference | ~20m |
 | 11 | `gcp/40_query_froyo.sh` | Allergen find + cross-cloud target list | 15s |
 | 12 | `gcp/50_forecast_bqml.sh` | BQML `ARIMA_PLUS` Q3 revenue forecast | ~1m |
 
@@ -138,8 +146,8 @@ by BQML on the AWS-resident `sales_history` table.
 | Raw PDFs | Cloud Storage | `assets/pdfs/recipes/*`, `assets/pdfs/suppliers/*` (vendored from the codelab) |
 
 The seeded knowledge tables mirror the vendored PDFs (e.g. Midnight Base 204 →
-Soy from `suppliers/midnight_base_204_manual.pdf`), so the deterministic demo and
-the optional live Knowledge Catalog extraction tell the same story.
+Soy from `suppliers/midnight_base_204_manual.pdf`). This keeps the event demo
+reliable even when the optional Knowledge Catalog preview is unavailable.
 
 ## Roadmap
 
@@ -166,16 +174,26 @@ refresh makes lightweight Glue API calls every 5 minutes while the catalog exist
 ## Security / this is a public repo
 
 - **Never committed:** `config.local.env` (real IDs) and `.env` are git-ignored.
-- AWS credentials live only in `~/.aws/` — never in the repo.
+- Use temporary AWS CLI credentials from `aws login` or IAM Identity Center.
 - No AWS keys in Google Cloud: federation uses OIDC + short-lived vended credentials.
 - The AWS IAM policy is scoped to this demo's bucket and Glue account.
 
 ## Teardown
 
 ```bash
-./gcp/90_teardown.sh   # native dataset + BQML model, DataScan, connection, PDF bucket, catalog
-./aws/90_teardown.sh   # Iceberg tables, Glue DB, S3 bucket, IAM role (+ prints IAM user cleanup)
+./gcp/90_teardown.sh --dry-run
+./aws/90_teardown.sh --dry-run
+
+# Destructive execution requires an explicit flag after reviewing the dry run:
+./gcp/90_teardown.sh --execute
+./aws/90_teardown.sh --execute
 ```
+
+With `S3_BUCKET_MODE=shared`, AWS teardown removes only the two Froyo warehouse
+prefixes and never deletes the bucket or unrelated prefixes. Always review the
+dry-run output before using `--execute`. If the optional discovery path was run,
+set `DISCOVERY_DATASET` in `config.local.env` to the generated BigQuery dataset
+name so teardown can remove it without guessing.
 
 ## References
 
