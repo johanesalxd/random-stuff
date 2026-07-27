@@ -43,6 +43,25 @@ if [[ -n "${DISCOVERY_DATASET:-}" ]] && bq --project_id="${GCP_PROJECT}" \
   run bq --project_id="${GCP_PROJECT}" rm -r -f --dataset \
     "${GCP_PROJECT}:${DISCOVERY_DATASET}"
 fi
+
+# Revoke the project-level roles gcp/06 grants to the Dataplex service agent.
+# NOTE: this is the shared, project-wide Dataplex service agent. In a project
+# that runs other Dataplex scans you may prefer to keep the generic roles
+# (aiplatform.user, bigquery.jobUser, bigquery.dataViewer); comment them out here.
+PROJECT_NUMBER="$(gcloud projects describe "${GCP_PROJECT}" --format='value(projectNumber)')"
+DATAPLEX_SA="service-${PROJECT_NUMBER}@gcp-sa-dataplex.iam.gserviceaccount.com"
+for role in roles/aiplatform.user roles/bigquery.jobUser roles/bigquery.dataViewer \
+  roles/dataplex.discoveryPublishingServiceAgent; do
+  if gcloud projects get-iam-policy "${GCP_PROJECT}" \
+      --flatten='bindings[].members' \
+      --filter="bindings.members:serviceAccount:${DATAPLEX_SA} AND bindings.role:${role}" \
+      --format='value(bindings.role)' 2>/dev/null | grep -q "${role}"; then
+    run gcloud projects remove-iam-policy-binding "${GCP_PROJECT}" \
+      --member="serviceAccount:${DATAPLEX_SA}" --role="${role}" \
+      --condition=None --quiet
+  fi
+done
+
 if bq --project_id="${GCP_PROJECT}" show --connection "${CONN}" >/dev/null 2>&1; then
   connection_sa="$(bq --project_id="${GCP_PROJECT}" --format=json show \
     --connection "${CONN}" | python3 -c \
@@ -60,7 +79,14 @@ if bq --project_id="${GCP_PROJECT}" show --connection "${CONN}" >/dev/null 2>&1;
 fi
 if gcloud storage buckets describe "gs://${GCS_PDF_BUCKET}" >/dev/null 2>&1; then
   if [[ "${GCS_PDF_BUCKET_MODE}" == "shared" ]]; then
-    echo "  Shared PDF bucket will be retained."
+    echo "  Shared PDF bucket will be retained; revoking only the demo bindings."
+    if gcloud storage buckets get-iam-policy "gs://${GCS_PDF_BUCKET}" \
+        --format='value(bindings.members)' 2>/dev/null \
+        | grep -q "${DATAPLEX_SA}"; then
+      run gcloud storage buckets remove-iam-policy-binding "gs://${GCS_PDF_BUCKET}" \
+        --member="serviceAccount:${DATAPLEX_SA}" \
+        --role=roles/dataplex.discoveryServiceAgent
+    fi
   else
     run gcloud storage rm --recursive "gs://${GCS_PDF_BUCKET}" --quiet
   fi

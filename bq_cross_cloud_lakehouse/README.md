@@ -66,8 +66,9 @@ flowchart LR
 ## Quick start
 
 Prereqs: `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`, an
-allowlisted and billed GCP project, and temporary AWS credentials from `aws login`
-or IAM Identity Center. The GCP operator needs BigLake Admin, BigQuery Data Editor,
+allowlisted and billed GCP project, and temporary AWS credentials from AWS IAM
+Identity Center (`aws configure sso` then `aws sso login`), or any `~/.aws`
+profile. The GCP operator needs BigLake Admin, BigQuery Data Editor,
 BigQuery Job User, Dataplex DataScan Editor, Dataplex Catalog Editor, and Service
 Usage Admin. Query users need BigLake Viewer, BigQuery Data Viewer, and BigQuery
 Job User. Full run is approximately 10–15 minutes. Cost is less than $5.
@@ -76,7 +77,7 @@ Job User. Full run is approximately 10–15 minutes. Cost is less than $5.
 cd bq_cross_cloud_lakehouse
 cp config.example.env config.local.env     # edit with your real values
 source config.local.env
-aws login                                  # temporary browser-based credentials
+aws sso login                              # temporary creds (after: aws configure sso)
 gcloud services enable --project="$GCP_PROJECT" \
   biglake.googleapis.com bigquery.googleapis.com
 
@@ -174,7 +175,7 @@ refresh makes lightweight Glue API calls every 5 minutes while the catalog exist
 ## Security / this is a public repo
 
 - **Never committed:** `config.local.env` (real IDs) and `.env` are git-ignored.
-- Use temporary AWS CLI credentials from `aws login` or IAM Identity Center.
+- Use temporary AWS CLI credentials from AWS IAM Identity Center (`aws sso login`) over long-lived keys.
 - No AWS keys in Google Cloud: federation uses OIDC + short-lived vended credentials.
 - The AWS IAM policy is scoped to this demo's bucket and Glue account.
 
