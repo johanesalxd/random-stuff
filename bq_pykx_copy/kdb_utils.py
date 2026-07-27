@@ -13,14 +13,17 @@ conversion decisions that matter for this migration:
        precision, which is what BigQuery's TIMESTAMP type stores.
 
 ``arrow_align`` takes a plain ``pyarrow.Table`` so it can be unit-tested without
-a running kdb+ instance; ``chunk_to_arrow`` is the thin PyKX wrapper.
+a running kdb+ instance. ``chunk_to_arrow`` reads raw q timestamp longs first,
+then converts the remaining columns through PyKX's Arrow interface.
 """
 
 from __future__ import annotations
 
 import logging
 import resource
+import sys
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -51,8 +54,9 @@ def ensure_licensed_pykx():
 
 
 def peak_rss_mb() -> float:
-    """Return peak resident memory of this process in MB (ru_maxrss is KB)."""
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    """Return peak resident memory in MiB on Linux and macOS."""
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return rss / (1024.0**2 if sys.platform == "darwin" else 1024.0)
 
 
 def chunk_ranges(n: int, chunk: int) -> list[tuple[int, int]]:
@@ -124,6 +128,39 @@ def arrow_align(table: pa.Table, schema: list[Column]) -> pa.Table:
     return pa.table(arrays, names=names)
 
 
+_Q_TIMESTAMP_NULL = np.iinfo(np.int64).min
+_Q_TIMESTAMP_NEG_INF = _Q_TIMESTAMP_NULL + 1
+_Q_TIMESTAMP_POS_INF = np.iinfo(np.int64).max
+_Q_TO_UNIX_EPOCH_NS = 946_684_800_000_000_000
+
+
+def q_timestamp_raw_to_arrow(
+    raw_values: np.ndarray, *, preserve_nanoseconds: bool
+) -> pa.Array:
+    """Convert raw q timestamps without overflowing the epoch adjustment.
+
+    q stores nanoseconds from 2000, while Arrow uses the Unix 1970 epoch. Event
+    timestamps remain INT64 nanoseconds; regular timestamps become microseconds.
+    """
+    raw = np.asarray(raw_values, dtype=np.int64)
+    if np.any((raw == _Q_TIMESTAMP_NEG_INF) | (raw == _Q_TIMESTAMP_POS_INF)):
+        raise ValueError("q timestamp infinities are not supported")
+
+    null_mask = raw == _Q_TIMESTAMP_NULL
+    values = raw.copy()
+    values[null_mask] = 0
+    if preserve_nanoseconds:
+        if np.any(values > _Q_TIMESTAMP_POS_INF - _Q_TO_UNIX_EPOCH_NS):
+            raise ValueError("q timestamp is outside the Unix nanosecond range")
+        arrow_values = pa.array(values, mask=null_mask, type=pa.int64())
+        return pc.add_checked(arrow_values, pa.scalar(_Q_TO_UNIX_EPOCH_NS))
+
+    micros = np.floor_divide(values, 1000)
+    micros[(values < 0) & (np.remainder(values, 1000) != 0)] += 1
+    micros += _Q_TO_UNIX_EPOCH_NS // 1000
+    return pa.array(micros, mask=null_mask, type=pa.timestamp("us"))
+
+
 def chunk_to_arrow(qtab_chunk, schema: list[Column]) -> pa.Table:
     """Convert a PyKX table chunk to a schema-aligned Arrow table.
 
@@ -134,7 +171,19 @@ def chunk_to_arrow(qtab_chunk, schema: list[Column]) -> pa.Table:
     Returns:
         A schema-aligned Arrow table (see ``arrow_align``).
     """
-    return arrow_align(qtab_chunk.pa(), schema)
+    arrays = []
+    for col in schema:
+        q_column = qtab_chunk[col.name]
+        if col.kdb_type == "p":
+            arrays.append(
+                q_timestamp_raw_to_arrow(
+                    q_column.np(raw=True),
+                    preserve_nanoseconds=col.is_event_ts_nanos,
+                )
+            )
+        else:
+            arrays.append(q_column.pa())
+    return arrow_align(pa.table(arrays, names=[col.name for col in schema]), schema)
 
 
 def arrow_schema(schema: list[Column]) -> pa.Schema:

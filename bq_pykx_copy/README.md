@@ -119,8 +119,7 @@ See [Loading Parquet data](https://cloud.google.com/bigquery/docs/loading-data-c
 
 ## Setup
 
-Requires [`uv`](https://docs.astral.sh/uv/). PyKX has no Python 3.14 wheels yet,
-so the project pins 3.12.
+Requires [`uv`](https://docs.astral.sh/uv/). The demo commands use Python 3.12.
 
 ```bash
 # 1. Create the environment and install dependencies
@@ -133,6 +132,9 @@ cp .env.example .env               # then edit .env (see below)
 # 3. Google auth (uses your own login — no keys)
 gcloud auth application-default login
 gcloud config set project <your-project>   # or set GCP_PROJECT in .env
+
+# GCS_BUCKET must already exist in the same location as BQ_LOCATION
+gcloud storage buckets create gs://<unique-bucket-name> --location=US
 ```
 
 ### Where to paste your PyKX license
@@ -163,6 +165,9 @@ customer engagement uses their own commercial kdb+ license.)
 ./run_all.sh
 ```
 
+This replaces the configured `BQ_TABLE`. Use the dedicated
+`firm_orderbook_poc` table from `.env.example`, not a production table.
+
 or step by step:
 
 | Step | Script | Does |
@@ -174,6 +179,10 @@ or step by step:
 
 Knobs live in `.env`: `POC_ROWS` (worst case ~7,000,000), `POC_DATES`,
 `PARQUET_ROW_GROUP` (lower = less peak RAM).
+
+Step 0 recreates `data/hdb`; that directory is generated demo data, not an input
+path for a customer HDB. Point the converter at real HDBs through configuration
+or orchestration rather than copying them into this generated directory.
 
 ---
 
@@ -205,11 +214,44 @@ they explain the null + timestamp decisions in one place.
 ### Epoch gotcha (important)
 
 kdb+ timestamps are **nanoseconds since 2000-01-01**, but Arrow / Parquet /
-BigQuery use **nanoseconds since 1970-01-01**. PyKX's `.pa()` handles this
-automatically on conversion, so the INT64 values in BigQuery are 1970-based. Only
-watch for it if you compute nanoseconds manually in q (e.g. `` `long$ts ``) — you
-must add the 1970 offset (`ts - 1970.01.01D0`) to compare against BigQuery, as
-`03_validate.py` does.
+BigQuery use the Unix **1970-01-01** epoch. `chunk_to_arrow()` reads the raw q
+timestamp longs before Arrow conversion, applies the checked epoch offset, and
+keeps q nulls as Arrow nulls. Timestamp infinities and values that cannot fit in
+Unix `INT64` nanoseconds fail explicitly instead of wrapping to an incorrect
+date.
+
+### Conversion core and scaling
+
+`01_kdb_to_parquet.py` is the main capability demonstrated by this project. It
+first counts the selected partition without projecting all 428 columns:
+
+```q
+first exec n from select n:count i from table where date=day
+```
+
+It then reads closed, partition-local row windows:
+
+```q
+select from table where date=day, i within (start;end)
+```
+
+Each window becomes one bounded Arrow table and is streamed into a Parquet
+writer. The partition is never represented as one Python or JSON object. Peak
+memory therefore follows the configured row-group size rather than total
+partition size.
+
+PyKX supports one loaded HDB per process. To scale across tens or hundreds of
+HDBs, run one converter process per HDB and control concurrency in an external
+worker pool such as Cloud Run Jobs, Batch, Airflow, or a shell scheduler:
+
+```text
+HDB A -> converter process -> Parquet
+HDB B -> converter process -> Parquet
+HDB C -> converter process -> Parquet
+```
+
+The converter code stays the same; only HDB paths, schemas, output locations,
+and worker concurrency change.
 
 ---
 
@@ -249,13 +291,14 @@ End-to-end run on a 428-column synthetic table, 2 partitions × 200,000 rows
 | Parquet size | ~33.6 MB / 200k rows |
 | Convert time | ~22 s / partition |
 | BigQuery load | 400,000 rows × 428 cols, partitioned by `date`, clustered by `sym, message_type` |
-| Validation | row counts, null counts, and nanosecond INT64 round-trip all pass (sub-µs digits preserved) |
+| Validation | row counts, schema width, representative null counts, and nanosecond INT64 sanity checks pass |
 
 The point: peak memory is bounded by the **row-group size**, not the partition
 size — the customer's ~120 GB single-file JSON blow-up does not recur. Raw
 per-row Parquet size here is high only because the synthetic data is random
 (incompressible); real sparse/mostly-null capture compresses far better.
 
+These are focused PoC sanity checks, not a row-by-row production reconciliation.
 Reproduce with `./run_all.sh` (see `data/metrics_convert.json` for raw numbers).
 
 ---

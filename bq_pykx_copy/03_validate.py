@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 3: prove the migration was lossless by comparing kdb+ against BigQuery.
+"""Step 3: run focused sanity checks against the BigQuery PoC table.
 
 Checks:
     1. Row count per partition (kdb vs BQ).
@@ -29,6 +29,19 @@ TABLE_ID = f"{PROJECT}.{config.BQ_DATASET}.{config.BQ_TABLE}"
 SCHEMA = build_schema()
 
 
+def check_schema(bq: bigquery.Client) -> bool:
+    """Check that BigQuery loaded the complete wide schema."""
+    columns = len(bq.get_table(TABLE_ID).schema)
+    ok = columns == len(SCHEMA)
+    logger.info(
+        "[2] Schema width: expected=%s bq=%s [%s]",
+        len(SCHEMA),
+        columns,
+        "OK" if ok else "MISMATCH",
+    )
+    return ok
+
+
 def check_row_counts(bq: bigquery.Client) -> bool:
     """Compare per-partition row counts between kdb+ and BigQuery.
 
@@ -39,15 +52,18 @@ def check_row_counts(bq: bigquery.Client) -> bool:
         True if all partition counts match.
     """
     logger.info("[1] Row counts per partition (kdb vs BigQuery)")
-    db = kx.DB(path=str(config.HDB_DIR))
-    db.load(str(config.HDB_DIR), overwrite=True)
     rows = bq.query(
         f"SELECT CAST(date AS STRING) AS d, COUNT(*) AS c FROM `{TABLE_ID}` GROUP BY d"
     ).result()
     bq_counts = {r["d"]: r["c"] for r in rows}
     ok = True
     for day in config.POC_DATES:
-        kdb_n = int(kx.q(f"count select from {config.BQ_TABLE} where date={day}").py())
+        kdb_n = int(
+            kx.q(
+                f"first exec n from select n:count i from {config.BQ_TABLE} "
+                f"where date={day}"
+            ).py()
+        )
         iso = day.replace(".", "-")
         bq_n = bq_counts.get(iso, 0)
         ok &= kdb_n == bq_n
@@ -70,7 +86,7 @@ def check_null_counts(bq: bigquery.Client) -> bool:
     Returns:
         True if all sampled null counts match.
     """
-    logger.info("[2] Null-count parity (sample of columns)")
+    logger.info("[3] Null-count parity (sample of columns)")
     sample = [c for c in SCHEMA if c.name != "date"][:6]
     day = config.POC_DATES[0]
     iso = day.replace(".", "-")
@@ -86,7 +102,8 @@ def check_null_counts(bq: bigquery.Client) -> bool:
     for c in sample:
         kdb_nulls = int(
             kx.q(
-                f"count select from {config.BQ_TABLE} where date={day}, null {c.name}"
+                f"first exec n from select n:count i from {config.BQ_TABLE} "
+                f"where date={day}, null {c.name}"
             ).py()
         )
         bq_nulls = bqrow[c.name]
@@ -110,7 +127,7 @@ def check_timestamp_precision(bq: bigquery.Client) -> bool:
     Returns:
         True if the kdb+ nanosecond value is found unchanged in BigQuery.
     """
-    logger.info("[3] Nanosecond timestamp fidelity (INT64 round-trip)")
+    logger.info("[4] Nanosecond timestamp fidelity (INT64 round-trip)")
     day = config.POC_DATES[0]
     iso = day.replace(".", "-")
     # Two subtleties handled here:
@@ -145,10 +162,12 @@ def check_timestamp_precision(bq: bigquery.Client) -> bool:
 def main() -> None:
     """Run all validation checks and exit non-zero on any failure."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    kx.DB(path=str(config.HDB_DIR), load_scripts=False)
     logger.info("Validating %s", TABLE_ID)
     bq = bigquery.Client(project=PROJECT)
     results = {
         "row_counts": check_row_counts(bq),
+        "schema": check_schema(bq),
         "null_counts": check_null_counts(bq),
         "timestamp_precision": check_timestamp_precision(bq),
     }
@@ -157,7 +176,7 @@ def main() -> None:
         logger.info("  %-20s %s", name, "PASS" if passed else "FAIL")
     if not all(results.values()):
         raise SystemExit(1)
-    logger.info("All checks passed - lossless kdb+ -> Parquet -> BigQuery migration.")
+    logger.info("All kdb+ -> Parquet -> BigQuery sanity checks passed.")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ run_step() {
   local label="$1"
   local script="$2"
   echo "== ${label} ==" >&2
-  uv run python "${SCRIPT_DIR}/${script}"
+  uv run --project "${SCRIPT_DIR}" --locked python "${SCRIPT_DIR}/${script}"
 }
 
 main() {

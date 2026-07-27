@@ -17,6 +17,7 @@ Knobs (via .env): POC_ROWS, POC_DATES.
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 
 import config
@@ -38,19 +39,26 @@ kx.q("applyNull:{[c;m;nv] @[c;where m;:;nv]}")
 
 _NULLS = {"j": kx.q("0Nj"), "s": kx.q("`"), "p": kx.q("0Np")}
 _SYM_POOL = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH"]
+_MESSAGE_TYPES = [f"mt{group:02d}" for group in range(1, 13)]
 
 
-def _make_column(col, n: int, day: str):
+def _make_column(col, n: int, day: str, message_types):
     """Generate one kdb+ column vector of length ``n`` with the right null ratio.
 
     Args:
         col: The column definition.
         n: Number of rows.
         day: Partition date in kdb+ form (e.g. "2024.01.02").
+        message_types: One generated message type per row.
 
     Returns:
         A PyKX vector.
     """
+    if col.name == "message_type":
+        return message_types
+    if col.name == "seq_no":
+        return kx.q("til", n)
+
     if col.kdb_type == "j":
         base = kx.random.random(n, 1_000_000)
     elif col.kdb_type == "s":
@@ -64,7 +72,15 @@ def _make_column(col, n: int, day: str):
     else:
         raise ValueError(f"Unsupported kdb_type: {col.kdb_type}")
 
-    if col.null_ratio > 0.0:
+    if col.name.startswith("mt") and "__" in col.name:
+        message_type = col.name.split("__", maxsplit=1)[0]
+        inactive = kx.q("{x<>y}", message_types, kx.q(f"`{message_type}"))
+        conditional_null = max(0.0, 1.0 - (1.0 - col.null_ratio) * 12)
+        if conditional_null:
+            optional = kx.q("{x<y}", kx.random.random(n, 1.0), conditional_null)
+            inactive = kx.q("{x|y}", inactive, optional)
+        base = kx.q("applyNull", base, inactive, _NULLS[col.kdb_type])
+    elif col.null_ratio > 0.0:
         mask = kx.q("{x < y}", kx.random.random(n, 1.0), col.null_ratio)
         base = kx.q("applyNull", base, mask, _NULLS[col.kdb_type])
     return base
@@ -79,9 +95,17 @@ def generate_partition(db, day: str, n: int) -> None:
         n: Number of rows to generate.
     """
     t0 = time.time()
-    data = {col.name: _make_column(col, n, day) for col in STORED}
+    message_types = kx.random.random(n, _MESSAGE_TYPES)
+    data = {col.name: _make_column(col, n, day, message_types) for col in STORED}
     tab = kx.Table(data=data)
-    db.create(tab, config.BQ_TABLE, kx.q(day), sym_enum="sym", log=False)
+    db.create(
+        tab,
+        config.BQ_TABLE,
+        kx.q(day),
+        sym_enum="sym",
+        log=False,
+        load_scripts=False,
+    )
     logger.info(
         "partition %s: %s rows x %s cols in %.1fs",
         day,
@@ -94,6 +118,8 @@ def generate_partition(db, day: str, n: int) -> None:
 def main() -> None:
     """Generate all configured partitions and print a per-partition row count."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    shutil.rmtree(config.HDB_DIR)
+    config.HDB_DIR.mkdir(parents=True)
     logger.info("Generating synthetic HDB at: %s", config.HDB_DIR)
     logger.info(
         "Table: %s | rows/partition: %s | partitions: %s",
@@ -103,13 +129,12 @@ def main() -> None:
     )
     logger.info("Columns: %s (stored: %s, +1 virtual `date`)", len(SCHEMA), len(STORED))
 
-    db = kx.DB(path=str(config.HDB_DIR))
+    db = kx.DB(path=str(config.HDB_DIR), load_scripts=False)
     t0 = time.time()
     for day in config.POC_DATES:
         generate_partition(db, day, config.POC_ROWS)
 
     logger.info("Done in %.1fs | peak RAM %.0f MB", time.time() - t0, peak_rss_mb())
-    db.load(str(config.HDB_DIR), overwrite=True)
     logger.info(
         "Row counts by partition:\n%s",
         str(kx.q(f"select count i by date from {config.BQ_TABLE}")),

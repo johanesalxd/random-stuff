@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 
 import pyarrow.parquet as pq
@@ -42,6 +43,16 @@ SCHEMA = build_schema()
 ARROW_SCHEMA = arrow_schema(SCHEMA)
 
 
+def partition_count(day: str) -> int:
+    """Count a partition without reading every column in the wide table."""
+    return int(
+        kx.q(
+            f"first exec n from select n:count i from {config.BQ_TABLE} "
+            f"where date={day}"
+        ).py()
+    )
+
+
 def convert_partition(day: str) -> dict:
     """Convert one HDB partition to a Parquet file in bounded memory.
 
@@ -53,30 +64,37 @@ def convert_partition(day: str) -> dict:
     """
     out_path = config.PARQUET_DIR / f"{config.BQ_TABLE}__{day}.parquet"
     tab = config.BQ_TABLE
-    n = int(kx.q(f"count select from {tab} where date={day}").py())
+    n = partition_count(day)
     logger.info("Partition %s: %s rows -> %s", day, f"{n:,}", out_path.name)
 
     chunk = config.PARQUET_ROW_GROUP
     t0 = time.time()
     rows_written = 0
 
-    writer = pq.ParquetWriter(out_path, ARROW_SCHEMA, compression="snappy")
+    temp_path = out_path.with_suffix(".parquet.tmp")
+    temp_path.unlink(missing_ok=True)
     try:
-        for start, end in chunk_ranges(n, chunk):
-            qchunk = kx.q(
-                f"select from {tab} where date={day}, i within ({start};{end})"
-            )
-            at = chunk_to_arrow(qchunk, SCHEMA).cast(ARROW_SCHEMA)
-            writer.write_table(at, row_group_size=chunk)
-            rows_written += at.num_rows
-            logger.debug(
-                "  chunk %s-%s | peak RAM %.0f MB",
-                f"{start:,}",
-                f"{end:,}",
-                peak_rss_mb(),
-            )
-    finally:
-        writer.close()
+        with pq.ParquetWriter(temp_path, ARROW_SCHEMA, compression="snappy") as writer:
+            for start, end in chunk_ranges(n, chunk):
+                qchunk = kx.q(
+                    f"select from {tab} where date={day}, i within ({start};{end})"
+                )
+                arrow_table = chunk_to_arrow(qchunk, SCHEMA).cast(ARROW_SCHEMA)
+                writer.write_table(arrow_table, row_group_size=chunk)
+                rows_written += arrow_table.num_rows
+                logger.debug(
+                    "  chunk %s-%s | peak RAM %.0f MB",
+                    f"{start:,}",
+                    f"{end:,}",
+                    peak_rss_mb(),
+                )
+
+        if rows_written != n or partition_count(day) != n:
+            raise RuntimeError(f"Partition {day} changed while it was converted")
+        os.replace(temp_path, out_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     dt = time.time() - t0
     size_mb = out_path.stat().st_size / (1024 * 1024)
@@ -100,8 +118,7 @@ def convert_partition(day: str) -> dict:
 def main() -> None:
     """Convert all configured partitions and write a metrics summary file."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    db = kx.DB(path=str(config.HDB_DIR))
-    db.load(str(config.HDB_DIR), overwrite=True)
+    kx.DB(path=str(config.HDB_DIR), load_scripts=False)
 
     metrics = [convert_partition(day) for day in config.POC_DATES]
     summary = {
@@ -111,7 +128,7 @@ def main() -> None:
         "peak_rss_mb": round(peak_rss_mb(), 1),
     }
     out = config.DATA_DIR / "metrics_convert.json"
-    out.write_text(json.dumps(summary, indent=2))
+    out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Metrics -> %s", out)
     logger.info(
         "Overall peak RAM: %.0f MB (vs the customer's ~120 GB JSON dump)",
