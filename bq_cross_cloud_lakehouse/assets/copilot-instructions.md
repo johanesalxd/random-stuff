@@ -11,7 +11,8 @@ of this repo. Replace the placeholders with your `config.local.env` values.
 - **Raw docs**: recipe/supplier PDFs live in `gs://<GCS_PDF_BUCKET>`.
 
 ## 2. Data locations
-- **Allergen / recipe / product knowledge** (native BigQuery, extracted from PDFs):
+- **Allergen / recipe / product knowledge** (native BigQuery, grounded in the
+  PDFs and seeded deterministically for the scripted demo):
   dataset `<GCP_PROJECT>.<FROYO_NATIVE_DATASET>` — tables `products`, `recipes`,
   `ingredient_allergens`, view `product_allergens`.
 - **Customer loyalty + sales history** (Apache Iceberg, physically in **AWS S3/Glue**,

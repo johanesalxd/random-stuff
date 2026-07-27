@@ -23,7 +23,6 @@ else
     --description="Froyo Knowledge Catalog (extracted allergen/recipe/product knowledge)" \
     "${DS}"
 fi
-
 bq_query() { bq --location="${GCP_REGION}" --project_id="${GCP_PROJECT}" query --use_legacy_sql=false "$1"; }
 
 # NOTE: ingredient/product/allergen values mirror the REAL codelab PDFs vendored
