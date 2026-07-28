@@ -40,7 +40,7 @@ def test_workflow_accepts_structured_llm_node_and_routed_edges():
     """Tests installed ADK graph construction accepts the target node pattern."""
     selector = LlmAgent(
         name="compatibility_selector",
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         instruction="Select a route.",
         output_schema=_Decision,
     )

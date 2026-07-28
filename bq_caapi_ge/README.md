@@ -39,8 +39,7 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 │   ├── scripts/                  # Deploy, auth, and registration scripts
 │   └── test_web/                 # Flask OAuth test harness
 ├── docs/
-│   ├── gemini-enterprise-demo.png
-│   └── test-web-demo.png
+│   └── gemini-enterprise-demo.png
 ├── .env.example
 ├── pyproject.toml
 └── README.md
@@ -268,6 +267,11 @@ Install the additional dependencies with:
 ```bash
 uv sync --extra advanced
 ```
+
+The ADK node modules under `semantic/` (`runtime.py`, `catalog_runtime.py`,
+`sql_runtime.py`) require the `advanced` extra. The base install exposes only the
+pure-logic modules (`sql_policy`, `execution`, `catalog`, `context`, `registry`,
+`types`), which can be referenced without ADK installed.
 
 ## Demo
 
