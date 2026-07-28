@@ -39,6 +39,8 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 │   ├── scripts/                  # Deploy, auth, and registration scripts
 │   └── test_web/                 # Flask OAuth test harness
 ├── docs/
+│   ├── adk_semantic_layer_plan.md  # Custom semantic workflow roadmap
+│   ├── eval-with-prism.md          # CA data-agent evaluation with Prism
 │   └── gemini-enterprise-demo.png
 ├── .env.example
 ├── pyproject.toml

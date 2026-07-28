@@ -23,8 +23,13 @@ Current phase: **Phases 6, 7, 8, and 9 are complete. Per-user SQL execution
 grounding uses a live BigQuery-backed adapter (optional Dataplex search and
 structural, value-free profile enrichment behind `CATALOG_DATAPLEX_ENABLED`), and
 guarded read-only SQL generation, independent source-scope policy, dry run, bounded
-repair, and mode-gated execution run behind deterministic boundaries. Deferred items
-are the provider-backed live catalog and execution smoke tests under Phase 10.**
+repair, and mode-gated execution run behind deterministic boundaries.**
+
+The roadmap is reordered to **11 -> 12 -> 10**. Phase 11 (CA data-agent fallback
+delegation) is the current focus: it completes the functional loop before Phase 12
+deploys it and Phase 10 evaluates it with Prism. Deferred items are the
+provider-backed live catalog and execution smoke tests, now folded into the Phase
+10 Prism-based evaluation.
 
 The executable `semantic_analytics` flow grounds selected context against the
 catalog through the adapter boundary and then generates guarded, read-only SQL:
@@ -597,104 +602,86 @@ Deferred to a later step: a distinct Gemini Enterprise authorization resource fo
 `semantic_analytics` (the 1:1 agent-to-authorization-resource mapping) is a
 deployment-registration concern, tracked with Phase 12.
 
-### Phase 10: Evaluation
+### Phase 11: CA Data-Agent Fallback Delegation
 
-Status: **planned**. Locked decisions: correctness is measured as execution
-accuracy against gold SQL result sets; the harness is bespoke (defer Prism and the
-BigQuery Agent Analytics SDK to a later CI-gate step); the live run executes real
-BigQuery in developer mode; Slice 1 (harness core plus arms 2 and 3) is built first.
+Status: **in progress (next)**. Sequencing note: the roadmap was reordered to
+11 -> 12 -> 10. Phase 11 completes the functional loop (a governed fallback for
+questions the guarded custom path cannot answer), Phase 12 deploys it, and Phase 10
+then measures the result with Prism. This is a conscious decision to finish and
+ship the delegation rung before quantifying it; the earlier "only after evaluation"
+gate is intentionally lifted.
 
-Evaluate independently:
+When the guarded custom path cannot serve a question -- broad grounding is
+insufficient (`assess_broad_context` routes to clarify) or SQL generation is
+refused after bounded repair (`finish_sql_refusal`) -- the workflow may delegate to
+a BigQuery Conversational Analytics data agent instead of returning a clarification
+or refusal.
 
-1. CA `DataAgentToolset` baseline (raw question, no grounding).
-2. Custom Knowledge Catalog-only path.
-3. Custom semantic-first plus Knowledge Catalog path (the recommended path; SQL
-   authored and guarded by the custom workflow).
-4. Grounded CA delegation: semantic selection plus narrow Knowledge Catalog
-   injected as context, then handed to `DataAgentToolset.ask_data_agent`. CA
-   still authors and executes the SQL; grounding is advisory prompt context, not
-   a binding contract.
+Configuration surface:
 
-Arm 4 exists to answer the Phase 11 question directly: does grounding lift CA far
-enough to serve as the broad / long-tail fallback rung? It is the ablation
-between arm 1 (raw CA) and arm 3 (grounded plus guarded custom generation).
-Because `ask_data_agent` returns only after CA has generated and executed the SQL
-(no pre-execution approval boundary), arm 4 cannot enforce the pre-execution
-guardrails (dry run, byte and cost caps, source-scope) that arm 3 applies, and
-its provenance is limited to CA's returned SQL rather than contract-bound
-generation. Score those two properties explicitly, not just answer correctness.
+- `SEMANTIC_FALLBACK_MODE=kc|data_agent|refuse` (default `kc`). `kc` keeps today's
+  clarify/refuse terminals, `refuse` always refuses, and `data_agent` delegates to
+  CA.
+- `AGENT_SEMANTIC_CA_ID` (default `semantic_ca_agent`) names a combined CA data
+  agent that pairs the orders and inventory tables, created idempotently by
+  `scripts/admin_tools.py` from a new `config/agent_definitions.py` entry.
 
-Measure SQL and answer correctness, source selection, constraint preservation,
-routing, semantic contribution, repeated-run consistency, repair rate, latency,
-query cost, and — for arm 4 specifically — provenance auditability and
-pre-execution guardrail coverage. Promote arm 4 to the Phase 11 `data_agent`
-fallback rung only if its silent-error rate and repeated-run consistency approach
-arm 3 and its returned SQL is auditable enough for provenance; otherwise it stays
-a comparison baseline.
+Transport and identity:
 
-#### Frameworks decision
+- Delegation uses an ADK `LlmAgent` with `DataAgentToolset` (the orders/inventory
+  pattern), targeting `dataAgents/{AGENT_SEMANTIC_CA_ID}` and reading the per-user
+  OAuth token from the same session-state key the executor uses
+  (`ADK_OAUTH_TOKEN_STATE_KEY`, default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`). Under
+  the Option A split, the CA call therefore executes as the caller, consistent with
+  `SQL_AUTH_MODE=user`.
+- Only the raw user question is sent to CA. Grounded-context injection (semantic
+  selection plus narrow catalog as advisory prompt context) is the Phase 10 arm-4
+  comparison, not the Phase 11 delegation rung.
 
-The docs name Prism (OSS, CA A/B) and the BigQuery Agent Analytics SDK (trace
-logging, golden-trajectory matching) but frame the comparison gate as `[Bespoke]`.
-ADK's own `adk eval` scores text `response_match`, which is a poor fit for
-execution-accuracy correctness and does not cover the REST CA arms. Phase 10 builds
-a bespoke 4-way harness; BigQuery Agent Analytics and Prism are optional later
-CI-gate wiring.
+Gating (fail-closed, plan-mode safe):
 
-#### Harness structure (`bq_caapi_ge/eval/`)
+- Delegation fires only when `SEMANTIC_FALLBACK_MODE=data_agent` AND execution is
+  allowed (`SQL_EXECUTION_MODE` is not `plan`) AND a user token is present. In
+  `plan` mode delegation is suppressed and the workflow returns the normal
+  clarify/refuse terminal, preserving the "plan mode never executes" contract (CA
+  executes SQL on `ask_data_agent`). In `user` auth with no token it refuses.
 
-- `eval/arms.py`: an `ArmRunner` protocol and a normalized `ArmResult` (sql,
-  referenced_sources, result rows, route, status, repair_count, latency, dry-run
-  bytes, provenance, guardrail_coverage). Adapters: `SemanticFirstArm` (arm 3, runs
-  `agent.root_agent` via `Runner`), `KcOnlyArm` (arm 2, a Workflow that starts at
-  `load_broad_catalog_context`, bypassing the selector), and later the CA REST
-  adapters (arms 1 and 4). Models are injectable so tests use a scripted `BaseLlm`.
-- `eval/metrics.py` (pure, unit-tested): `result_set_equal` (order-insensitive
-  multiset comparison with numeric normalization) is the execution-accuracy metric;
-  plus source-selection, constraint-preservation (`sqlglot`/regex against expected
-  constructs such as `COUNT(DISTINCT)` and required filters), routing,
-  consistency aggregation (N-run), semantic-contribution delta (arm 3 minus arm 2),
-  repair rate, latency, and cost.
-- `eval/golden/thelook.yaml`: golden cases over `bigquery-public-data.thelook_ecommerce`,
-  each with `question`, `gold_sql`, `expected_route`, `expected_sources`,
-  `expected_constraints`, and `difficulty` (simple aggregate, filtered, multi-table
-  join, ratio, top-N, should-clarify, should-refuse).
-- `eval/loader.py`, `eval/orchestration.py` (pure over injected runners),
-  `eval/report.py` (JSON and markdown scorecard), `eval/run_eval.py` (live CLI).
+Provenance:
 
-#### Hermetic versus live
+- The delegated terminal reports `reasoning_path=data_agent`,
+  `guardrail_coverage=none`, and carries CA's answer. Because `ask_data_agent`
+  returns only after CA has generated and executed the SQL, the pre-execution
+  guardrails the custom path applies (dry run, byte and cost caps, source-scope) do
+  not apply, and provenance is limited to what CA returns. CA-generated SQL is not
+  modified or re-executed by the custom path.
 
-Harness logic (metrics, orchestration, report, arm-payload extraction) is unit
-tested with fakes and scripted models; no live calls in `pytest`. The live run
-(`run_eval.py`) executes real Gemini and BigQuery in developer mode and is a
-separate credentialed job, including the provider-backed structured-selector smoke
-case. Pytest must not assert nondeterministic LLM wording.
+Graph:
 
-#### Slices
+```text
+assess_broad_context insufficient -> route_grounding_fallback
+finish_sql_refusal (repair exhausted / policy) -> route_sql_fallback
+route_* delegate    -> data_agent_fallback (LlmAgent) -> finish_data_agent_result
+route_* suppress    -> existing clarify or finish_sql_refusal terminal
+```
 
-1. Harness core plus arms 2 and 3, metrics, golden set, and hermetic tests (no CA
-   dependency).
-2. Arms 1 and 4 (CA REST adapter reusing `advanced/docs/examples/chart_with_ca_api.py`;
-   arm-4 grounding injection into the CA `query`/`system_instruction`; a thelook CA
-   data agent via `scripts/admin_tools.py`) plus arm-4 provenance and guardrail
-   coverage scoring.
-3. Full live orchestration (N-run consistency, cost, latency), scorecard write-up,
-   and this section's status update.
+Exit criteria:
 
-### Phase 11: Optional Data-Agent Delegation
-
-The initial custom fallback remains Knowledge Catalog. Only after the custom
-catalog path has been evaluated may a future configuration expose
-`SEMANTIC_FALLBACK_MODE=kc|data_agent|refuse`. Delegation must be explicit and
-reported as `reasoning_path=data_agent`. CA-generated SQL is not modified and
-re-executed by default because CA has already executed it.
+- default (`kc`) and `refuse` behavior is unchanged
+- delegation is suppressed in plan mode and fails closed without a user token
+- delegated answers are labeled `reasoning_path=data_agent` and
+  `guardrail_coverage=none`
+- both trigger points (insufficient grounding, SQL refusal) route to delegation
+  when enabled
+- routing, gating, and provenance are tested hermetically with a scripted model;
+  the live CA call is exercised only in a credentialed run
 
 ### Phase 12: Deployment
 
-Defer deployment of `semantic_analytics` until local user-token execution and
-evaluations pass. Select Agent Runtime or Cloud Run based on verified Workflow,
-OAuth, observability, and operational behavior. Revisit Agents CLI deployment,
-evaluation, and observability assets only after selecting the deployment target.
+Sequencing: after Phase 11. Defer deployment of `semantic_analytics` until the
+functional loop (guarded custom path plus the CA fallback rung) is complete. Select
+Agent Runtime or Cloud Run based on verified Workflow, OAuth, observability, and
+operational behavior. Revisit Agents CLI deployment, evaluation, and observability
+assets only after selecting the deployment target.
 
 #### Identity and IAM model
 
@@ -734,6 +721,57 @@ IAM grants:
 Production requirement: any multi-user deployment must set `SQL_AUTH_MODE=user`.
 Leaving it at the `adc` default runs every caller's query as the shared service
 account and bypasses per-user data controls.
+
+### Phase 10: Evaluation (final step, with Prism)
+
+Status: **planned (final step)**. Sequencing: runs after Phases 11 and 12 so the
+complete, deployed functional loop is what gets measured.
+
+Decision: adopt Prism, the open-source CA / GDA evaluation application from
+`looker-open-source/ca-demos-and-tools` (`ca-agent-ops-prism`), instead of building
+a bespoke `eval/` harness in this repository. Prism is a deployed Dash/Flask app
+with a PostgreSQL backend (Docker locally, or Cloud Run plus Cloud SQL) whose test
+suites and assertions are authored in its UI. Its data-level assertions cover
+execution accuracy directly: Data Check Row and Data Check Row Count (real query
+execution), Query Check, Latency, and AI Judge, with a Trace View and an A/B Delta
+dashboard. `docs/eval-with-prism.md` covers stand-up, configuration, and IAM.
+
+Scope boundary: Prism evaluates CA / GDA data agents only. It therefore measures
+the CA baseline (raw question) and the combined `semantic_ca` fallback data agent
+shipped in Phase 11 directly. It does not execute the custom `semantic_analytics`
+workflow, so the semantic-first guarded path (and any grounded-CA delegation) are
+compared against Prism's CA scores rather than driven through Prism.
+
+The four comparison arms remain the conceptual framing for what to compare:
+
+1. CA `DataAgentToolset` baseline (raw question, no grounding) -- measurable in
+   Prism.
+2. Custom Knowledge Catalog-only path -- custom workflow, outside Prism.
+3. Custom semantic-first plus Knowledge Catalog path (the recommended path) --
+   custom workflow, outside Prism.
+4. Grounded CA delegation (semantic selection plus narrow Knowledge Catalog
+   injected as advisory context, then `ask_data_agent`) -- the ablation between arm
+   1 and arm 3.
+
+Arm 4 answers whether grounding lifts CA far enough to serve as the long-tail
+fallback rung shipped in Phase 11. Because `ask_data_agent` returns only after CA
+has generated and executed the SQL, arm 4 cannot enforce the pre-execution
+guardrails (dry run, byte and cost caps, source-scope) that arm 3 applies, and its
+provenance is limited to CA's returned SQL. Score those two properties explicitly,
+not just answer correctness.
+
+Metrics of interest: SQL and answer correctness (execution accuracy against gold
+result sets), source selection, constraint preservation, routing, semantic
+contribution (arm 3 minus arm 2), repeated-run consistency, repair rate, latency,
+query cost, and -- for arm 4 -- provenance auditability and pre-execution guardrail
+coverage. Promote arm 4 to the shipped `data_agent` fallback's grounded mode only
+if its silent-error rate and consistency approach arm 3 and its returned SQL is
+auditable enough for provenance; otherwise the Phase 11 rung stays raw-question
+delegation.
+
+A custom-workflow evaluation (driving arms 2 and 3 through their own runners with
+an execution-accuracy metric over a golden thelook set) can be added later if
+Prism's CA-only scope proves insufficient; it is not built now.
 
 ## Design Requirements
 
@@ -901,6 +939,9 @@ Historical commits (restore points):
 | 7 | Complete | Narrow and broad Knowledge Catalog grounding (Dataplex optional; live smoke test deferred to Phase 10) |
 | 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
 | 9 | Complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding) and hardened Flask/OAuth test harness (server-side tokens, state validation, refresh, session reuse, `web` extra) |
+| 11 | In progress | CA data-agent fallback delegation (`SEMANTIC_FALLBACK_MODE`, combined `semantic_ca` agent, plan-mode-safe fail-closed gating) |
+| 12 | Planned | Deployment of `semantic_analytics` (after Phase 11; two-identity IAM model) |
+| 10 | Planned | Evaluation with Prism (final step; CA / GDA agents in Prism, custom path compared against CA scores) |
 
 ### Certification
 
@@ -998,7 +1039,9 @@ Required checks across the roadmap:
 - Which execution boundary exposes user credentials, dry-run control, bytes, and
   job IDs reliably?
 - What evaluation threshold demonstrates improvement over KC-only and CA paths?
-- Is optional data-agent delegation operationally valuable after the custom path?
+- Does the CA fallback rung benefit enough from grounded context (Phase 10 arm 4)
+  to justify injecting semantic and narrow-catalog context, or does raw-question
+  delegation suffice?
 - Which deployment target best supports ADK Workflow and OAuth behavior?
 
 BigQuery Graph may be evaluated later for explicit multi-hop relationship work.

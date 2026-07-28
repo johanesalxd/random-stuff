@@ -9,6 +9,8 @@ This directory contains two parallel ADK paths:
   and generates guarded, read-only BigQuery SQL. It validates read-only and
   source-scope policy, dry-runs, and executes only in developer mode (plan mode by
   default). See [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
+  The CA data agents are evaluated with Prism; see
+  [`docs/eval-with-prism.md`](../docs/eval-with-prism.md).
 
 The historical deterministic compiler and execution adapters were removed from
 `semantic/` in the Phase 7 cleanup; they are recoverable from git history if a
