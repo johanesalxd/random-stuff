@@ -38,13 +38,21 @@ There is no separate virtualenv or manual `uv pip install` step.
       serving over HTTPS.
     - `ADK_OAUTH_TOKEN_STATE_KEY`, optional; the session-state key the user token is
       written to. Defaults to `AUTH_RESOURCE_SEMANTIC_ANALYTICS` and must match the
-      engine's value.
+      target agent's `external_access_token_key`.
 
    Local ADK API server mode also needs:
 
    - `ADK_LOCAL_BASE_URL`, for example `http://127.0.0.1:8000`
    - `ADK_LOCAL_APP_NAME`, optional, defaults to `semantic_analytics`
    - `SEMANTIC_CONTRACT_PATH`, optional semantic YAML file or directory
+
+   > **Driving the orders/inventory baseline agents.** The defaults target
+   > `semantic_analytics`. To drive the orders or inventory agent instead, set
+   > `ADK_LOCAL_APP_NAME` to `orders` or `inventory` **and** override
+   > `ADK_OAUTH_TOKEN_STATE_KEY` to that agent's key — `bq-caapi-oauth` (orders,
+   > from `AUTH_RESOURCE_ORDERS`) or `bq-caapi-oauth-inventory` (inventory, from
+   > `AUTH_RESOURCE_INVENTORY`) — so the token is written to the key the agent's
+   > `external_access_token_key` reads.
 
    Agent Engine mode also needs:
 

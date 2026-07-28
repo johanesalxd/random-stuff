@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
@@ -26,20 +27,24 @@ def create_auth_resource(auth_id: str) -> None:
         auth_id: The authorization resource ID to create.
 
     Raises:
-        ValueError: If OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET is not set.
+        ValueError: If required OAuth or project configuration is not set.
     """
     if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
         raise ValueError("OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET must be set")
+    if not PROJECT_NUMBER:
+        raise ValueError("GOOGLE_CLOUD_PROJECT_NUMBER must be set")
 
-    logger.info(f"Creating Authorization Resource: {auth_id}...")
+    logger.info("Creating Authorization Resource: %s...", auth_id)
 
+    # Authorization resources are addressed by project number so the reference
+    # built by register_agents.py resolves to the resource created here.
     url = (
         f"https://{LOCATION}-discoveryengine.googleapis.com/v1alpha/"
-        f"projects/{PROJECT_ID}/locations/{LOCATION}/authorizations?authorizationId={auth_id}"
+        f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations?authorizationId={auth_id}"
     )
 
     payload = {
-        "name": f"projects/{PROJECT_ID}/locations/{LOCATION}/authorizations/{auth_id}",
+        "name": f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{auth_id}",
         "serverSideOauth2": {
             "clientId": OAUTH_CLIENT_ID,
             "clientSecret": OAUTH_CLIENT_SECRET,
@@ -57,7 +62,7 @@ def create_auth_resource(auth_id: str) -> None:
             .strip()
         )
     except Exception as e:
-        logger.error(f"Failed to get token: {e}")
+        logger.error("Failed to get token: %s", e)
         return
 
     cmd = [
@@ -79,9 +84,9 @@ def create_auth_resource(auth_id: str) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode == 0:
-        logger.info(f"Response for {auth_id}: {result.stdout}")
+        logger.info("Response for %s: %s", auth_id, result.stdout)
     else:
-        logger.error(f"Failed to create {auth_id}: {result.stderr}")
+        logger.error("Failed to create %s: %s", auth_id, result.stderr)
 
 
 if __name__ == "__main__":

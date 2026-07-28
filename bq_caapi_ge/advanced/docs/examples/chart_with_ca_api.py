@@ -12,12 +12,13 @@ Key differences from DataAgentToolset:
 - Renders Vega-Lite charts locally using Altair
 
 Usage:
-    python advanced/docs/examples/chart_with_ca_api.py
+    uv run python advanced/docs/examples/chart_with_ca_api.py
 
 Requirements:
-    pip install altair requests python-dotenv
+    uv add altair requests python-dotenv
 """
 
+import base64
 import json
 import os
 import subprocess
@@ -193,8 +194,6 @@ def chat_with_chart_rest(prompt: str):
                         mime_type = result["image"].get("mimeType", "unknown")
                         print(f"[CHART IMAGE] Image blob received: {mime_type}")
                         # Decode base64 and save
-                        import base64
-
                         image_data = base64.b64decode(result["image"]["data"])
                         image_path = "chart_server_rendered.png"
                         with open(image_path, "wb") as f:
