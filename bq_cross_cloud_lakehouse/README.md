@@ -196,6 +196,12 @@ dry-run output before using `--execute`. If the optional discovery path was run,
 set `DISCOVERY_DATASET` in `config.local.env` to the generated BigQuery dataset
 name so teardown can remove it without guessing.
 
+## License
+
+Apache-2.0 — see [`LICENSE`](LICENSE). Provided as a self-contained baseline you
+can fork and adapt; the linked Google Cloud codelab is credited as inspiration,
+not a dependency.
+
 ## References
 
 - [Codelab: Raw data to forecasting in seconds with AI agents](https://codelabs.developers.google.com/next26/gen-keynote/raw-data-forecasting)
