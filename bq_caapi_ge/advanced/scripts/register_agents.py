@@ -1,4 +1,4 @@
-"""Utility for registering A2A agents in Gemini Enterprise."""
+"""Utility for registering ADK Agent Engine agents in Gemini Enterprise."""
 
 import json
 import logging
@@ -39,7 +39,7 @@ def register_agent(
         reasoning_engine_resource: The full resource name of the deployed Agent Engine.
         auth_resource: The full path to an authorization resource.
     """
-    logger.info(f"Registering {display_name}...")
+    logger.info("Registering %s...", display_name)
 
     # We use curl to call the REST API as it's easier to handle the v1alpha endpoint
     try:
@@ -91,15 +91,19 @@ def register_agent(
         response_json = json.loads(result.stdout)
         if "error" in response_json:
             logger.error(
-                f"Registration failed for {display_name}: {response_json['error']}"
+                "Registration failed for %s: %s", display_name, response_json["error"]
             )
         else:
             logger.info(
-                f"Successfully registered {display_name}: {response_json.get('name')}"
+                "Successfully registered %s: %s",
+                display_name,
+                response_json.get("name"),
             )
     else:
         logger.error(
-            f"Failed to execute registration command for {display_name}: {result.stderr}"
+            "Failed to execute registration command for %s: %s",
+            display_name,
+            result.stderr,
         )
 
 
@@ -126,6 +130,18 @@ if __name__ == "__main__":
         parser.error(
             "At least one of --orders-resource or --inventory-resource is required"
         )
+
+    missing = [
+        name
+        for name, value in (
+            ("GOOGLE_CLOUD_PROJECT", PROJECT_ID),
+            ("GOOGLE_CLOUD_PROJECT_NUMBER", PROJECT_NUMBER),
+            ("GEMINI_APP_ID", APP_ID),
+        )
+        if not value
+    ]
+    if missing:
+        parser.error(f"Missing required environment variables: {', '.join(missing)}")
 
     # 1. Orders Agent
     if args.orders_resource:

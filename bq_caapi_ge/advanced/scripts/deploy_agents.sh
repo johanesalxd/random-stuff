@@ -40,18 +40,15 @@ deploy_agent() {
     
     echo -e "${YELLOW}Deploying $display_name...${NC}"
     
+    # 'set -e' aborts the script if this deploy fails, so reaching the next
+    # line means the deploy succeeded.
     uv run adk deploy agent_engine "$agent_dir" \
         --project="$PROJECT_ID" \
         --region="$LOCATION" \
         --display_name="$display_name"
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}$display_name deployed successfully${NC}"
-        echo ""
-    else
-        echo -e "${RED}Failed to deploy $display_name${NC}"
-        exit 1
-    fi
+
+    echo -e "${GREEN}$display_name deployed successfully${NC}"
+    echo ""
 }
 
 echo -e "${YELLOW}=== Deploying Orders Agent ===${NC}"
@@ -63,6 +60,9 @@ deploy_agent "advanced/app/inventory" "Inventory Analyst"
 echo -e "${GREEN}=== Deployment Complete ===${NC}"
 echo ""
 echo "Next steps:"
-echo "1. Note the Reasoning Engine IDs from the output above"
-echo "2. Update .env with ORDERS_REASONING_ENGINE_ID and INVENTORY_REASONING_ENGINE_ID"
-echo "3. Register with Gemini Enterprise: uv run python advanced/scripts/register_agents.py"
+echo "1. Note the Reasoning Engine resource names from the output above"
+echo "2. Create the OAuth authorizations (once): uv run python advanced/scripts/setup_auth.py"
+echo "3. Register with Gemini Enterprise, passing the resource names as flags:"
+echo "   uv run python advanced/scripts/register_agents.py \\"
+echo "     --orders-resource <ORDERS_REASONING_ENGINE_RESOURCE> \\"
+echo "     --inventory-resource <INVENTORY_REASONING_ENGINE_RESOURCE>"

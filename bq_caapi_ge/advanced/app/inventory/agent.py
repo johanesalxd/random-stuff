@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 AGENT_INVENTORY_ID = os.getenv("AGENT_INVENTORY_ID", "agent-inventory-id-placeholder")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-id-placeholder")
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 
 # Session state key where Gemini Enterprise deposits the user's OAuth token.
 # Must match the AUTH_RESOURCE_INVENTORY value used when registering the agent.
