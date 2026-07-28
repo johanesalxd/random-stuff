@@ -49,10 +49,10 @@ There is no separate virtualenv or manual `uv pip install` step.
    > **Driving the orders/inventory baseline agents.** The defaults target
    > `semantic_analytics`. To drive the orders or inventory agent instead, set
    > `ADK_LOCAL_APP_NAME` to `orders` or `inventory` **and** override
-   > `ADK_OAUTH_TOKEN_STATE_KEY` to that agent's key — `bq-caapi-oauth` (orders,
-   > from `AUTH_RESOURCE_ORDERS`) or `bq-caapi-oauth-inventory` (inventory, from
-   > `AUTH_RESOURCE_INVENTORY`) — so the token is written to the key the agent's
-   > `external_access_token_key` reads.
+   > `ADK_OAUTH_TOKEN_STATE_KEY` to that agent's key — `bq-caapi-oauth-orders`
+   > (orders, from `AUTH_RESOURCE_ORDERS`) or `bq-caapi-oauth-inventory`
+   > (inventory, from `AUTH_RESOURCE_INVENTORY`) — so the token is written to the
+   > key the agent's `external_access_token_key` reads.
 
    Agent Engine mode also needs:
 
