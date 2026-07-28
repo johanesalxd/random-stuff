@@ -611,63 +611,176 @@ then measures the result with Prism. This is a conscious decision to finish and
 ship the delegation rung before quantifying it; the earlier "only after evaluation"
 gate is intentionally lifted.
 
-When the guarded custom path cannot serve a question -- broad grounding is
-insufficient (`assess_broad_context` routes to clarify) or SQL generation is
-refused after bounded repair (`finish_sql_refusal`) -- the workflow may delegate to
-a BigQuery Conversational Analytics data agent instead of returning a clarification
-or refusal.
+The `semantic_ca` CA data agent is created (dataset-wide over the full thelook
+dataset; see below) and was smoke-tested live: a single-domain question (completed
+order count) and a cross-domain question (distribution centers plus distinct
+products) both generated and executed correct SQL under Application Default
+Credentials.
 
-Configuration surface:
+#### Current flow (before Phase 11)
+
+```mermaid
+flowchart TD
+  Q[question] --> REG[load_semantic_registry]
+  REG --> SEL[semantic selector LLM]
+  SEL --> RES{resolve_semantic_selection}
+  RES -->|semantic_narrow| LNC[load_narrow_catalog_context]
+  RES -->|catalog_broad| LBC[load_broad_catalog_context]
+  LNC --> AC{assess_context}
+  AC -->|sufficient| GEN[enter_sql_generation]
+  AC -->|insufficient| LBC
+  LBC --> ABC{assess_broad_context}
+  ABC -->|grounded| GEN
+  ABC -->|clarify| CLAR([finish_clarification]):::dead
+  GEN --> GSQL[generate_sql LLM] --> POL{enforce_sql_policy}
+  POL -->|allowed| DRY{dry_run_sql}
+  POL -->|rejected| REP{repair_sql}
+  DRY -->|valid| EXE[maybe_execute_sql] --> OK([finish_sql_result])
+  DRY -->|invalid| REP
+  DRY -->|unauthorized| REFU([finish_sql_refusal]):::dead
+  REP -->|retry bounded| GSQL
+  REP -->|exhausted| REFU
+  classDef dead fill:#553,stroke:#b95;
+```
+
+The two highlighted terminals are today's dead-ends, and they map to the two
+fallback triggers:
+
+- `finish_clarification` = the question is too broad / could not be grounded
+  (broad catalog search found no in-scope sources).
+- `finish_sql_refusal` = an error occurred (policy rejected the SQL, the dry run
+  failed, or bounded repair was exhausted).
+
+#### Phase 11 flow (deterministic fallback)
+
+Phase 11 intercepts exactly those two deterministic exits with gate nodes; nothing
+else in the flow changes.
+
+```mermaid
+flowchart TD
+  ABC{assess_broad_context} -->|grounded| GEN[SQL chain ...]
+  ABC -->|clarify| RGF{{route_grounding_fallback}}
+  REP{repair_sql} -->|exhausted| RSF{{route_sql_fallback}}
+  RGF -->|keep| CLAR([finish_clarification])
+  RGF -->|delegate| DA[data_agent_fallback: LlmAgent + DataAgentToolset]
+  RSF -->|keep| REFU([finish_sql_refusal])
+  RSF -->|delegate| DA
+  DA --> FDR([finish_data_agent_result: reasoning_path=data_agent])
+```
+
+The decision to delegate is 100% deterministic: the gate nodes read which
+deterministic route the workflow already took, the feature flag, and the
+execution/auth mode. The model never chooses to delegate. The CA agent uses an LLM
+only internally to author its own SQL, which is CA's concern and outside the custom
+guardrails.
+
+#### Deterministic decision table
+
+`decide_fallback_route(mode, execution_mode, auth_mode, has_token, trigger)`:
+
+| `SEMANTIC_FALLBACK_MODE` | exec mode | auth / token | "too broad" exit | "error" exit |
+|---|---|---|---|---|
+| `kc` (default) | any | any | clarify | refuse |
+| `refuse` | any | any | refuse | refuse |
+| `data_agent` | `plan` | any | clarify (suppressed) | refuse (suppressed) |
+| `data_agent` | `developer` | `user` + token | delegate | delegate |
+| `data_agent` | `developer` | `user`, no token | refuse | refuse |
+| `data_agent` | `developer` | `adc` | clarify (suppressed) | refuse (suppressed) |
+
+This encodes three guarantees: the feature is off by default (existing behavior is
+unchanged); plan mode never executes (CA runs SQL on `ask_data_agent`, so plan mode
+suppresses); and it fails closed (no usable per-user credentials means no
+delegation, never a silent run).
+
+Identity choice ("Option X"): delegation runs only under the caller's OAuth token
+(`SQL_AUTH_MODE=user` with a token). In `adc` mode it is suppressed rather than
+running CA as the shared service account. This keeps CA data access strictly
+per-user, consistent with the row-data-vs-metadata split below.
+
+#### Identity and OAuth scope model
+
+Two independent axes are easy to conflate. Identity decides whose IAM applies;
+OAuth scope decides how broad the user's token is.
+
+| Component | Touches | Identity | OAuth scope |
+|---|---|---|---|
+| Semantic selector / SQL generator | Gemini (Vertex) | Vertex / ADC model creds | none (no data) |
+| Catalog: BigQuery schema reads | table schemas, dataset/table lists (metadata) | service account (ADC) | none |
+| Catalog: Dataplex search / profile | catalog entries, profiles (metadata) | service account (ADC) | (SA) `cloud-platform` |
+| Custom SQL dry-run + execute | row data | user OAuth token (`user` mode) | `auth/bigquery` |
+| CA fallback (`semantic_ca`) | row data (CA runs SQL) | user OAuth token | `cloud-platform` |
+
+The correct model is a row-data-vs-metadata split, not "only Dataplex uses the
+service account":
+
+- Everything that reads row data uses the caller's OAuth token: both the custom
+  `execute_sql` path and the CA fallback. Neither uses a shared service account for
+  data, so per-user controls (row-level security, authorized views, column masking)
+  always apply.
+- Everything that reads schema/metadata uses the service account (ADC): the plain
+  BigQuery schema reads in catalog grounding as well as Dataplex.
+
+Metadata stays on the service account because grounding needs schema before the
+query is authored, because Dataplex requires the broad `cloud-platform` scope
+(threading the user token there would force the user token to carry
+`cloud-platform`), and because the deployment SA holds `metadataViewer` only (never
+`dataViewer`), so any accidental ADC execution fails closed at the data layer.
+
+Scope implication of the fallback: the CA / GDA API requires the user token to
+carry `cloud-platform` (`advanced/scripts/setup_auth.py` and the Flask harness
+`SCOPES` already request it), whereas the custom `execute_sql` path needs only
+`auth/bigquery`. Both read data as the user, never the shared SA. For this demo the
+wider `cloud-platform` scope from the ADK harness is used as-is; narrowing a
+custom-path-only deployment to `auth/bigquery` (and, if ever needed, a subagent
+model for a cleaner handover) is a future refinement, not part of Phase 11.
+
+#### Configuration surface
 
 - `SEMANTIC_FALLBACK_MODE=kc|data_agent|refuse` (default `kc`). `kc` keeps today's
   clarify/refuse terminals, `refuse` always refuses, and `data_agent` delegates to
-  CA.
-- `AGENT_SEMANTIC_CA_ID` (default `semantic_ca_agent`) names a combined CA data
-  agent that pairs the orders and inventory tables, created idempotently by
-  `scripts/admin_tools.py` from a new `config/agent_definitions.py` entry.
+  CA under the gating above.
+- `AGENT_SEMANTIC_CA_ID` (default `semantic_ca_agent`) names a dataset-wide CA data
+  agent over the full thelook dataset (all seven tables: the union of the orders and
+  inventory agents), created idempotently by `scripts/admin_tools.py` from its
+  `config/agent_definitions.py` entry.
 
-Transport and identity:
+#### Transport, input, and provenance
 
 - Delegation uses an ADK `LlmAgent` with `DataAgentToolset` (the orders/inventory
   pattern), targeting `dataAgents/{AGENT_SEMANTIC_CA_ID}` and reading the per-user
-  OAuth token from the same session-state key the executor uses
-  (`ADK_OAUTH_TOKEN_STATE_KEY`, default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`). Under
-  the Option A split, the CA call therefore executes as the caller, consistent with
-  `SQL_AUTH_MODE=user`.
-- Only the raw user question is sent to CA. Grounded-context injection (semantic
-  selection plus narrow catalog as advisory prompt context) is the Phase 10 arm-4
-  comparison, not the Phase 11 delegation rung.
+  OAuth token from `ADK_OAUTH_TOKEN_STATE_KEY` (default
+  `AUTH_RESOURCE_SEMANTIC_ANALYTICS`).
+- Only the raw user question is sent to CA. A tool-using `LlmAgent` node without an
+  `output_schema` returns its final text as the node output (tool-call turns are
+  skipped), and in single-turn mode it sees only the injected `node_input`, so
+  "raw question only" is enforced by construction. Grounded-context injection is the
+  Phase 10 arm-4 comparison, not this rung.
+- `DataAgentToolset` raises if `external_access_token_key` is set but no token is in
+  state; it never silently uses ADC. The gate therefore resolves credentials
+  deterministically before delegating.
+- The delegated terminal (`finish_data_agent_result`) reports
+  `reasoning_path=data_agent`, `guardrail_coverage=none`, and carries CA's answer.
+  Because `ask_data_agent` returns only after CA has generated and executed the SQL,
+  the pre-execution guardrails the custom path applies (dry run, byte and cost caps,
+  source-scope) do not apply, and provenance is limited to what CA returns.
+  CA-generated SQL is not modified or re-executed by the custom path.
 
-Gating (fail-closed, plan-mode safe):
+#### Planned modules and nodes
 
-- Delegation fires only when `SEMANTIC_FALLBACK_MODE=data_agent` AND execution is
-  allowed (`SQL_EXECUTION_MODE` is not `plan`) AND a user token is present. In
-  `plan` mode delegation is suppressed and the workflow returns the normal
-  clarify/refuse terminal, preserving the "plan mode never executes" contract (CA
-  executes SQL on `ask_data_agent`). In `user` auth with no token it refuses.
+- `semantic/delegation_runtime.py` (new, deterministic, no `data_agent` import):
+  `resolve_fallback_mode`, the pure `decide_fallback_route`, the
+  `route_grounding_fallback` and `route_sql_fallback` gate nodes, and the
+  `finish_data_agent_result` terminal.
+- `advanced/app/semantic_analytics/agent.py`: `build_root_agent(*, ...,
+  fallback_model=None)` (injectable models for hermetic tests) plus the
+  `data_agent_fallback` `LlmAgent` and the two new gate edges. The agent is
+  embedded in the workflow, not a standalone deployable package.
 
-Provenance:
-
-- The delegated terminal reports `reasoning_path=data_agent`,
-  `guardrail_coverage=none`, and carries CA's answer. Because `ask_data_agent`
-  returns only after CA has generated and executed the SQL, the pre-execution
-  guardrails the custom path applies (dry run, byte and cost caps, source-scope) do
-  not apply, and provenance is limited to what CA returns. CA-generated SQL is not
-  modified or re-executed by the custom path.
-
-Graph:
-
-```text
-assess_broad_context insufficient -> route_grounding_fallback
-finish_sql_refusal (repair exhausted / policy) -> route_sql_fallback
-route_* delegate    -> data_agent_fallback (LlmAgent) -> finish_data_agent_result
-route_* suppress    -> existing clarify or finish_sql_refusal terminal
-```
-
-Exit criteria:
+#### Exit criteria
 
 - default (`kc`) and `refuse` behavior is unchanged
-- delegation is suppressed in plan mode and fails closed without a user token
+- delegation runs only under a user token; it is suppressed in plan mode and in
+  `adc` mode, and fails closed with no token
 - delegated answers are labeled `reasoning_path=data_agent` and
   `guardrail_coverage=none`
 - both trigger points (insufficient grounding, SQL refusal) route to delegation
@@ -687,7 +800,10 @@ assets only after selecting the deployment target.
 
 Under the Phase 9 Slice 1 split (Option A), a deployment runs under two identities:
 metadata grounding uses the deployment service account (ADC), and SQL execution
-uses the caller's OAuth token when `SQL_AUTH_MODE=user`.
+uses the caller's OAuth token when `SQL_AUTH_MODE=user`. The Phase 11 CA fallback
+follows the same rule (row data under the caller's token, never the SA); see the
+"Identity and OAuth scope model" table in Phase 11 for the full row-data-vs-metadata
+split and the CA `cloud-platform` scope requirement.
 
 Application Default Credentials resolve to the attached service account on both
 targets:
@@ -866,6 +982,7 @@ semantic/
   sql_policy.py             # Deterministic read-only and source-scope SQL policy
   execution.py              # Guarded ADK BigQuery execution boundary
   sql_runtime.py            # Guarded SQL generation, dry run, repair, execution nodes
+  delegation_runtime.py     # Deterministic CA fallback gate nodes and terminal (Phase 11)
 
 config/semantic_contracts/
   thelook_orders.yaml
@@ -874,6 +991,7 @@ config/semantic_contracts/
 
 Add modules only when they own a clear reusable boundary. The catalog grounding
 boundary and the Phase 8 SQL policy, execution, and generation modules now exist.
+`delegation_runtime.py` is the planned Phase 11 module and does not exist yet.
 
 ## ADK 2.5 Compatibility Record
 
