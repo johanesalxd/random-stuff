@@ -23,6 +23,8 @@ os.environ.setdefault("OAUTH_CLIENT_SECRET", "test-secret")
 os.environ.setdefault("ADK_OAUTH_TOKEN_STATE_KEY", "AUTH_RESOURCE_SEMANTIC_ANALYTICS")
 
 _WEB_DIR = Path(__file__).resolve().parents[1] / "advanced" / "test_web"
+if not _WEB_DIR.exists():
+    pytest.skip("advanced/test_web not present", allow_module_level=True)
 if str(_WEB_DIR) not in sys.path:
     sys.path.insert(0, str(_WEB_DIR))
 

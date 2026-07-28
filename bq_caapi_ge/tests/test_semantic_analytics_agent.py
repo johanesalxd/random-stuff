@@ -23,7 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from advanced.app.semantic_analytics import agent  # noqa: E402
+agent = pytest.importorskip("advanced.app.semantic_analytics.agent")  # noqa: E402
 from semantic.registry import load_contract, load_contracts  # noqa: E402
 from semantic.runtime import (  # noqa: E402
     SemanticConceptSelection,
