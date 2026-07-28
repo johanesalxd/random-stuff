@@ -47,6 +47,30 @@ AGENT_DEFINITIONS: tuple[AgentDefinition, ...] = (
             "inventory movement."
         ),
     ),
+    AgentDefinition(
+        env_agent_id="AGENT_SEMANTIC_CA_ID",
+        default_agent_id="semantic_ca_agent",
+        description=(
+            "Dataset-wide ecommerce agent over the full thelook dataset, used as "
+            "the semantic workflow's Conversational Analytics fallback."
+        ),
+        tables=(
+            "users",
+            "orders",
+            "order_items",
+            "events",
+            "products",
+            "inventory_items",
+            "distribution_centers",
+        ),
+        system_instruction=(
+            "You are a general ecommerce analyst with access to the entire "
+            "thelook dataset: customers, orders, order items, web events, "
+            "products, inventory, and distribution centers. Answer any question "
+            "spanning customer behavior, revenue, product catalog, stock "
+            "availability, and logistics, joining across these tables as needed."
+        ),
+    ),
 )
 
 
