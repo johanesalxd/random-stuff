@@ -32,7 +32,9 @@ echo "  Project: $GOOGLE_CLOUD_PROJECT"
 echo ""
 
 PROJECT_ID="$GOOGLE_CLOUD_PROJECT"
-LOCATION="us-central1"
+# Vertex AI Agent Engine region. GOOGLE_CLOUD_LOCATION=global is for Discovery
+# Engine and is not a valid Vertex region, so this is a separate setting.
+LOCATION="${AGENT_ENGINE_LOCATION:-us-central1}"
 
 deploy_agent() {
     local agent_dir=$1

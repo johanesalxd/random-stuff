@@ -21,7 +21,7 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 APP_ID = os.getenv("GEMINI_APP_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-AUTH_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
+AUTH_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth-orders")
 AUTH_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
 

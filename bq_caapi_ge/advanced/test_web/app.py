@@ -60,6 +60,9 @@ TOKEN_STATE_KEY = os.getenv(
 )
 ADK_LOCAL_BASE_URL = os.getenv("ADK_LOCAL_BASE_URL")
 ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "semantic_analytics")
+# Vertex AI Agent Engine region. GOOGLE_CLOUD_LOCATION=global is for Discovery
+# Engine and is not a valid Vertex region, so this is a separate setting.
+AGENT_ENGINE_LOCATION = os.getenv("AGENT_ENGINE_LOCATION", "us-central1")
 
 if ADK_LOCAL_BASE_URL:
     RUNTIME_MODE = "local_adk"
@@ -82,8 +85,8 @@ REDIRECT_URI = "http://localhost:8080/auth/callback"
 
 # Agent Engine API base URL
 AGENT_ENGINE_BASE = (
-    f"https://us-central1-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}"
-    f"/locations/us-central1/reasoningEngines/{REASONING_ENGINE_ID}"
+    f"https://{AGENT_ENGINE_LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}"
+    f"/locations/{AGENT_ENGINE_LOCATION}/reasoningEngines/{REASONING_ENGINE_ID}"
 )
 
 # Server-side session store. Only an opaque session id is placed in the signed

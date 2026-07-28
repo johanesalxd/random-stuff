@@ -16,7 +16,7 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 
 # Session state key where Gemini Enterprise deposits the user's OAuth token.
 # Must match the AUTH_RESOURCE_ORDERS value used when registering the agent.
-AUTH_RESOURCE_ID = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
+AUTH_RESOURCE_ID = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth-orders")
 
 DATA_AGENT_NAME = f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_ORDERS_ID}"
 

@@ -16,7 +16,7 @@ OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
 # Load Auth Resource IDs from environment
-AUTH_ID_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth")
+AUTH_ID_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth-orders")
 AUTH_ID_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
 
