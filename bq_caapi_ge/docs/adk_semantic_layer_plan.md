@@ -825,6 +825,9 @@ semantic/
   runtime.py                # Active semantic-resolution nodes and instructions
   catalog.py                # Catalog grounding boundary and adapter protocol
   catalog_runtime.py        # Narrow and broad catalog grounding nodes
+  sql_policy.py             # Deterministic read-only and source-scope SQL policy
+  execution.py              # Guarded ADK BigQuery execution boundary
+  sql_runtime.py            # Guarded SQL generation, dry run, repair, execution nodes
 
 config/semantic_contracts/
   thelook_orders.yaml
@@ -832,7 +835,7 @@ config/semantic_contracts/
 ```
 
 Add modules only when they own a clear reusable boundary. The catalog grounding
-boundary now exists; planned SQL planning and policy modules do not exist yet.
+boundary and the Phase 8 SQL policy, execution, and generation modules now exist.
 
 ## ADK 2.5 Compatibility Record
 

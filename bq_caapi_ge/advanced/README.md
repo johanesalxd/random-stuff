@@ -2,8 +2,8 @@
 
 This directory contains two parallel ADK paths:
 
-- Legacy orders and inventory wrappers that deploy to Agent Engine and call CA
-  API data agents with end-user OAuth.
+- Independent orders and inventory CA API baselines that deploy to Agent Engine
+  and call CA API data agents with end-user OAuth.
 - A local-first `semantic_analytics` Workflow that selects bounded semantic
   concepts from portable YAML, grounds them against the catalog (narrow or broad),
   and generates guarded, read-only BigQuery SQL. It validates read-only and
@@ -25,7 +25,7 @@ Use this approach when you need:
 For the standard integration (no ADK runtime required), see the
 [root README](../README.md).
 
-## Legacy Agent Engine Architecture
+## CA API Baseline (Agent Engine) Architecture
 
 ```mermaid
 sequenceDiagram
@@ -113,7 +113,10 @@ EOF
 bash advanced/scripts/deploy_agents.sh
 ```
 
-Save the Reasoning Engine resource names from the output.
+Deploys to `us-central1` by default; set `AGENT_ENGINE_LOCATION` to target a
+different Vertex AI region (this is separate from `GOOGLE_CLOUD_LOCATION=global`,
+which addresses Discovery Engine). Save the Reasoning Engine resource names from
+the output.
 
 ### Step 4: Setup OAuth Authorization
 
@@ -134,7 +137,7 @@ uv run python advanced/scripts/register_agents.py \
 Test agents locally with the ADK CLI:
 
 ```bash
-export $(cat .env | xargs)
+set -a; . ./.env; set +a
 uv run adk run advanced/app/orders
 ```
 
