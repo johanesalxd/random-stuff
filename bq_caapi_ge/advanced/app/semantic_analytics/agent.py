@@ -42,7 +42,7 @@ from semantic.sql_runtime import (  # noqa: E402
 
 semantic_selector = LlmAgent(
     name="semantic_context_selector",
-    model=os.getenv("MODEL_NAME", "gemini-2.5-flash"),
+    model=os.getenv("MODEL_NAME", "gemini-3.5-flash"),
     instruction=SEMANTIC_SELECTION_INSTRUCTION,
     output_schema=SemanticSelection,
     after_model_callback=recover_invalid_semantic_selection,
@@ -50,7 +50,7 @@ semantic_selector = LlmAgent(
 
 sql_generator = LlmAgent(
     name="guarded_sql_generator",
-    model=os.getenv("MODEL_NAME", "gemini-2.5-flash"),
+    model=os.getenv("MODEL_NAME", "gemini-3.5-flash"),
     instruction=GENERATE_SQL_INSTRUCTION,
     output_schema=GeneratedSql,
     after_model_callback=recover_invalid_sql,
