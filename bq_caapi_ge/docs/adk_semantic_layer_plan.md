@@ -18,12 +18,13 @@ accuracy, consistency, and explainability.
 
 ## Current Checkpoint
 
-Current phase: **Phases 6, 7, and 8 are complete. Catalog grounding uses a live
-BigQuery-backed adapter (optional Dataplex search and structural, value-free profile
-enrichment behind `CATALOG_DATAPLEX_ENABLED`), and guarded read-only SQL generation,
-independent source-scope policy, dry run, bounded repair, and mode-gated execution
-run behind deterministic boundaries. Deferred items are the provider-backed live
-catalog and execution smoke tests under Phase 10.**
+Current phase: **Phases 6, 7, 8, and 9 are complete. Per-user SQL execution
+(`SQL_AUTH_MODE=user`) and a hardened Flask/OAuth harness ship in Phase 9. Catalog
+grounding uses a live BigQuery-backed adapter (optional Dataplex search and
+structural, value-free profile enrichment behind `CATALOG_DATAPLEX_ENABLED`), and
+guarded read-only SQL generation, independent source-scope policy, dry run, bounded
+repair, and mode-gated execution run behind deterministic boundaries. Deferred items
+are the provider-backed live catalog and execution smoke tests under Phase 10.**
 
 The executable `semantic_analytics` flow grounds selected context against the
 catalog through the adapter boundary and then generates guarded, read-only SQL:
