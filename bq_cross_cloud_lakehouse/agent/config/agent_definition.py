@@ -254,3 +254,70 @@ def build_agent_definition(
         tables=tables,
         system_instruction=_system_instruction(config),
     )
+
+
+def is_federated_dataset_id(dataset_id: str) -> bool:
+    """Return whether a dataset id is a federated ``catalog.namespace`` ref.
+
+    Native BigQuery datasets are a single identifier; federated Lakehouse
+    tables use the four-part P.C.N.T form where the dataset id is
+    ``<catalog>.<namespace>`` (and therefore contains a dot).
+
+    Args:
+        dataset_id: The dataset id from a :class:`TableRef`.
+
+    Returns:
+        ``True`` for a federated (catalog.namespace) dataset id.
+    """
+    return "." in dataset_id
+
+
+def native_table_ids(
+    config: LakehouseConfig,
+    agent_id: str = "froyo_lakehouse_analyst",
+) -> tuple[str, ...]:
+    """Return the native (single-dataset) BigQuery table ids for the agent.
+
+    Native tables live in ``config.native_dataset`` and can be targeted by
+    Dataplex data profile and data documentation scans.
+
+    Args:
+        config: Resolved lakehouse configuration.
+        agent_id: Agent id used to build the definition (does not affect the
+            table set).
+
+    Returns:
+        Ordered, deduplicated native table ids.
+    """
+    definition = build_agent_definition(config, agent_id)
+    seen: dict[str, None] = {}
+    for table in definition.tables:
+        if not is_federated_dataset_id(table.dataset_id):
+            seen.setdefault(table.table_id, None)
+    return tuple(seen)
+
+
+def federated_table_refs(
+    config: LakehouseConfig,
+    agent_id: str = "froyo_lakehouse_analyst",
+) -> tuple[tuple[str, str], ...]:
+    """Return ``(dataset_id, table_id)`` pairs for federated Iceberg tables.
+
+    Federated tables use the P.C.N.T ``<catalog>.<namespace>`` dataset id. Their
+    schemas are owned by the external catalog, so BigQuery DDL (and therefore
+    schema-level column descriptions) cannot be written to them.
+
+    Args:
+        config: Resolved lakehouse configuration.
+        agent_id: Agent id used to build the definition (does not affect the
+            table set).
+
+    Returns:
+        Ordered, deduplicated ``(dataset_id, table_id)`` pairs.
+    """
+    definition = build_agent_definition(config, agent_id)
+    seen: dict[tuple[str, str], None] = {}
+    for table in definition.tables:
+        if is_federated_dataset_id(table.dataset_id):
+            seen.setdefault((table.dataset_id, table.table_id), None)
+    return tuple(seen)

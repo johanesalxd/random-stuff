@@ -193,6 +193,7 @@ adds the GE/OAuth settings).
 | `scripts/create_agent.py` | Idempotently creates/updates the CA API data agent over the six native + federated tables. Endpoint-aware for `global` vs regional locations. |
 | `scripts/register_ge_agent.py` | Fetches the A2A card (`getCard`), creates the OAuth authorization resource, and registers/updates the agent in GE. Also `--list` and `--delete`. |
 | `scripts/validate_agent.py` | Streams the storyline questions through the CA API `:chat` endpoint and prints text, generated SQL, and row counts. |
+| `scripts/enrich_bigquery_metadata.py` | **Showcase:** runs Dataplex data profile + data documentation scans on the agent's tables (see [Metadata enrichment](#metadata-enrichment-showcase)). Not required to run the agent. |
 
 ```bash
 # List agents registered in the GE app
@@ -241,15 +242,79 @@ uv run ruff format --check .
 uv run pytest
 ```
 
-## Parked: Dataplex metadata enrichment
+## Metadata enrichment (showcase)
 
-`bq_caapi_ge` ships an optional `enrich_bigquery_metadata.py` that runs Dataplex
-profile/documentation scans so descriptions land in Knowledge Catalog. It is
-intentionally **not** ported here — this demo already provides the equivalent
-Knowledge-Catalog path via [`gcp/06_knowledge_catalog.sh`](../gcp/06_knowledge_catalog.sh),
-and the agent's table/column context is supplied inline in
-`config/agent_definition.py`. Add enrichment later if you want catalog-persisted
-metadata.
+`scripts/enrich_bigquery_metadata.py` runs Dataplex **data profile** and **data
+documentation** scans over the agent's tables so BigQuery and Knowledge Catalog
+hold generated profiles, table/column descriptions, and dataset insights. It
+demonstrates for the selling motion that these components already exist — the
+only remaining step is wiring that metadata into the agent's context.
+
+> **Intentionally not wired in.** This script does **not** modify the agent's
+> `system_instruction` or `create_agent.py`. The point is to show that the
+> metadata is generated and available in BigQuery *regardless of whether the CA
+> agent consumes it today*. The CA API reads authored context (schema
+> descriptions/synonyms/example queries passed at agent-create time), not the
+> Knowledge Catalog directly — so surfacing catalog metadata to the agent is a
+> separate, deliberate step.
+
+### What works where (native vs cross-cloud)
+
+The scan resource is always addressed as
+`//bigquery.googleapis.com/projects/P/datasets/D/tables/T`, which drives what is
+possible on each side:
+
+| Capability | Native `froyo_demo_ue4.*` | AWS-federated `demo_glue_cat.*` |
+|---|---|---|
+| Data profile (null/distinct stats) | Yes | Yes (Iceberg REST Catalog profiling, `biglake.viewer`) |
+| Data documentation → Knowledge Catalog aspects | Yes | Read-only aspects only |
+| Lineage | Yes | Yes |
+| **Column descriptions written to the table schema** | Yes (`ALTER COLUMN SET OPTIONS`) | **No** — DDL is prohibited on the external Iceberg REST catalog schema |
+
+This is why, in the BigQuery console, a federated Glue-catalog table can show a
+profile, insights, and lineage but **no column descriptions**: writing
+descriptions to a table is DDL, and the federated Iceberg schema is owned by the
+external catalog (AWS Glue), so BigQuery can't modify it. That gap is the
+cross-cloud governance frontier the showcase makes visible. Accordingly, the
+script fully enriches the **native** tables (profile + documentation + publish
+back to the table so descriptions appear on the Studio **Insights** tab) and
+runs **profile-only** (best-effort) on the **federated** tables.
+
+### Prerequisites
+
+- Enable the API: `gcloud services enable dataplex.googleapis.com --project="$GCP_PROJECT"`.
+- Create the Knowledge Catalog service identity and grant it read (+ export)
+  access:
+  ```bash
+  gcloud beta services identity create --service=dataplex.googleapis.com \
+    --project="$GCP_PROJECT"
+  # Grant the returned service-<PROJECT_NUMBER>@... account:
+  #   roles/bigquery.dataViewer   (read native tables)
+  #   roles/biglake.viewer        (read federated Iceberg REST catalog tables)
+  ```
+- Operator (the ADC identity running the script): `roles/dataplex.dataScanAdmin`,
+  `roles/bigquery.dataEditor` (to publish documentation labels back to the
+  native tables), and `roles/bigquery.jobUser`.
+
+### Run it
+
+```bash
+# Preview every scan payload without calling Dataplex
+uv run python scripts/enrich_bigquery_metadata.py --dry-run
+
+# Create + run the scans and wait for completion
+GOOGLE_API_USE_CLIENT_CERTIFICATE=false \
+  uv run python scripts/enrich_bigquery_metadata.py --wait
+```
+
+Useful flags: `--tables ...` (limit native tables), `--skip-federated`,
+`--skip-profile`, `--skip-table-docs`, `--skip-dataset-docs`, `--no-publish`,
+`--profile-mode LIGHTWEIGHT`. After it finishes, view results on each native
+table's **Insights** tab in BigQuery Studio, or search Knowledge Catalog.
+
+> This script mirrors `bq_caapi_ge/scripts/enrich_bigquery_metadata.py` (same
+> generic Dataplex REST plumbing) so the two are easy to keep in sync; the
+> lakehouse-specific parts are marked in the source.
 
 ## License
 
