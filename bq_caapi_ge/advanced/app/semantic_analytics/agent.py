@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from google.adk.agents import LlmAgent
+from google.adk.tools.data_agent import DataAgentCredentialsConfig, DataAgentToolset
 from google.adk.workflow import Workflow
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -19,6 +20,11 @@ from semantic.catalog_runtime import (  # noqa: E402
     finish_clarification,
     load_broad_catalog_context,
     load_narrow_catalog_context,
+)
+from semantic.delegation_runtime import (  # noqa: E402
+    finish_data_agent_result,
+    route_grounding_fallback,
+    route_sql_fallback,
 )
 from semantic.runtime import (  # noqa: E402
     SEMANTIC_SELECTION_INSTRUCTION,
@@ -56,11 +62,44 @@ sql_generator = LlmAgent(
     after_model_callback=recover_invalid_sql,
 )
 
+# CA data-agent fallback (Phase 11). Targets the dataset-wide `semantic_ca` agent
+# and reads the per-user OAuth token from the same session-state key the executor
+# uses, so the CA call executes as the caller (Option X). No output_schema: this
+# is a tool-using agent whose final free text becomes the node output.
+_FALLBACK_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-id-placeholder")
+_FALLBACK_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+_SEMANTIC_CA_ID = os.getenv("AGENT_SEMANTIC_CA_ID", "semantic_ca_agent")
+_FALLBACK_TOKEN_KEY = os.getenv(
+    "ADK_OAUTH_TOKEN_STATE_KEY", "AUTH_RESOURCE_SEMANTIC_ANALYTICS"
+)
+_SEMANTIC_CA_NAME = (
+    f"projects/{_FALLBACK_PROJECT_ID}/locations/{_FALLBACK_LOCATION}"
+    f"/dataAgents/{_SEMANTIC_CA_ID}"
+)
+
+data_agent_fallback = LlmAgent(
+    name="data_agent_fallback",
+    model=os.getenv("MODEL_NAME", "gemini-3.5-flash"),
+    instruction=(
+        f"Use ask_data_agent with: {_SEMANTIC_CA_NAME}. Answer the user's "
+        "question and summarize the result clearly."
+    ),
+    tools=[
+        DataAgentToolset(
+            credentials_config=DataAgentCredentialsConfig(
+                external_access_token_key=_FALLBACK_TOKEN_KEY,
+            )
+        )
+    ],
+    description="Dataset-wide CA fallback for questions the guarded path cannot serve.",
+)
+
 
 def build_root_agent(
     *,
     selector_model=None,
     generator_model=None,
+    fallback_model=None,
 ):
     """Build the semantic-analytics Workflow with injectable model boundaries.
 
@@ -73,6 +112,9 @@ def build_root_agent(
     Args:
         selector_model: Optional model override for the semantic selector agent.
         generator_model: Optional model override for the SQL generator agent.
+        fallback_model: Optional model override for the CA fallback agent. Tests
+            inject a scripted model so the delegation branch runs without calling
+            live Conversational Analytics.
 
     Returns:
         A configured ``Workflow`` root agent.
@@ -90,6 +132,13 @@ def build_root_agent(
         )
         if generator_model is not None
         else sql_generator
+    )
+    fallback = (
+        data_agent_fallback.model_copy(
+            update={"model": fallback_model, "parent_agent": None}
+        )
+        if fallback_model is not None
+        else data_agent_fallback
     )
 
     return Workflow(
@@ -118,7 +167,15 @@ def build_root_agent(
                 assess_broad_context,
                 {
                     "grounded": enter_sql_generation,
+                    "clarify": route_grounding_fallback,
+                },
+            ),
+            (
+                route_grounding_fallback,
+                {
+                    "delegate": fallback,
                     "clarify": finish_clarification,
+                    "refuse": finish_sql_refusal,
                 },
             ),
             (enter_sql_generation, generator),
@@ -142,9 +199,17 @@ def build_root_agent(
                 repair_sql,
                 {
                     "retry": generator,
-                    "exhausted": finish_sql_refusal,
+                    "exhausted": route_sql_fallback,
                 },
             ),
+            (
+                route_sql_fallback,
+                {
+                    "delegate": fallback,
+                    "refuse": finish_sql_refusal,
+                },
+            ),
+            (fallback, finish_data_agent_result),
             (maybe_execute_sql, finish_sql_result),
         ],
     )
