@@ -165,3 +165,12 @@ synthesis and governance slide.
    reducing hallucination and over-broad access.
 5. **Allergen guardrail** — the soy-exclusion rule is encoded in the agent's
    instructions so customer-safety logic is applied consistently.
+6. **Automated metadata is already there** — BigQuery + Knowledge Catalog can
+   auto-generate data profiles, table/column documentation, and lineage for these
+   tables via Dataplex ([`scripts/enrich_bigquery_metadata.py`](README.md#metadata-enrichment-showcase)).
+   Show the **Insights** tab on a native table (full column descriptions) next to
+   a federated Glue-catalog table (profile, insights, and lineage, but no
+   schema-level column descriptions — the external Iceberg schema is read-only to
+   BigQuery DDL). The talking point: the components already exist; feeding this
+   catalog metadata into the agent's context is the remaining wiring, not new
+   engineering.
