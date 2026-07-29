@@ -56,59 +56,98 @@ sql_generator = LlmAgent(
     after_model_callback=recover_invalid_sql,
 )
 
-root_agent = Workflow(
-    name="semantic_analytics",
-    description="Grounds semantic context and generates guarded, read-only SQL.",
-    edges=[
-        ("START", load_semantic_registry, semantic_selector),
-        (semantic_selector, resolve_semantic_selection),
-        (
-            resolve_semantic_selection,
-            {
-                "semantic_narrow": load_narrow_catalog_context,
-                "catalog_broad": load_broad_catalog_context,
-            },
-        ),
-        (load_narrow_catalog_context, assess_context),
-        (
-            assess_context,
-            {
-                "sufficient": enter_sql_generation,
-                "insufficient": load_broad_catalog_context,
-            },
-        ),
-        (load_broad_catalog_context, assess_broad_context),
-        (
-            assess_broad_context,
-            {
-                "grounded": enter_sql_generation,
-                "clarify": finish_clarification,
-            },
-        ),
-        (enter_sql_generation, sql_generator),
-        (sql_generator, enforce_sql_policy),
-        (
-            enforce_sql_policy,
-            {
-                "allowed": dry_run_sql,
-                "rejected": repair_sql,
-            },
-        ),
-        (
-            dry_run_sql,
-            {
-                "valid": maybe_execute_sql,
-                "invalid": repair_sql,
-                "unauthorized": finish_sql_refusal,
-            },
-        ),
-        (
-            repair_sql,
-            {
-                "retry": sql_generator,
-                "exhausted": finish_sql_refusal,
-            },
-        ),
-        (maybe_execute_sql, finish_sql_result),
-    ],
-)
+
+def build_root_agent(
+    *,
+    selector_model=None,
+    generator_model=None,
+):
+    """Build the semantic-analytics Workflow with injectable model boundaries.
+
+    The default selector and generator agents are reused unless a replacement
+    model is supplied, in which case the corresponding agent is copied with the
+    scripted model detached from any parent. This lets hermetic tests drive the
+    full graph with a deterministic ``BaseLlm`` while production keeps the
+    configured Gemini model.
+
+    Args:
+        selector_model: Optional model override for the semantic selector agent.
+        generator_model: Optional model override for the SQL generator agent.
+
+    Returns:
+        A configured ``Workflow`` root agent.
+    """
+    selector = (
+        semantic_selector.model_copy(
+            update={"model": selector_model, "parent_agent": None}
+        )
+        if selector_model is not None
+        else semantic_selector
+    )
+    generator = (
+        sql_generator.model_copy(
+            update={"model": generator_model, "parent_agent": None}
+        )
+        if generator_model is not None
+        else sql_generator
+    )
+
+    return Workflow(
+        name="semantic_analytics",
+        description=("Grounds semantic context and generates guarded, read-only SQL."),
+        edges=[
+            ("START", load_semantic_registry, selector),
+            (selector, resolve_semantic_selection),
+            (
+                resolve_semantic_selection,
+                {
+                    "semantic_narrow": load_narrow_catalog_context,
+                    "catalog_broad": load_broad_catalog_context,
+                },
+            ),
+            (load_narrow_catalog_context, assess_context),
+            (
+                assess_context,
+                {
+                    "sufficient": enter_sql_generation,
+                    "insufficient": load_broad_catalog_context,
+                },
+            ),
+            (load_broad_catalog_context, assess_broad_context),
+            (
+                assess_broad_context,
+                {
+                    "grounded": enter_sql_generation,
+                    "clarify": finish_clarification,
+                },
+            ),
+            (enter_sql_generation, generator),
+            (generator, enforce_sql_policy),
+            (
+                enforce_sql_policy,
+                {
+                    "allowed": dry_run_sql,
+                    "rejected": repair_sql,
+                },
+            ),
+            (
+                dry_run_sql,
+                {
+                    "valid": maybe_execute_sql,
+                    "invalid": repair_sql,
+                    "unauthorized": finish_sql_refusal,
+                },
+            ),
+            (
+                repair_sql,
+                {
+                    "retry": generator,
+                    "exhausted": finish_sql_refusal,
+                },
+            ),
+            (maybe_execute_sql, finish_sql_result),
+        ],
+    )
+
+
+root_agent = build_root_agent()
