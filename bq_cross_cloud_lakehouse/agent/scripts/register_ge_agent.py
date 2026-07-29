@@ -155,6 +155,69 @@ def _request(
     return data
 
 
+# Maps the CA API's wrapper key to the A2A SecurityScheme discriminator "type".
+_SECURITY_SCHEME_TYPES = {
+    "oauth2SecurityScheme": "oauth2",
+    "apiKeySecurityScheme": "apiKey",
+    "httpAuthSecurityScheme": "http",
+    "openIdConnectSecurityScheme": "openIdConnect",
+    "mutualTlsSecurityScheme": "mutualTLS",
+}
+
+
+def normalize_agent_card(card: dict) -> dict:
+    """Normalize the CA API agent card to the A2A shape Gemini Enterprise accepts.
+
+    The CA API ``getCard`` endpoint returns two fields in a non-standard shape
+    that GE's A2A validator rejects:
+
+    1. ``security`` entries are wrapped as ``{"schemes": {"<name>": {"list":
+       [...]}}}``. A2A expects each entry to map a scheme name directly to a list
+       of scopes, i.e. ``{"<name>": ["scope", ...]}``.
+    2. Each ``securitySchemes`` value is wrapped as
+       ``{"oauth2SecurityScheme": {...}}`` without the discriminator ``type``.
+       A2A expects the scheme object inline with a ``type`` field, e.g.
+       ``{"type": "oauth2", "flows": {...}}``.
+
+    Args:
+        card: The agent card dict from the CA API.
+
+    Returns:
+        The same card dict with GE-compatible ``security`` and
+        ``securitySchemes`` fields.
+    """
+    security = card.get("security")
+    if isinstance(security, list):
+        normalized: list[dict] = []
+        for entry in security:
+            if isinstance(entry, dict) and "schemes" in entry:
+                fixed: dict[str, list[str]] = {}
+                for scheme_name, value in entry["schemes"].items():
+                    if isinstance(value, dict) and "list" in value:
+                        fixed[scheme_name] = value["list"]
+                    else:
+                        fixed[scheme_name] = value
+                normalized.append(fixed)
+            else:
+                normalized.append(entry)
+        card["security"] = normalized
+
+    schemes = card.get("securitySchemes")
+    if isinstance(schemes, dict):
+        fixed_schemes: dict[str, dict] = {}
+        for name, value in schemes.items():
+            if isinstance(value, dict) and len(value) == 1:
+                wrapper_key = next(iter(value))
+                scheme_type = _SECURITY_SCHEME_TYPES.get(wrapper_key)
+                if scheme_type and isinstance(value[wrapper_key], dict):
+                    fixed_schemes[name] = {"type": scheme_type, **value[wrapper_key]}
+                    continue
+            fixed_schemes[name] = value
+        card["securitySchemes"] = fixed_schemes
+
+    return card
+
+
 def get_agent_card(agent_id: str, token: str) -> dict:
     """Fetch the A2A agent card from the CA API ``getCard`` endpoint.
 
@@ -298,7 +361,7 @@ def register_agent(
         display_name: Optional display name override.
         force: If True, update (PATCH) when the agent already exists.
     """
-    card = get_agent_card(agent_id, token)
+    card = normalize_agent_card(get_agent_card(agent_id, token))
     derived_display_name = display_name or agent_id.replace("_", " ").title()
 
     payload: dict = {
