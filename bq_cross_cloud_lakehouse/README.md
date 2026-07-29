@@ -138,6 +138,17 @@ sleep 120                                   # let AWS IAM propagate
 `gcp/50_forecast_bqml.sh` — projected Midnight Swirl revenue per region, forecast
 by BQML on the AWS-resident `sales_history` table.
 
+## Conversational agent (Gemini Enterprise)
+
+[`agent/`](agent/) is a self-contained BigQuery **Conversational Analytics API**
+data agent that spans the native knowledge tables **and** the AWS-federated
+Iceberg tables in one query surface, published to **Gemini Enterprise**. It turns
+the Midnight Swirl storyline into a natural-language experience (allergen find →
+cross-cloud soy-safe target list → regional revenue). See
+[`agent/README.md`](agent/README.md) to deploy and
+[`agent/DEMO_RUNDOWN.md`](agent/DEMO_RUNDOWN.md) for the talk-track. Based on the
+`bq_caapi_ge` project.
+
 ## Data model
 
 | Layer | Location | Tables |

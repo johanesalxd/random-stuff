@@ -1,0 +1,11 @@
+# Local secrets: NEVER commit
+.env
+
+# Python tooling
+.venv/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# uv lockfile is intentionally committed for reproducible installs; keep it.
