@@ -67,6 +67,19 @@ if aws iam get-role --role-name "${AWS_ROLE_NAME}" >/dev/null 2>&1; then
   fi
   run aws iam delete-role --role-name "${AWS_ROLE_NAME}"
 fi
+
+READONLY_USER="${AWS_READONLY_USERNAME:-demo_user}"
+READONLY_POLICY="${AWS_READONLY_POLICY_NAME:-froyo_readonly_athena_glue_policy}"
+if aws iam get-user --user-name "${READONLY_USER}" >/dev/null 2>&1; then
+  if aws iam get-login-profile --user-name "${READONLY_USER}" >/dev/null 2>&1; then
+    run aws iam delete-login-profile --user-name "${READONLY_USER}"
+  fi
+  if aws iam get-user-policy --user-name "${READONLY_USER}" --policy-name "${READONLY_POLICY}" >/dev/null 2>&1; then
+    run aws iam delete-user-policy --user-name "${READONLY_USER}" --policy-name "${READONLY_POLICY}"
+  fi
+  run aws iam delete-user --user-name "${READONLY_USER}"
+fi
+
 run rm -rf .generated
 
 echo "AWS teardown ${MODE} complete."
