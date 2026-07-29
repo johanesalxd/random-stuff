@@ -26,8 +26,9 @@ guarded read-only SQL generation, independent source-scope policy, dry run, boun
 repair, and mode-gated execution run behind deterministic boundaries.**
 
 The roadmap is reordered to **11 -> 12 -> 10**. Phase 11 (CA data-agent fallback
-delegation) is the current focus: it completes the functional loop before Phase 12
-deploys it and Phase 10 evaluates it with Prism. Deferred items are the
+delegation) is **complete**: the functional loop now includes a deterministic,
+fail-closed fallback to the dataset-wide `semantic_ca` CA agent. Next is Phase 12
+(deployment), then Phase 10 (evaluation with Prism). Deferred items are the
 provider-backed live catalog and execution smoke tests, now folded into the Phase
 10 Prism-based evaluation.
 
@@ -604,7 +605,7 @@ deployment-registration concern, tracked with Phase 12.
 
 ### Phase 11: CA Data-Agent Fallback Delegation
 
-Status: **in progress (next)**. Sequencing note: the roadmap was reordered to
+Status: **complete**. Sequencing note: the roadmap was reordered to
 11 -> 12 -> 10. Phase 11 completes the functional loop (a governed fallback for
 questions the guarded custom path cannot answer), Phase 12 deploys it, and Phase 10
 then measures the result with Prism. This is a conscious decision to finish and
@@ -616,6 +617,15 @@ dataset; see below) and was smoke-tested live: a single-domain question (complet
 order count) and a cross-domain question (distribution centers plus distinct
 products) both generated and executed correct SQL under Application Default
 Credentials.
+
+Implemented: `semantic/delegation_runtime.py` (the pure `decide_fallback_route`,
+the `route_grounding_fallback` and `route_sql_fallback` gate nodes, and the
+`finish_data_agent_result` terminal), the `data_agent_fallback` `LlmAgent` plus
+`build_root_agent(fallback_model=...)` wiring in
+`advanced/app/semantic_analytics/agent.py`, the `SEMANTIC_FALLBACK_MODE` control
+surface, and `tests/test_semantic_delegation.py` (decision-matrix, plan/adc
+suppression, fail-closed-without-token, and delegated-provenance coverage; the live
+CA call is exercised only in a credentialed run).
 
 #### Current flow (before Phase 11)
 
@@ -990,8 +1000,8 @@ config/semantic_contracts/
 ```
 
 Add modules only when they own a clear reusable boundary. The catalog grounding
-boundary and the Phase 8 SQL policy, execution, and generation modules now exist.
-`delegation_runtime.py` is the planned Phase 11 module and does not exist yet.
+boundary, the Phase 8 SQL policy, execution, and generation modules, and the Phase
+11 `delegation_runtime.py` fallback module now exist.
 
 ## ADK 2.5 Compatibility Record
 
@@ -1057,7 +1067,7 @@ Historical commits (restore points):
 | 7 | Complete | Narrow and broad Knowledge Catalog grounding (Dataplex optional; live smoke test deferred to Phase 10) |
 | 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
 | 9 | Complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding) and hardened Flask/OAuth test harness (server-side tokens, state validation, refresh, session reuse, `web` extra) |
-| 11 | In progress | CA data-agent fallback delegation (`SEMANTIC_FALLBACK_MODE`, combined `semantic_ca` agent, plan-mode-safe fail-closed gating) |
+| 11 | Complete | CA data-agent fallback delegation (`SEMANTIC_FALLBACK_MODE`, dataset-wide `semantic_ca` agent, deterministic plan/adc-safe fail-closed gating) |
 | 12 | Planned | Deployment of `semantic_analytics` (after Phase 11; two-identity IAM model) |
 | 10 | Planned | Evaluation with Prism (final step; CA / GDA agents in Prism, custom path compared against CA scores) |
 
