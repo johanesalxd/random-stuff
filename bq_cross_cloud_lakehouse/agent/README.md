@@ -67,7 +67,7 @@ BigQuery/BigLake permissions.
 3. Tooling: [`uv`](https://docs.astral.sh/uv/), the `gcloud` CLI, and `curl`.
 4. APIs enabled: `geminidataanalytics.googleapis.com`,
    `discoveryengine.googleapis.com`, `bigquery.googleapis.com`,
-   `biglake.googleapis.com`.
+   `biglake.googleapis.com`, `cloudaicompanion.googleapis.com`.
 5. A Gemini Enterprise app and OAuth 2.0 client credentials (Client ID + Secret)
    with redirect URIs:
    - `https://vertexaisearch.cloud.google.com/oauth-redirect`
