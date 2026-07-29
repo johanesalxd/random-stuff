@@ -45,6 +45,7 @@ sequenceDiagram
 ./aws/10_s3_glue.sh                 # bucket + froyo_lakehouse Glue database
 ./aws/11_iceberg_tables_athena.sh   # global_loyalty + sales_history (Iceberg) + seed data
 ./aws/20_iam_role.sh
+./aws/21_readonly_user.sh           # read-only console user (demo_user) for Glue/Athena Web UI
 ```
 
 ## Phase 3 — Federation

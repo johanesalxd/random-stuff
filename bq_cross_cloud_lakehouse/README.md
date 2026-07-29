@@ -86,6 +86,7 @@ gcloud services enable --project="$GCP_PROJECT" \
 ./aws/10_s3_glue.sh
 ./aws/11_iceberg_tables_athena.sh
 ./aws/20_iam_role.sh
+./aws/21_readonly_user.sh                   # create read-only console user (demo_user) for Glue/Athena Web UI
 
 # GCP: create federated catalog, finalize AWS trust with the printed SA id
 SA_ID=$(./gcp/10_create_federated_catalog.sh)
@@ -109,14 +110,15 @@ sleep 120                                   # let AWS IAM propagate
 | 2 | `aws/10_s3_glue.sh` | Create S3 bucket + `froyo_lakehouse` Glue database | 10s |
 | 3 | `aws/11_iceberg_tables_athena.sh` | Create + seed `global_loyalty` + `sales_history` Iceberg tables | ~40s |
 | 4 | `aws/20_iam_role.sh` | Create IAM role (placeholder trust) + scoped policy | 10s |
-| 5 | `gcp/10_create_federated_catalog.sh` | Create catalog; prints BigLake SA id | 10s |
-| 6 | `aws/30_update_trust_policy.sh <SA_ID>` | Finalize AWS trust policy | 5s |
-| 7 | `gcp/20_enable_refresh.sh` | Enable 300s metadata refresh (after propagation) | 5s |
-| 8 | `gcp/30_verify.sh` | Confirm refresh + `froyo_lakehouse` tables queryable | ~2m |
-| 9 | `gcp/05_seed_native_bq.sh` | Seed native allergen/recipe/product knowledge | 15s |
-| 10 | `gcp/06_knowledge_catalog.sh` | **Optional:** PDF discovery + semantic inference | ~20m |
-| 11 | `gcp/40_query_froyo.sh` | Allergen find + cross-cloud target list | 15s |
-| 12 | `gcp/50_forecast_bqml.sh` | BQML `ARIMA_PLUS` Q3 revenue forecast | ~1m |
+| 5 | `aws/21_readonly_user.sh` | Create read-only IAM user (`demo_user`) for Athena & Glue Web UI | 5s |
+| 6 | `gcp/10_create_federated_catalog.sh` | Create catalog; prints BigLake SA id | 10s |
+| 7 | `aws/30_update_trust_policy.sh <SA_ID>` | Finalize AWS trust policy | 5s |
+| 8 | `gcp/20_enable_refresh.sh` | Enable 300s metadata refresh (after propagation) | 5s |
+| 9 | `gcp/30_verify.sh` | Confirm refresh + `froyo_lakehouse` tables queryable | ~2m |
+| 10 | `gcp/05_seed_native_bq.sh` | Seed native allergen/recipe/product knowledge | 15s |
+| 11 | `gcp/06_knowledge_catalog.sh` | **Optional:** PDF discovery + semantic inference | ~20m |
+| 12 | `gcp/40_query_froyo.sh` | Allergen find + cross-cloud target list | 15s |
+| 13 | `gcp/50_forecast_bqml.sh` | BQML `ARIMA_PLUS` Q3 revenue forecast | ~1m |
 
 > Script number prefixes group related steps (`aws/*`, `gcp/*`); the table above is
 > the actual execution order. `gcp/05` intentionally runs after `gcp/30` (federation

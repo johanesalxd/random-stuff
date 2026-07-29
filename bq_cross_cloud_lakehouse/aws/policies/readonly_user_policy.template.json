@@ -1,0 +1,73 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GlueCatalogReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetCatalog",
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetPartition",
+        "glue:GetPartitions",
+        "glue:BatchGetPartition"
+      ],
+      "Resource": [
+        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:catalog",
+        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:database/${GLUE_DATABASE}",
+        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:table/${GLUE_DATABASE}/*"
+      ]
+    },
+    {
+      "Sid": "AthenaQueryConsoleExecution",
+      "Effect": "Allow",
+      "Action": [
+        "athena:ListEngineVersions",
+        "athena:ListWorkGroups",
+        "athena:GetWorkGroup",
+        "athena:ListDatabases",
+        "athena:ListDataCatalogs",
+        "athena:GetDataCatalog",
+        "athena:ListTableMetadata",
+        "athena:GetTableMetadata",
+        "athena:BatchGetQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:GetQueryResultsStream",
+        "athena:ListQueryExecutions",
+        "athena:StartQueryExecution",
+        "athena:StopQueryExecution"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3WarehouseDataReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${S3_BUCKET}",
+        "arn:aws:s3:::${S3_BUCKET}/*"
+      ]
+    },
+    {
+      "Sid": "S3AthenaResultsReadWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${S3_BUCKET}",
+        "arn:aws:s3:::${S3_BUCKET}/athena-results/*"
+      ]
+    }
+  ]
+}
