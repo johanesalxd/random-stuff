@@ -27,10 +27,12 @@ repair, and mode-gated execution run behind deterministic boundaries.**
 
 The roadmap is reordered to **11 -> 12 -> 10**. Phase 11 (CA data-agent fallback
 delegation) is **complete**: the functional loop now includes a deterministic,
-fail-closed fallback to the dataset-wide `semantic_ca` CA agent. Next is Phase 12
-(deployment), then Phase 10 (evaluation with Prism). Deferred items are the
-provider-backed live catalog and execution smoke tests, now folded into the Phase
-10 Prism-based evaluation.
+fail-closed fallback to the dataset-wide `semantic_ca` CA agent. Phase 12
+(deployment) is **designed** (target ADR defaulting to Agent Engine, dual-identity
+IAM, GE authorization resource, config surface, and runbook); its implementation
+and Phase 10 (evaluation with Prism) remain. Deferred items are the provider-backed
+live catalog and execution smoke tests, now folded into the Phase 10 Prism-based
+evaluation.
 
 The executable `semantic_analytics` flow grounds selected context against the
 catalog through the adapter boundary and then generates guarded, read-only SQL:
@@ -243,9 +245,10 @@ request-scoped marker; the resolver then routes broad with
 errors are not converted into semantic misses. The resolver also retains
 defensive schema handling for malformed input delivered by non-LLM nodes.
 
-### Phase 6 Response
+### Semantic Selection Handoff
 
-Current terminal output is an internal catalog handoff, not an analytics answer:
+The selector emits an internal semantic-selection handoff payload consumed by the
+catalog grounding nodes; it is not the user-facing answer:
 
 ```text
 status: semantic_context_resolved |
@@ -274,8 +277,9 @@ catalog retrieval. `catalog_broad` means no useful context matched, selected
 context is incomplete, or schema-valid selected IDs failed deterministic
 validation. A semantic miss is not a refusal.
 
-At the current checkpoint, `next_step` is informational metadata. Both routes end
-in pass-through terminal functions; no catalog node consumes this field yet.
+`next_step` is informational provenance. Both routes continue into the catalog
+grounding nodes (`load_narrow_catalog_context` / `load_broad_catalog_context`); the
+Phase 6 pass-through terminals were retired from the active graph.
 
 Expanded selected context is serialized as deterministic compact JSON and limited
 to 100,000 UTF-8 bytes after required dimensions, relationships, tables, and
@@ -370,18 +374,18 @@ searchable data sources:
   `project.dataset.table` before catalog access
 
 Broad results must match the configured project and dataset allowlists. Phase 8
-source policy will use the exact sources returned by the selected catalog route;
-it must not infer permission from the compute project.
+source policy uses the exact sources returned by the selected catalog route; it does
+not infer permission from the compute project.
 
-Proposed nodes:
+Grounding nodes:
 
 1. `load_narrow_catalog_context`
 2. `assess_context`
 3. `load_broad_catalog_context`
 4. `assess_broad_context`
-5. terminal clarification or Phase 8 SQL handoff
+5. terminal clarification or SQL handoff
 
-The first Phase 7 graph change replaces the current pass-through branch targets:
+The active grounding wiring is:
 
 ```text
 semantic_narrow -> load_narrow_catalog_context -> assess_context
@@ -389,10 +393,9 @@ catalog_broad   -> load_broad_catalog_context  -> assess_broad_context
 assess_context insufficient -> load_broad_catalog_context
 ```
 
-Each loader receives the complete Phase 6 handoff payload. Narrow loading uses
+Each loader receives the complete selection handoff payload. Narrow loading uses
 `semantic_source_names`; broad loading uses the preserved question and configured
-allowlists. The pass-through terminal functions can be removed after both routes
-have equivalent integration coverage.
+allowlists.
 
 Context sufficiency must report:
 
@@ -415,44 +418,18 @@ Exit criteria:
 - metadata size and result counts are bounded
 - both routes are tested without SQL execution
 
-### Resume Here
-
-Phase 6 implementation closed at commit `9a95d5b`. The active graph is
-`advanced/app/semantic_analytics/agent.py`; it now routes through the catalog
-grounding nodes in `semantic/catalog_runtime.py` and terminates at the grounded
-SQL handoff or clarification.
-
-Phase 7 grounding is implemented:
-
-1. Live Knowledge Catalog schema retrieval via the BigQuery metadata API
-   (`get_table` schema and description). **(done)**
-2. Typed, default-deny parsing for `CATALOG_ALLOWED_PROJECTS` and
-   `CATALOG_ALLOWED_DATASETS`, kept separate from the compute project. **(done)**
-3. Reusable catalog adapter boundary (`CatalogAdapter`) plus the live
-   `BigQueryCatalogAdapter`; unit tests inject fakes and make no live calls. **(done)**
-4. Replace the two pass-through branch targets with narrow and broad loading nodes.
-   **(done)**
-5. Deterministic sufficiency routing with bounded, redacted, timestamped metadata
-   payloads. **(done)**
-6. Optional `DataplexCatalogAdapter` (behind `CATALOG_DATAPLEX_ENABLED`) adding
-   Dataplex Catalog search and structural, value-free profile enrichment, both
-   re-clamped to the allowlists and falling back to name-match on error. **(done)**
+### Provenance and boundary
 
 Structural enrichment surfaces only null ratio, distinct ratio, a derived
-candidate-key flag, and the presence of a generated insight aspect. Actual data
+candidate-key flag, and the presence of a generated insight aspect; actual data
 values (samples, min, max, top-N, averages, quantiles) are never read or surfaced,
 satisfying the redaction exit criterion. The `broad` payload records
 `catalog_discovery_backend` (`dataplex`, `name_match`, or `name_match_fallback`)
 for provenance and Phase 10 evaluation.
 
-Remaining Phase 7 work:
-
-- add the provider-backed live smoke test under Phase 10 evaluation (the only
-  deferred item)
-
-Phase 7 must stop before SQL generation or execution. Do not reconnect the
-historical grounding, compiler, executor, or join-planner modules to the active
-workflow merely because similarly named code already exists.
+Do not reconnect the historical grounding, compiler, executor, or join-planner
+modules to the active workflow because similarly named code remains in git history;
+the import-boundary check under "Verification Strategy" enforces this.
 
 ## Phase 8: SQL Generation And Guarded Developer Execution
 
@@ -527,7 +504,7 @@ maybe_execute_sql -> finish_sql_result
 - SQL, policy, dry-run, and execution provenance are returned
 - all paths are tested without live calls
 
-### Phase 9: User Authentication And Local UX
+## Phase 9: User Authentication And Local UX
 
 Status: **complete.** Split into two slices so the functional per-user execution
 gap landed first (hermetic, high value) and the dev-harness hardening second.
@@ -538,7 +515,7 @@ The semantic workflow currently executes only with Application Default Credentia
 function with no `ctx`/session access). "Per-user execution" is therefore a real
 functional gap distinct from the Flask harness polish.
 
-#### Slice 1: User-token execution in the workflow (functional core) — implemented
+### Slice 1: User-token execution in the workflow (functional core) — implemented
 
 - `semantic/execution.py`: `build_sql_executor(*, access_token=None, auth_mode=None)`
   builds `google.oauth2.credentials.Credentials(token=...)` for injection into
@@ -573,7 +550,7 @@ The full-user-scoped alternative (threading the token into the catalog and Datap
 clients, which requires the token to carry `cloud-platform` for Dataplex) is
 recorded as a future option, not implemented.
 
-#### Slice 2: Flask harness hardening, dependencies, and provenance UI — implemented
+### Slice 2: Flask harness hardening, dependencies, and provenance UI — implemented
 
 `advanced/test_web/app.py` was hardened from a legacy development harness (it is
 still a dev harness, not a production identity service):
@@ -599,11 +576,11 @@ still a dev harness, not a production identity service):
   require the `web` extra and skip otherwise; live user-token integration coverage
   is exercised under Phase 10
 
-Deferred to a later step: a distinct Gemini Enterprise authorization resource for
-`semantic_analytics` (the 1:1 agent-to-authorization-resource mapping) is a
-deployment-registration concern, tracked with Phase 12.
+A distinct Gemini Enterprise authorization resource for `semantic_analytics` (the
+1:1 agent-to-authorization-resource mapping) is a deployment-registration concern;
+it is designed in Phase 12 under "Gemini Enterprise authorization resource".
 
-### Phase 11: CA Data-Agent Fallback Delegation
+## Phase 11: CA Data-Agent Fallback Delegation
 
 Status: **complete**. Sequencing note: the roadmap was reordered to
 11 -> 12 -> 10. Phase 11 completes the functional loop (a governed fallback for
@@ -627,7 +604,7 @@ surface, and `tests/test_semantic_delegation.py` (decision-matrix, plan/adc
 suppression, fail-closed-without-token, and delegated-provenance coverage; the live
 CA call is exercised only in a credentialed run).
 
-#### Current flow (before Phase 11)
+### Current flow (before Phase 11)
 
 ```mermaid
 flowchart TD
@@ -661,7 +638,7 @@ fallback triggers:
 - `finish_sql_refusal` = an error occurred (policy rejected the SQL, the dry run
   failed, or bounded repair was exhausted).
 
-#### Phase 11 flow (deterministic fallback)
+### Phase 11 flow (deterministic fallback)
 
 Phase 11 intercepts exactly those two deterministic exits with gate nodes; nothing
 else in the flow changes.
@@ -684,7 +661,7 @@ execution/auth mode. The model never chooses to delegate. The CA agent uses an L
 only internally to author its own SQL, which is CA's concern and outside the custom
 guardrails.
 
-#### Deterministic decision table
+### Deterministic decision table
 
 `decide_fallback_route(mode, execution_mode, auth_mode, has_token, trigger)`:
 
@@ -707,7 +684,7 @@ Identity choice ("Option X"): delegation runs only under the caller's OAuth toke
 running CA as the shared service account. This keeps CA data access strictly
 per-user, consistent with the row-data-vs-metadata split below.
 
-#### Identity and OAuth scope model
+### Identity and OAuth scope model
 
 Two independent axes are easy to conflate. Identity decides whose IAM applies;
 OAuth scope decides how broad the user's token is.
@@ -744,7 +721,7 @@ wider `cloud-platform` scope from the ADK harness is used as-is; narrowing a
 custom-path-only deployment to `auth/bigquery` (and, if ever needed, a subagent
 model for a cleaner handover) is a future refinement, not part of Phase 11.
 
-#### Configuration surface
+### Configuration surface
 
 - `SEMANTIC_FALLBACK_MODE=kc|data_agent|refuse` (default `kc`). `kc` keeps today's
   clarify/refuse terminals, `refuse` always refuses, and `data_agent` delegates to
@@ -754,7 +731,7 @@ model for a cleaner handover) is a future refinement, not part of Phase 11.
   inventory agents), created idempotently by `scripts/admin_tools.py` from its
   `config/agent_definitions.py` entry.
 
-#### Transport, input, and provenance
+### Transport, input, and provenance
 
 - Delegation uses an ADK `LlmAgent` with `DataAgentToolset` (the orders/inventory
   pattern), targeting `dataAgents/{AGENT_SEMANTIC_CA_ID}` and reading the per-user
@@ -775,18 +752,18 @@ model for a cleaner handover) is a future refinement, not part of Phase 11.
   source-scope) do not apply, and provenance is limited to what CA returns.
   CA-generated SQL is not modified or re-executed by the custom path.
 
-#### Planned modules and nodes
+### Modules and nodes
 
-- `semantic/delegation_runtime.py` (new, deterministic, no `data_agent` import):
+- `semantic/delegation_runtime.py` (deterministic, no `data_agent` import):
   `resolve_fallback_mode`, the pure `decide_fallback_route`, the
   `route_grounding_fallback` and `route_sql_fallback` gate nodes, and the
   `finish_data_agent_result` terminal.
 - `advanced/app/semantic_analytics/agent.py`: `build_root_agent(*, ...,
   fallback_model=None)` (injectable models for hermetic tests) plus the
-  `data_agent_fallback` `LlmAgent` and the two new gate edges. The agent is
-  embedded in the workflow, not a standalone deployable package.
+  `data_agent_fallback` `LlmAgent` and the two gate edges. The agent is embedded in
+  the workflow, not a standalone deployable package.
 
-#### Exit criteria
+### Exit criteria
 
 - default (`kc`) and `refuse` behavior is unchanged
 - delegation runs only under a user token; it is suppressed in plan mode and in
@@ -798,15 +775,69 @@ model for a cleaner handover) is a future refinement, not part of Phase 11.
 - routing, gating, and provenance are tested hermetically with a scripted model;
   the live CA call is exercised only in a credentialed run
 
-### Phase 12: Deployment
+## Phase 12: Deployment
 
-Sequencing: after Phase 11. Defer deployment of `semantic_analytics` until the
-functional loop (guarded custom path plus the CA fallback rung) is complete. Select
-Agent Runtime or Cloud Run based on verified Workflow, OAuth, observability, and
-operational behavior. Revisit Agents CLI deployment, evaluation, and observability
-assets only after selecting the deployment target.
+Status: **design (next); not yet implemented**. Sequencing: after Phase 11. Deploy
+`semantic_analytics` only once the functional loop (guarded custom path plus the CA
+fallback rung) is complete. This section is the deployment design; the deployment
+scripts and target-confirming spike are the implementation work that follows.
 
-#### Identity and IAM model
+### Target selection (ADR): default Vertex AI Agent Engine
+
+Two targets are viable. The default is **Vertex AI Agent Engine / Agent Runtime**,
+with Cloud Run as the self-hosted alternative.
+
+| Criterion | Agent Engine (default) | Cloud Run (alternative) |
+|---|---|---|
+| Workflow runtime | Managed ADK runtime; deploy the embedded agent directly | Container you build and operate |
+| End-user token path | Gemini Enterprise injects the OAuth token via the authorization resource | Flask harness (Phase 9 Slice 2) runs the OAuth flow |
+| ADC identity | Reasoning Engine service agent or a custom deploy-time SA | Service runtime SA (assign a dedicated one) |
+| Observability | Built-in Agent Engine tracing/logging | You wire Cloud Logging/Trace |
+| Ops model | Fully managed, autoscaled | You own scaling, revisions, health |
+| GE integration | Native (the intended production surface) | Requires the harness as a token broker |
+
+Agent Engine is the default because the production surface is Gemini Enterprise:
+GE's authorization resource injects the per-user token into the same session-state
+key the workflow already reads (`ADK_OAUTH_TOKEN_STATE_KEY`), the managed runtime
+removes container and scaling ownership, and tracing is built in. Cloud Run remains
+the right choice for self-hosting outside GE, reusing the existing Flask harness as
+the OAuth token broker.
+
+Before locking the target, run a short spike that confirms, on Agent Engine: ADK
+`Workflow` execution parity with local, the GE token landing in
+`ADK_OAUTH_TOKEN_STATE_KEY`, trace visibility for the node graph, and the SA
+fail-closed posture (no `dataViewer`). If the spike fails any of these, fall back to
+Cloud Run without changing engine code — the workflow is deployment-agnostic because
+both targets converge on the same token state key.
+
+### Deployment architecture
+
+Agent Engine (default), behind Gemini Enterprise:
+
+```mermaid
+flowchart TD
+  User[User] --> GE[Gemini Enterprise]
+  GE -->|injects user OAuth token| AE[Agent Engine: semantic_analytics Workflow]
+  AE -->|user token in ADK_OAUTH_TOKEN_STATE_KEY| ROW[BigQuery row data / CA fallback]
+  AE -->|ADC = Reasoning Engine SA| META[BigQuery schema + Dataplex metadata]
+  GE -. authorization resource 1:1 .- AUTH[(OAuth client + scope)]
+```
+
+Cloud Run (alternative), self-hosted with the Flask harness:
+
+```mermaid
+flowchart TD
+  User[User] --> Flask[Flask OAuth harness]
+  Flask -->|writes token to ADK_OAUTH_TOKEN_STATE_KEY| CR[Cloud Run: semantic_analytics Workflow]
+  CR -->|user token| ROW[BigQuery row data / CA fallback]
+  CR -->|ADC = runtime SA| META[BigQuery schema + Dataplex metadata]
+```
+
+Both diagrams preserve the Phase 11 row-data-vs-metadata split: row data (custom
+`execute_sql` and the CA fallback) runs under the caller's token; schema and
+Dataplex metadata run under the deployment SA (ADC).
+
+### Identity and IAM model
 
 Under the Phase 9 Slice 1 split (Option A), a deployment runs under two identities:
 metadata grounding uses the deployment service account (ADC), and SQL execution
@@ -824,14 +855,6 @@ targets:
   (`service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com`) or a
   custom service account supplied at deploy time.
 
-The end-user token source differs by target but lands in the same session-state key
-the workflow reads (`ADK_OAUTH_TOKEN_STATE_KEY`, default
-`AUTH_RESOURCE_SEMANTIC_ANALYTICS`), so engine code is deployment-agnostic:
-
-- Cloud Run with the Flask harness: the local OAuth flow (Slice 2) writes the token.
-- Agent Engine behind Gemini Enterprise: GE injects the token via the authorization
-  resource (the 1:1 agent-to-authorization-resource mapping).
-
 IAM grants:
 
 - Deployment service account (metadata only, no row data):
@@ -842,13 +865,116 @@ IAM grants:
 - End user (via the OAuth token): `roles/bigquery.jobUser` on the compute project
   (`GOOGLE_CLOUD_PROJECT`, where jobs are created and bytes billed) and
   `roles/bigquery.dataViewer` on the data they may read. OAuth scope
-  `.../auth/bigquery` is sufficient under Option A.
+  `.../auth/bigquery` is sufficient for the custom path under Option A; the CA
+  fallback rung additionally requires `cloud-platform` (see Phase 11).
 
 Production requirement: any multi-user deployment must set `SQL_AUTH_MODE=user`.
 Leaving it at the `adc` default runs every caller's query as the shared service
 account and bypasses per-user data controls.
 
-### Phase 10: Evaluation (final step, with Prism)
+### Gemini Enterprise authorization resource
+
+This folds in the item deferred from Phase 9 Slice 2. Gemini Enterprise binds each
+registered agent to exactly one authorization resource (1:1), which holds the OAuth
+client and scopes GE uses to mint the per-user token it injects at call time.
+
+- `semantic_analytics` needs its own authorization resource, distinct from the
+  `orders` and `inventory` baseline agents. Reusing another agent's resource is not
+  supported and conflates identities.
+- The OAuth client is a standard GCP OAuth 2.0 client; the authorization resource
+  references it and declares the scopes. Because the CA fallback rung uses the
+  CA / GDA API, the scope set must include `cloud-platform` (a superset of
+  `.../auth/bigquery`); the Flask harness already requests `cloud-platform`.
+- GE writes the minted token into the session such that it arrives at
+  `ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`). Keeping
+  the authorization resource id aligned with this key avoids drift between the GE
+  registration and the workflow's token lookup.
+- Registration is a deployment concern, not engine code. The engine reads only the
+  state key; it never learns whether the token came from GE or the Flask harness.
+
+### Deployment configuration surface
+
+Set at deploy time; values shared across targets unless noted.
+
+| Variable | Purpose | Deploy note |
+|---|---|---|
+| `GOOGLE_CLOUD_PROJECT` | Compute/billing project for jobs | Required |
+| `GOOGLE_CLOUD_LOCATION` | Vertex/model region | Required |
+| `BIGQUERY_LOCATION` | BigQuery job location | Match data location |
+| `SQL_AUTH_MODE` | `user` binds execution to the caller token | **`user` for multi-user** |
+| `SQL_EXECUTION_MODE` | `plan` (dry-run only) or `developer` (execute) | `developer` to serve answers |
+| `ADK_OAUTH_TOKEN_STATE_KEY` | Session-state key GE / harness writes the token to | Align with GE auth resource |
+| `CATALOG_ALLOWED_PROJECTS` | Broad-search project allowlist | Fail-closed if unset |
+| `CATALOG_ALLOWED_DATASETS` | Broad-search `project.dataset` allowlist | Fail-closed if unset |
+| `CATALOG_DATAPLEX_ENABLED` | Opt into Dataplex search/profile | Adds `catalogViewer` grant |
+| `SEMANTIC_FALLBACK_MODE` | `kc` / `data_agent` / `refuse` | `data_agent` to enable the fallback rung |
+| `AGENT_SEMANTIC_CA_ID` | Dataset-wide CA agent id | Needed when fallback is `data_agent` |
+| `SEMANTIC_CONTRACT_PATH` | Semantic registry file/dir | Defaults to `config/semantic_contracts/` |
+| `SQL_MAX_BYTES_BILLED`, `SQL_MAX_RESULT_ROWS` | Cost/row caps | Enforced pre-execution |
+| `FLASK_SECRET_KEY`, `COOKIE_SECURE` | Cloud Run harness session security | Cloud Run only |
+| `GEMINI_APP_ID` and GE registration inputs | GE app + authorization resource | Agent Engine / GE only |
+
+### Packaging
+
+The agent is embedded in the `semantic_analytics` workflow, not a standalone
+deployable package. Packaging supplies an entrypoint that builds the root agent
+(`build_root_agent(...)`) and depends on the `advanced` extra; the Cloud Run harness
+additionally needs the `web` extra. Pin ADK to the lock-resolved version and rerun
+the compatibility suite after any ADK upgrade.
+
+### Deployment runbook
+
+Code-free ordered steps; the implementation phase turns these into scripts.
+
+Preflight (both targets):
+
+1. Confirm the deployment SA holds `metadataViewer` (and `catalogViewer` only if
+   Dataplex is enabled) and **not** `dataViewer` on source data.
+2. Confirm `SQL_AUTH_MODE=user` for any multi-user deployment.
+3. Confirm the CA data agent (`AGENT_SEMANTIC_CA_ID`) exists if
+   `SEMANTIC_FALLBACK_MODE=data_agent`.
+
+Agent Engine (default):
+
+4. Create/confirm the OAuth client and the `semantic_analytics` GE authorization
+   resource (scopes include `cloud-platform`).
+5. Deploy the workflow to Agent Engine with the config surface above.
+6. Register the agent in Gemini Enterprise bound to its authorization resource.
+
+Cloud Run (alternative):
+
+4. Assign a dedicated runtime SA with the metadata-only grants.
+5. Build and deploy the container (`advanced` + `web`), setting `FLASK_SECRET_KEY`
+   and `COOKIE_SECURE`.
+6. Point the Flask harness OAuth client at the `cloud-platform` scope.
+
+Post-deploy smoke checks (both):
+
+7. Metadata grounding succeeds under the SA.
+8. Execution succeeds under a user token and fails closed with no token in
+   `user` mode.
+9. In `plan` mode the CA fallback is suppressed (never executes).
+
+### Observability and operations
+
+"Verified operational behavior" for the target decision means: the node graph is
+traceable end to end, per-request provenance (reasoning path, auth block, execution
+stats) is logged without row data or tokens, and errors distinguish refusals from
+provider failures. Agent Engine provides tracing natively; Cloud Run must wire Cloud
+Logging and Trace to reach parity.
+
+### Exit criteria
+
+- deployment target selected and justified, with the spike passed
+- the two-identity model verified end to end (metadata under SA, row data under the
+  user token) on the chosen target
+- the `semantic_analytics` GE authorization resource created and bound 1:1
+- the deployment SA proven fail-closed (no `dataViewer`; accidental ADC execution
+  cannot read row data)
+- multi-user deployments enforce `SQL_AUTH_MODE=user`
+- the runbook validated by a real deploy and the post-deploy smoke checks pass
+
+## Phase 10: Evaluation (final step, with Prism)
 
 Status: **planned (final step)**. Sequencing: runs after Phases 11 and 12 so the
 complete, deployed functional loop is what gets measured.
@@ -920,7 +1046,7 @@ organization-wide search by default.
 
 ### Generic SQL Guardrails
 
-Before execution, future safeguards must verify:
+Before execution, the SQL guardrails must verify:
 
 - the request is a BigQuery read query
 - no DDL or DML is present
@@ -948,7 +1074,8 @@ baselines. `DataAgentToolset` exposes agent discovery and `ask_data_agent`.
 documented pre-execution approval boundary for BigQuery sources.
 
 Therefore `DataAgentToolset` is not the SQL planning tool for the custom path. It
-remains a comparison baseline and possible future governed delegation adapter.
+remains a comparison baseline; Phase 11 also uses it as the governed delegation
+adapter for the deterministic CA fallback.
 
 ### Custom Workflow
 
@@ -1025,7 +1152,7 @@ The installed SDK behavior is covered by focused tests:
 - `GoogleTool.run_async(..., tool_context=ctx)` receives workflow state
 
 The compatibility test uses a dynamic child node, not a SQL retry loop. Bounded
-SQL correction remains Phase 8 work.
+SQL correction shipped in Phase 8 (`repair_sql`).
 
 ## Decision History
 
@@ -1068,7 +1195,7 @@ Historical commits (restore points):
 | 8 | Complete | Guarded read-only SQL generation and execution (ADK execute_sql; live execution smoke test deferred to Phase 10) |
 | 9 | Complete | Per-user execution via `SQL_AUTH_MODE=user` (fail-closed OAuth token binding) and hardened Flask/OAuth test harness (server-side tokens, state validation, refresh, session reuse, `web` extra) |
 | 11 | Complete | CA data-agent fallback delegation (`SEMANTIC_FALLBACK_MODE`, dataset-wide `semantic_ca` agent, deterministic plan/adc-safe fail-closed gating) |
-| 12 | Planned | Deployment of `semantic_analytics` (after Phase 11; two-identity IAM model) |
+| 12 | Design | Deployment of `semantic_analytics` (design complete: Agent Engine default, two-identity IAM, GE authorization resource, config surface, runbook; implementation pending) |
 | 10 | Planned | Evaluation with Prism (final step; CA / GDA agents in Prism, custom path compared against CA scores) |
 
 ### Certification
@@ -1164,13 +1291,12 @@ Required checks across the roadmap:
 - What metadata must be omitted because it is sensitive, noisy, or too large?
 - When should broad discovery clarify rather than choose among plausible sources?
 - What structured SQL output best supports source validation and dry-run repair?
-- Which execution boundary exposes user credentials, dry-run control, bytes, and
-  job IDs reliably?
 - What evaluation threshold demonstrates improvement over KC-only and CA paths?
 - Does the CA fallback rung benefit enough from grounded context (Phase 10 arm 4)
   to justify injecting semantic and narrow-catalog context, or does raw-question
   delegation suffice?
-- Which deployment target best supports ADK Workflow and OAuth behavior?
+- Will the deployment spike confirm Agent Engine (the Phase 12 default) for ADK
+  Workflow and OAuth, or force the Cloud Run fallback?
 
 BigQuery Graph may be evaluated later for explicit multi-hop relationship work.
 It is not a dependency for the initial semantic-first analytics workflow.
