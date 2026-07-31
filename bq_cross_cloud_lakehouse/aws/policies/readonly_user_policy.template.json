@@ -6,18 +6,23 @@
       "Effect": "Allow",
       "Action": [
         "glue:GetCatalog",
+        "glue:GetCatalogs",
         "glue:GetDatabase",
         "glue:GetDatabases",
         "glue:GetTable",
         "glue:GetTables",
         "glue:GetPartition",
         "glue:GetPartitions",
-        "glue:BatchGetPartition"
+        "glue:BatchGetPartition",
+        "glue:SearchTables",
+        "glue:GetTableVersions",
+        "glue:GetUserDefinedFunctions"
       ],
       "Resource": [
-        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:catalog",
-        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:database/${GLUE_DATABASE}",
-        "arn:aws:glue:${AWS_REGION}:${AWS_ACCOUNT_ID}:table/${GLUE_DATABASE}/*"
+        "arn:aws:glue:*:${AWS_ACCOUNT_ID}:catalog",
+        "arn:aws:glue:*:${AWS_ACCOUNT_ID}:database/*",
+        "arn:aws:glue:*:${AWS_ACCOUNT_ID}:table/*/*",
+        "arn:aws:glue:*:${AWS_ACCOUNT_ID}:userDefinedFunction/*"
       ]
     },
     {
@@ -38,7 +43,18 @@
         "athena:GetQueryResultsStream",
         "athena:ListQueryExecutions",
         "athena:StartQueryExecution",
-        "athena:StopQueryExecution"
+        "athena:StopQueryExecution",
+        "athena:ListNamedQueries",
+        "athena:GetNamedQuery"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3ConsoleListAllBuckets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation"
       ],
       "Resource": "*"
     },
