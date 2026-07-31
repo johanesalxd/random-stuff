@@ -1,6 +1,8 @@
 # ---- Local secrets / real values: NEVER commit ----
 .env
 config.local.env
+cookies.txt
+**/cookies.txt
 
 # Re-include the safe template (root .gitignore's *.env rule would otherwise hide it)
 !config.example.env

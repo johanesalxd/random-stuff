@@ -65,42 +65,115 @@ flowchart LR
 
 ## Quick start
 
-Prereqs: `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`, an
-allowlisted and billed GCP project, and temporary AWS credentials from AWS IAM
-Identity Center (`aws configure sso` then `aws sso login`), or any `~/.aws`
-profile. The GCP operator needs BigLake Admin, BigQuery Data Editor,
-BigQuery Job User, Dataplex DataScan Editor, Dataplex Catalog Editor, and Service
-Usage Admin. Query users need BigLake Viewer, BigQuery Data Viewer, and BigQuery
-Job User. Full run is approximately 10–15 minutes. Cost is less than $5.
+The demo can be run in two modes depending on whether you have an active AWS account:
+- **Option A: Full Cross-Cloud Demo (With AWS)**: Federates S3/Glue Apache Iceberg tables in AWS into BigQuery using GCP BigLake.
+- **Option B: Native GCP Demo (Without AWS)**: Seeds mock AWS tables natively in BigQuery for quick GCP-only sandbox testing.
 
-```bash
-cd bq_cross_cloud_lakehouse
-cp config.example.env config.local.env     # edit with your real values
-source config.local.env
-aws sso login                              # temporary creds (after: aws configure sso)
-gcloud services enable --project="$GCP_PROJECT" \
-  biglake.googleapis.com bigquery.googleapis.com
+You can deploy either option **automatically** using the master scripts, or **manually** step-by-step to see how each phase is constructed.
 
-# AWS: bucket + Glue DB + two Iceberg tables (global_loyalty, sales_history) + IAM role
-./aws/01_verify.sh
-./aws/10_s3_glue.sh
-./aws/11_iceberg_tables_athena.sh
-./aws/20_iam_role.sh
-./aws/21_readonly_user.sh                   # create read-only console user (demo_user) for Glue/Athena Web UI
+### Prerequisites
 
-# GCP: create federated catalog, finalize AWS trust with the printed SA id
-SA_ID=$(./gcp/10_create_federated_catalog.sh)
-./aws/30_update_trust_policy.sh "$SA_ID"
-sleep 120                                   # let AWS IAM propagate
+- **GCP Project**: A billed GCP project with permissions to create BigQuery datasets, Dataplex catalogs, and deploy to Cloud Run.
+- **CLIs & Python**: `gcloud` CLI (with `alpha` component), `bq` CLI, and `python3` (with `uv` or `pip`) installed locally.
+- **AWS Credentials (For Option A only)**: AWS CLI v2 configured with active credentials (e.g. `aws sso login` or standard profile keys) and permissions to create S3 buckets, Glue databases, Athena tables, and IAM OIDC roles.
+- **Google OAuth Client Credentials (Optional)**: If you want to test actual user authentication (logging in with personal Google accounts), you must create an OAuth Client ID in the GCP console (under *APIs & Services > Credentials*) and add the client ID and secret to `agent/.env` (based on `agent/.env.example`). If omitted, the Web UI runs in **auto-login bypass mode**, which redirects to a mock user identity and executes BigQuery queries using the Cloud Run Service Account credentials (no configuration required).
 
-# GCP: refresh, verify, seed native knowledge, then run the demo
-./gcp/20_enable_refresh.sh
-./gcp/30_verify.sh                          # expect namespace: froyo_lakehouse + both tables
-./gcp/05_seed_native_bq.sh                  # allergen/recipe/product knowledge (deterministic)
-# ./gcp/06_knowledge_catalog.sh             # OPTIONAL: preview semantic inference
-./gcp/40_query_froyo.sh                     # allergen find + cross-cloud target list
-./gcp/50_forecast_bqml.sh 92                # BQML ARIMA_PLUS Q3 forecast on AWS data
-```
+---
+
+### Option A: Full Cross-Cloud Setup (With AWS)
+
+This setup establishes keyless OIDC catalog federation between BigQuery (GCP) and Glue/S3 (AWS).
+
+#### Option A1: Automated Setup
+1. Copy the configuration template and populate it with your GCP and AWS project details (fill in actual IDs/regions):
+   ```bash
+   cp config.example.env config.local.env
+   ```
+2. Authenticate to your cloud environments:
+   ```bash
+   aws sso login   # or ensure ~/.aws/credentials are active
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+3. Run the master deployment script:
+   ```bash
+   ./deploy_demo.sh
+   ```
+
+#### Option A2: Step-by-Step Manual Setup
+If you want to observe each phase of the OIDC setup:
+1. Configure and authenticate as shown in Option A1.
+2. Enable GCP BigLake & BigQuery APIs:
+   ```bash
+   source config.local.env
+   gcloud services enable --project="$GCP_PROJECT" \
+     biglake.googleapis.com bigquery.googleapis.com
+   ```
+3. Provision the AWS storage, database, Iceberg tables, and IAM role:
+   ```bash
+   ./aws/01_verify.sh
+   ./aws/10_s3_glue.sh
+   ./aws/11_iceberg_tables_athena.sh
+   ./aws/20_iam_role.sh
+   ./aws/21_readonly_user.sh
+   ```
+4. Mint the BigLake federated catalog on GCP, retrieve its generated service account, and trust it in the AWS IAM role:
+   ```bash
+   SA_ID=$(./gcp/10_create_federated_catalog.sh)
+   ./aws/30_update_trust_policy.sh "$SA_ID"
+   sleep 120   # let AWS IAM changes propagate
+   ```
+5. Trigger metadata sync, verify connections, and execute queries:
+   ```bash
+   ./gcp/20_enable_refresh.sh
+   ./gcp/30_verify.sh            # verifies the AWS tables appear in BigQuery
+   ./gcp/05_seed_native_bq.sh    # seeds native GCP recipes & allergens
+   ./gcp/40_query_froyo.sh       # runs cross-cloud soy-safety join query
+   ./gcp/50_forecast_bqml.sh 92  # trains ARIMA forecast directly on S3 data
+   ```
+
+---
+
+### Option B: Native GCP Setup (Without AWS)
+
+This setup runs entirely within GCP by seeding mock customer loyalty and sales tables directly inside BigQuery.
+
+#### Option B1: Automated Setup
+1. Copy the configuration template and populate it with your GCP project details:
+   ```bash
+   cp config.example.env config.local.env
+   ```
+2. Open `config.local.env` and set `NO_AWS` to `"true"`:
+   ```bash
+   export NO_AWS="true"
+   ```
+3. Authenticate to GCP:
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+4. Run the GCP-only deployment script:
+   ```bash
+   ./deploy_no_aws.sh
+   ```
+
+#### Option B2: Step-by-Step Manual Setup
+If you want to run the GCP-only steps manually:
+1. Configure and authenticate as shown in Option B1.
+2. Enable APIs and seed all native GCP allergen tables plus mock AWS data natively inside BigQuery:
+   ```bash
+   source config.local.env
+   gcloud services enable --project="$GCP_PROJECT" \
+     biglake.googleapis.com bigquery.googleapis.com dataplex.googleapis.com
+   
+   ./gcp/05_seed_native_bq.sh       # Seeds allergen/recipe catalog
+   ./gcp/04_seed_mock_aws_data.sh   # Seeds mock global_loyalty & sales tables in BigQuery
+   ```
+3. Execute query verifications and ARIMA BQML forecasting:
+   ```bash
+   ./gcp/40_query_froyo.sh          # Performs dynamic local query resolution
+   ./gcp/50_forecast_bqml.sh 92     # Trains ARIMA model on local mock sales history
+   ```
 
 ## Run order
 

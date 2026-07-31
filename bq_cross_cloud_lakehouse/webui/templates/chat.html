@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BQ Data Agent Chat - Froyo Sweet Mockup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Sidebar Panel -->
+        <aside class="sidebar">
+            <div class="brand-section">
+                <img src="{{ url_for('static', filename='froyo_logo.jpg') }}" class="brand-logo-img" alt="Logo">
+                <div class="brand-name">Froyo Agent Hub</div>
+            </div>
+
+            <div class="sidebar-scrollable">
+                <!-- Agent Selector -->
+                <div class="section">
+                    <h3 class="sidebar-title">Active Agent</h3>
+                    
+                    <div class="agent-card active" data-agent="lakehouse_analyst" data-desc="Midnight Swirl cross-cloud data agent.">
+                        <span class="name">Froyo Lakehouse Analyst</span>
+                        <span class="desc">Cross-cloud query analyst (GCP/AWS)</span>
+                    </div>
+                    
+                    <div class="agent-card" data-agent="metadata_manager" data-desc="Enriches and inspects Dataplex catalog metadata.">
+                        <span class="name">Catalog Metadata Manager</span>
+                        <span class="desc">Dataplex profiling & lineage</span>
+                    </div>
+                </div>
+
+
+                <!-- Cloud Connections -->
+                <div class="section">
+                    <h3 class="sidebar-title">Cloud Connections</h3>
+                    <div class="connection-status">
+                        <div class="connection-item">
+                            <span class="dot active"></span>
+                            <span class="label">Google Cloud BigQuery</span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="dot active"></span>
+                            <span class="label">AWS S3 (Glue Catalog)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preset Prompts -->
+                <div class="section">
+                    <h3 class="sidebar-title">Preset Queries</h3>
+                    <div id="presets-list" class="section" style="gap: 8px;">
+                        <!-- Dynamically populated based on selected agent -->
+                    </div>
+                </div>
+
+                <!-- Session & Auth Details -->
+                <div class="session-info">
+                    <div><strong>User:</strong> {{ user_email }}</div>
+                    <div><strong>Session:</strong> <span class="session-badge">Active</span></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-workspace">
+            <header class="main-header">
+                <h2 id="current-agent-title">Semantic Analytics</h2>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline">Logout</a>
+            </header>
+
+            <!-- KPI Summary Bar -->
+            <div class="kpi-bar">
+                <div class="kpi-card">
+                    <span class="kpi-label">Midnight Swirl Revenue</span>
+                    <span class="kpi-val">$305,700</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Cross-Cloud Data Sources</span>
+                    <span class="kpi-val">2 Active</span>
+                </div>
+                <div class="kpi-card" id="kpi-guardrails" style="cursor: pointer;">
+                    <span class="kpi-label">Active Guardrails</span>
+                    <span class="kpi-val">1 (Soy Alert)</span>
+                </div>
+            </div>
+
+            <!-- Chat Container -->
+            <div id="chat-messages" class="chat-container">
+                <div class="message system-alert">
+                    Connected. Your OAuth token is active and scoped to this agent session.
+                </div>
+            </div>
+
+            <!-- Footer / Input Form -->
+            <footer class="chat-footer">
+                <form id="chat-form" class="chat-form">
+                    <input type="text" id="message-input" class="chat-input" placeholder="Ask about configured data..." autocomplete="off">
+                    <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+                </form>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const currentAgentTitle = document.getElementById('current-agent-title');
+        const agentCards = document.querySelectorAll('.agent-card');
+        const presetsList = document.getElementById('presets-list');
+
+        // Preset prompts database mapped to each agent
+        const presets = {
+            lakehouse_analyst: [
+                "Show total Midnight Swirl revenue by region, highest first.",
+                "What allergens are in Midnight Swirl, and which supplier document reveals each one?",
+                "Build a Midnight Swirl campaign target list from our loyalty customers whose favorite flavor is Midnight Swirl, excluding soy-sensitive customers. Show customer_id, region, loyalty_tier, and avg_monthly_spend, ordered by avg_monthly_spend descending.",
+                "Which region has the highest total Midnight Swirl revenue over the last 12 months, and show the monthly revenue trend per region.",
+                "Summarize today's findings into an executive-ready slide outline: (1) allergen risk for Midnight Swirl, (2) the cross-cloud soy-safe target list, and (3) regional revenue performance. End with a slide on the data governance guardrails."
+            ],
+            metadata_manager: [
+                "Show insights, profile statistics, and lineage for the native product_allergens table.",
+                "Compare metadata catalog entries for native tables vs external AWS Iceberg tables."
+            ]
+        };
+
+        let selectedAgent = localStorage.getItem('selectedAgent') || 'lakehouse_analyst';
+        
+
+        // Load presets for selected agent
+        function loadPresets(agentKey) {
+            presetsList.innerHTML = '';
+            presets[agentKey].forEach(promptText => {
+                const button = document.createElement('button');
+                button.className = 'preset-btn';
+                button.textContent = promptText;
+                button.type = 'button';
+                button.addEventListener('click', () => {
+                    submitQuery(promptText);
+                });
+                presetsList.appendChild(button);
+            });
+        }
+
+        // Helper to update active card styling
+        function setActiveAgentCard(agentKey) {
+            agentCards.forEach(c => {
+                if (c.getAttribute('data-agent') === agentKey) {
+                    c.classList.add('active');
+                    currentAgentTitle.textContent = c.querySelector('.name').textContent;
+                } else {
+                    c.classList.remove('active');
+                }
+            });
+            loadPresets(agentKey);
+        }
+
+        // Initialize active agent layout
+        setActiveAgentCard(selectedAgent);
+
+        // Handle Agent Selector clicks
+        agentCards.forEach(card => {
+            card.addEventListener('click', () => {
+                selectedAgent = card.getAttribute('data-agent');
+                localStorage.setItem('selectedAgent', selectedAgent);
+                setActiveAgentCard(selectedAgent);
+                
+                // Add a system notification about switching agents (mockup behavior)
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'message system-alert';
+                alertDiv.textContent = `Switched workspace focus to ${currentAgentTitle.textContent}.`;
+                chatMessages.appendChild(alertDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        });
+
+        // Appends user message to feed
+        function addUserMessage(text) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'message-wrapper user';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = text;
+
+            const meta = document.createElement('div');
+            meta.className = 'message-metadata';
+            meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(meta);
+            chatMessages.appendChild(wrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Helper to format/prettify JSON structures if needed
+        function tryParseJSON(str) {
+            try {
+                const o = JSON.parse(str);
+                if (o && typeof o === "object") {
+                    return o;
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+
+        // Render an HTML table for array payloads
+        function buildTableHTML(dataArray) {
+            if (!Array.isArray(dataArray) || dataArray.length === 0) return '';
+            
+            const keys = Object.keys(dataArray[0]);
+            let html = '<div class="data-table-container"><table class="data-table"><thead><tr>';
+            
+            // headers
+            keys.forEach(key => {
+                html += `<th>${escapeHTML(key)}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            // rows
+            dataArray.forEach(row => {
+                html += '<tr>';
+                keys.forEach(key => {
+                    html += `<td>${row[key] !== null ? escapeHTML(row[key]) : '<em style="color:#bbb">null</em>'}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderMarkdown(text) {
+            if (typeof text !== 'string') return text;
+            let html = text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+            html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/^- (.*?)$/gm, '<li>$1</li>');
+            html = html.replace(/((?:<li>.*?<\/li>\s*)+)/gs, '<ul>$1</ul>');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // Render Agent Response bubble and its Provenance block
+        function identifyColumns(dataArray) {
+            if (!dataArray || dataArray.length === 0) return { xField: null, yField: null };
+            const keys = Object.keys(dataArray[0]);
+            
+            const numericKeys = [];
+            const nominalKeys = [];
+
+            for (const key of keys) {
+                let firstNonNullVal = null;
+                for (const row of dataArray) {
+                    if (row[key] !== null && row[key] !== undefined) {
+                        firstNonNullVal = row[key];
+                        break;
+                    }
+                }
+                if (firstNonNullVal === null) continue;
+
+                const isNum = typeof firstNonNullVal === 'number' || 
+                              (typeof firstNonNullVal === 'string' && firstNonNullVal.trim() !== '' && !isNaN(firstNonNullVal));
+                const isNominal = typeof firstNonNullVal === 'boolean' || 
+                                  (typeof firstNonNullVal === 'string' && (firstNonNullVal.trim() === '' || isNaN(firstNonNullVal)));
+
+                if (isNum) {
+                    numericKeys.push(key);
+                } else if (isNominal) {
+                    nominalKeys.push(key);
+                }
+            }
+
+            let xField = null;
+            let yField = null;
+
+            if (nominalKeys.length > 0) {
+                xField = nominalKeys[0];
+                if (numericKeys.length > 0) {
+                    yField = numericKeys[0];
+                } else if (nominalKeys.length > 1) {
+                    yField = nominalKeys[1];
+                }
+            } else if (numericKeys.length > 0) {
+                xField = numericKeys[0];
+                if (numericKeys.length > 1) {
+                    yField = numericKeys[1];
+                }
+            }
+
+            if (!xField && keys.length > 0) {
+                xField = keys[0];
+            }
+            if (!yField && keys.length > 0) {
+                yField = keys.find(k => k !== xField) || keys[0];
+            }
+
+            return { xField, yField };
+        }
+
+        function addAgentResponse(text, provenance, vegaConfig) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'message-wrapper agent';
+            wrapper.style.width = '100%';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+
+            // Check if response text is structured JSON array (e.g. data table)
+            const parsedJSON = tryParseJSON(text);
+            if (Array.isArray(parsedJSON)) {
+                const uniqueId = `vis-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                
+                let bubbleHTML = `
+                    <div class="table-response-header">
+                        <span>Query results returned ${parsedJSON.length} rows:</span>
+                        <div class="header-actions">
+                            <select id="selector-${uniqueId}" class="chart-type-selector" style="display: none;">
+                                <option value="bar">Bar</option>
+                                <option value="line">Line</option>
+                                <option value="pie">Pie</option>
+                            </select>
+                            <select id="x-select-${uniqueId}" class="chart-column-selector" style="display: none;" title="X Axis Column"></select>
+                            <select id="y-select-${uniqueId}" class="chart-column-selector" style="display: none;" title="Y Axis Column"></select>
+                            <button id="toggle-${uniqueId}" class="btn-chart-toggle" title="Turn this into a chart">
+                                <svg class="icon-chart" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                                <svg class="icon-table" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="table-container-${uniqueId}" class="table-view-container">
+                        ${buildTableHTML(parsedJSON)}
+                    </div>
+                    <div id="chart-container-${uniqueId}" class="chart-view-container" style="display: none;">
+                        <div id="chart-div-${uniqueId}" class="vega-chart-div"></div>
+                    </div>
+                `;
+                bubble.innerHTML = bubbleHTML;
+
+                // Bind events for the interactive chart converter
+                setTimeout(() => {
+                    const toggleBtn = bubble.querySelector(`#toggle-${uniqueId}`);
+                    const selector = bubble.querySelector(`#selector-${uniqueId}`);
+                    const xSelector = bubble.querySelector(`#x-select-${uniqueId}`);
+                    const ySelector = bubble.querySelector(`#y-select-${uniqueId}`);
+                    const tableContainer = bubble.querySelector(`#table-container-${uniqueId}`);
+                    const chartContainer = bubble.querySelector(`#chart-container-${uniqueId}`);
+                    const chartDiv = bubble.querySelector(`#chart-div-${uniqueId}`);
+                    
+                    if (!toggleBtn) return;
+
+                    // Populate column selectors
+                    if (parsedJSON.length > 0) {
+                        const keys = Object.keys(parsedJSON[0]);
+                        keys.forEach(k => {
+                            const optX = document.createElement('option');
+                            optX.value = k;
+                            optX.textContent = k;
+                            xSelector.appendChild(optX);
+
+                            const optY = document.createElement('option');
+                            optY.value = k;
+                            optY.textContent = k;
+                            ySelector.appendChild(optY);
+                        });
+                    }
+
+                    let isChartView = false;
+                    let chartRendered = false;
+                    const cols = identifyColumns(parsedJSON);
+                    
+                    // Set defaults
+                    xSelector.value = cols.xField;
+                    ySelector.value = cols.yField;
+
+                    function renderVegaChart(type) {
+                        const currentX = xSelector.value;
+                        const currentY = ySelector.value;
+                        
+                        let spec;
+                        if (type === 'bar') {
+                            spec = {
+                                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                                "width": "container",
+                                "height": 250,
+                                "data": { "values": parsedJSON },
+                                "mark": { "type": "bar", "tooltip": true },
+                                "encoding": {
+                                    "x": { "field": currentX, "type": "nominal", "axis": { "labelAngle": -45 } },
+                                    "y": { "field": currentY, "type": "quantitative" }
+                                }
+                            };
+                        } else if (type === 'line') {
+                            spec = {
+                                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                                "width": "container",
+                                "height": 250,
+                                "data": { "values": parsedJSON },
+                                "mark": { "type": "line", "point": true, "tooltip": true },
+                                "encoding": {
+                                    "x": { "field": currentX, "type": "nominal", "axis": { "labelAngle": -45 } },
+                                    "y": { "field": currentY, "type": "quantitative" }
+                                }
+                            };
+                        } else if (type === 'pie') {
+                            spec = {
+                                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                                "width": "container",
+                                "height": 250,
+                                "data": { "values": parsedJSON },
+                                "mark": { "type": "arc", "tooltip": true },
+                                "encoding": {
+                                    "theta": { "field": currentY, "type": "quantitative" },
+                                    "color": { "field": currentX, "type": "nominal" }
+                                }
+                            };
+                        }
+
+                        if (typeof vegaEmbed === 'undefined') {
+                            chartDiv.innerHTML = `<span style="color:#c62828; font-size:12px;">⚠️ Visualization could not be loaded: Vega library is blocked or not loaded.</span>`;
+                            return;
+                        }
+
+                        vegaEmbed(`#${chartDiv.id}`, spec, { actions: false, renderer: 'svg' })
+                            .catch(err => {
+                                console.error("Vega-Embed failed to render client-side chart:", err);
+                                chartDiv.innerHTML = `<span style="color:#c62828; font-size:12px;">⚠️ Chart render failed: ${err.message}</span>`;
+                            });
+                    }
+
+                    toggleBtn.addEventListener('click', () => {
+                        isChartView = !isChartView;
+                        if (isChartView) {
+                            tableContainer.style.display = 'none';
+                            chartContainer.style.display = 'block';
+                            selector.style.display = 'inline-block';
+                            xSelector.style.display = 'inline-block';
+                            ySelector.style.display = 'inline-block';
+                            toggleBtn.title = "Show table";
+                            toggleBtn.querySelector('.icon-chart').style.display = 'none';
+                            toggleBtn.querySelector('.icon-table').style.display = 'inline-block';
+
+                            if (!chartRendered) {
+                                renderVegaChart(selector.value);
+                                chartRendered = true;
+                            }
+                        } else {
+                            tableContainer.style.display = 'block';
+                            chartContainer.style.display = 'none';
+                            selector.style.display = 'none';
+                            xSelector.style.display = 'none';
+                            ySelector.style.display = 'none';
+                            toggleBtn.title = "Turn this into a chart";
+                            toggleBtn.querySelector('.icon-chart').style.display = 'inline-block';
+                            toggleBtn.querySelector('.icon-table').style.display = 'none';
+                        }
+                    });
+
+                    selector.addEventListener('change', () => {
+                        renderVegaChart(selector.value);
+                    });
+
+                    xSelector.addEventListener('change', () => {
+                        renderVegaChart(selector.value);
+                    });
+
+                    ySelector.addEventListener('change', () => {
+                        renderVegaChart(selector.value);
+                    });
+                }, 0);
+            } else {
+                bubble.innerHTML = renderMarkdown(text);
+            }
+
+            if (vegaConfig) {
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'chart-view-container';
+                const chartId = `chart-${Date.now()}`;
+                chartContainer.id = chartId;
+                bubble.appendChild(chartContainer);
+                
+                setTimeout(() => {
+                    console.log("Attempting to render chart payload:", vegaConfig);
+                    if (typeof vegaEmbed === 'undefined') {
+                        console.error("vegaEmbed library is not loaded. Network block or blocked CDN scripts likely.");
+                        const errMsg = document.createElement('div');
+                        errMsg.style.color = '#c62828';
+                        errMsg.style.fontSize = '12px';
+                        errMsg.style.fontWeight = 'bold';
+                        errMsg.textContent = '⚠️ Visualization could not be loaded: Vega library is blocked or not loaded.';
+                        chartContainer.appendChild(errMsg);
+                    } else {
+                        vegaEmbed(`#${chartId}`, vegaConfig, {actions: false, width: 360})
+                            .then(result => console.log("Chart rendered successfully:", result))
+                            .catch(err => {
+                                console.error("Vega-Embed failed to render:", err);
+                                chartContainer.innerHTML = `<span style="color:#c62828; font-size:12px;">⚠️ Chart render failed: ${err.message}</span>`;
+                            });
+                    }
+                }, 0);
+            }
+
+            wrapper.appendChild(bubble);
+
+            // Render Provenance Card if information exists
+            if (provenance && Object.keys(provenance).length > 0) {
+                const provCard = document.createElement('div');
+                provCard.className = 'provenance-card';
+
+                const header = document.createElement('div');
+                header.className = 'provenance-header';
+                header.innerHTML = `<span>Provenance Details</span>`;
+                
+                header.addEventListener('click', () => {
+                    provCard.classList.toggle('open');
+                });
+
+                const body = document.createElement('div');
+                body.className = 'provenance-body';
+
+                // 1. Pipeline Flow Steps
+                const pipeline = document.createElement('div');
+                pipeline.className = 'pipeline-flow';
+                
+                const steps = [
+                    { label: 'Grounding', done: !!provenance.catalog_route },
+                    { label: 'SQL Generated', done: !!provenance.sql },
+                    { label: 'Dry Run', done: provenance.dry_run !== undefined },
+                    { label: 'Execution', done: !!provenance.execution }
+                ];
+
+                steps.forEach(s => {
+                    const stepEl = document.createElement('div');
+                    stepEl.className = 'pipeline-step' + (s.done ? ' active' : '');
+                    stepEl.textContent = s.label;
+                    pipeline.appendChild(stepEl);
+                });
+                body.appendChild(pipeline);
+
+                // 2. Metadata details
+                let metaHTML = '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">';
+                if (provenance.catalog_route) {
+                    metaHTML += `<div><strong>Route:</strong> ${provenance.catalog_route}</div>`;
+                }
+                if (provenance.status) {
+                    metaHTML += `<div><strong>Status:</strong> <span class="status-pill">${provenance.status}</span></div>`;
+                }
+                if (provenance.dry_run) {
+                    metaHTML += `<div><strong>Dry Run:</strong> <span class="status-pill dry-run">Enabled</span></div>`;
+                }
+                metaHTML += '</div>';
+                body.innerHTML += metaHTML;
+
+                // 3. SQL Query block
+                if (provenance.sql) {
+                    const sqlPre = document.createElement('pre');
+                    sqlPre.className = 'sql-block';
+                    sqlPre.textContent = provenance.sql;
+                    sqlPre.innerHTML += '<span class="sql-label">SQL Generated</span>';
+                    body.appendChild(sqlPre);
+                }
+
+                // 4. Refusals/Errors if any
+                if (provenance.refusal_reason) {
+                    const refDiv = document.createElement('div');
+                    refDiv.style.color = 'var(--error-text)';
+                    refDiv.innerHTML = `<strong>Refusal Reason:</strong> ${provenance.refusal_reason}`;
+                    body.appendChild(refDiv);
+                }
+
+                provCard.appendChild(header);
+                provCard.appendChild(body);
+                wrapper.appendChild(provCard);
+            }
+
+            const meta = document.createElement('div');
+            meta.className = 'message-metadata';
+            meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            wrapper.appendChild(meta);
+
+            chatMessages.appendChild(wrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Send query to the agent backend
+        async function submitQuery(message) {
+            addUserMessage(message);
+            sendBtn.disabled = true;
+            sendBtn.textContent = '...';
+            
+            // Add thinking bubble
+            const thinkingWrapper = document.createElement('div');
+            thinkingWrapper.className = 'thinking-bubble-wrapper';
+            thinkingWrapper.innerHTML = `
+                <div class="thinking-bubble">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+            chatMessages.appendChild(thinkingWrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        message,
+                        agent: selectedAgent
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'message error-alert';
+                    errDiv.textContent = 'Error: ' + data.error;
+                    chatMessages.appendChild(errDiv);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                } else {
+                    addAgentResponse(data.response, data.provenance, data.vega_config);
+                }
+            } catch (err) {
+                const errDiv = document.createElement('div');
+                errDiv.className = 'message error-alert';
+                errDiv.textContent = 'Request failed: ' + err.message;
+                chatMessages.appendChild(errDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            } finally {
+                if (thinkingWrapper && thinkingWrapper.parentNode) {
+                    thinkingWrapper.parentNode.removeChild(thinkingWrapper);
+                }
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+            }
+        }
+
+        // Form Submit handler
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (!message) return;
+            messageInput.value = '';
+            await submitQuery(message);
+        });
+
+        // Click KPI card to trigger guardrail explanation
+        const kpiGuardrails = document.getElementById('kpi-guardrails');
+        if (kpiGuardrails) {
+            kpiGuardrails.addEventListener('click', () => {
+                submitQuery("Explain the active guardrails and why the Soy Alert is active.");
+            });
+        }
+
+        messageInput.focus();
+    </script>
+</body>
+</html>

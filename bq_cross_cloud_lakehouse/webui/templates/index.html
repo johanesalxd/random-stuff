@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BQ Data Agent Login - Froyo Sweet Mockup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Centered login box layout overrides */
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+        }
+        .login-container {
+            max-width: 480px;
+            width: 90%;
+            background-color: var(--panel-color);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 4px 12px rgba(127, 114, 104, 0.08);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .login-logo-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid var(--border-color);
+            object-fit: cover;
+            margin: 0 auto;
+            box-shadow: 0 6px 12px rgba(255, 143, 163, 0.35);
+        }
+        .login-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .login-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .info-list {
+            text-align: left;
+            font-size: 13px;
+            color: var(--text-secondary);
+            background-color: var(--bg-color);
+            padding: 18px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .info-list li {
+            list-style: none;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+        .info-list li::before {
+            content: '✓';
+            color: var(--primary-accent);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <img src="{{ url_for('static', filename='froyo_logo.jpg') }}" class="login-logo-img" alt="Logo">
+        <div>
+            <h1 class="login-title">Froyo Agent Hub</h1>
+            <p class="login-subtitle">Internal staff test harness & mockup playground for BQ Data Agents.</p>
+        </div>
+        
+        <div>
+            <a href="{{ url_for('login') }}" class="btn btn-primary" style="display: block; width: 100%; padding: 14px; border-radius: 24px;">
+                Login with Google Identity
+            </a>
+        </div>
+        
+        <ul class="info-list">
+            <li>OAuth authentication captures your Google identity securely.</li>
+            <li>Select from dynamic data agents in the sandbox sidebar.</li>
+            <li>Inspect SQL execution pathways, grounding routes, and dry runs inline.</li>
+        </ul>
+    </div>
+</body>
+</html>

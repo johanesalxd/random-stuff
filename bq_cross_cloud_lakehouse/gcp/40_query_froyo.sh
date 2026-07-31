@@ -12,7 +12,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
-LOYALTY="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_LOYALTY_TABLE}"
+if [[ "${NO_AWS:-false}" == "true" ]]; then
+  LOYALTY="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}.${FROYO_LOYALTY_TABLE}"
+else
+  LOYALTY="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_LOYALTY_TABLE}"
+fi
 FQDS="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}"
 
 bq_query() { bq --location="${GCP_REGION}" --project_id="${GCP_PROJECT}" query --use_legacy_sql=false "$1"; }

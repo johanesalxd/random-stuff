@@ -135,18 +135,26 @@ def _system_instruction(config: LakehouseConfig) -> str:
         The agent system instruction string.
     """
     native = f"{config.project_id}.{config.native_dataset}"
-    fed = f"{config.project_id}.{config.federated_dataset_id}"
+    
+    no_aws = os.getenv("NO_AWS", "false").lower() in ("true", "1")
+    if no_aws:
+        fed = native
+        location_desc = "all tables live natively in Google Cloud BigQuery."
+        table_source_desc = "Native BigQuery tables"
+        rule_desc = "all tables are native to BigQuery. Join them using ordinary BigQuery SQL."
+    else:
+        fed = f"{config.project_id}.{config.federated_dataset_id}"
+        location_desc = "native product/allergen knowledge lives in Google Cloud BigQuery, while customer loyalty and sales history physically live in AWS S3/Glue as Apache Iceberg tables, federated into BigQuery."
+        table_source_desc = "AWS-federated Iceberg tables (physically in AWS S3/Glue, read cross-cloud)"
+        rule_desc = "the loyalty and sales tables are AWS-resident but directly queryable from BigQuery. Join them with the native knowledge tables using ordinary BigQuery SQL."
+
     loyalty = f"{fed}.{config.loyalty_table}"
     sales = f"{fed}.{config.sales_table}"
 
     return (
         "You are the Froyo Lakehouse Analyst, a data agent for the frozen-yogurt "
-        "brand 'Froyo'. Its hero product is 'Midnight Swirl'. You answer business "
-        "questions by writing BigQuery SQL over a CROSS-CLOUD lakehouse: native "
-        "product/allergen knowledge lives in Google Cloud BigQuery, while customer "
-        "loyalty and sales history physically live in AWS S3/Glue as Apache Iceberg "
-        "tables, federated into BigQuery. You can join all of these in a single "
-        "BigQuery query; never copy or move data between clouds.\n\n"
+        f"brand 'Froyo'. Its hero product is 'Midnight Swirl'. You answer business "
+        f"questions by writing BigQuery SQL: {location_desc}\n\n"
         "Native knowledge tables (Google Cloud BigQuery):\n"
         f"- {native}.products: product catalog. Columns: product_id, product_name, "
         "category, launch_date, status.\n"
@@ -159,7 +167,7 @@ def _system_instruction(config: LakehouseConfig) -> str:
         "ingredient_allergens. Columns: product_id, product_name, allergen, "
         "ingredient_name, supplier, source_doc. Prefer this view for "
         "'what allergens are in product X' questions.\n\n"
-        "AWS-federated Iceberg tables (physically in AWS S3/Glue, read cross-cloud):\n"
+        f"{table_source_desc}:\n"
         f"- {loyalty}: customer loyalty. Columns: customer_id, region "
         "(APAC/EMEA/AMER), loyalty_tier (Platinum/Gold/Silver/Bronze), "
         "favorite_flavor, avg_monthly_spend, soy_sensitive_flag (boolean), "
@@ -176,15 +184,13 @@ def _system_instruction(config: LakehouseConfig) -> str:
         "'midnight_base_204_manual.pdf'). Therefore Midnight Swirl contains Soy. "
         "Any Midnight Swirl customer-targeting or campaign list MUST exclude "
         "customers whose soy_sensitive_flag is TRUE.\n"
-        "2. Cross-cloud, no replication: the loyalty and sales tables are "
-        "AWS-resident but directly queryable from BigQuery. Join them with the "
-        "native knowledge tables using ordinary BigQuery SQL.\n"
+        f"2. {rule_desc}\n"
         "3. Forecasting scope: you perform ad-hoc analytics (aggregations, trends, "
         "comparisons) on the sales history. You do not train time-series models; "
         "the deterministic ARIMA_PLUS revenue forecast is a separate scripted step "
         "of the demo (gcp/50_forecast_bqml.sh).\n\n"
         "When answering, state exact figures, explain the business rationale, and "
-        "make the cross-cloud nature explicit when a query spans both clouds."
+        "make the cross-cloud nature explicit when a query spans both clouds (only if cross-cloud mode is active)."
     )
 
 
@@ -202,7 +208,18 @@ def build_agent_definition(
         The fully-populated agent definition.
     """
     native = config.native_dataset
-    fed = config.federated_dataset_id
+    
+    no_aws = os.getenv("NO_AWS", "false").lower() in ("true", "1")
+    if no_aws:
+        fed = native
+        table_type_desc = "Mock customer loyalty"
+        sales_table_desc = "Mock daily sales history"
+        agent_desc = "Froyo analyst spanning native BigQuery allergen/recipe knowledge and mock customer loyalty/sales tables."
+    else:
+        fed = config.federated_dataset_id
+        table_type_desc = "AWS-federated Iceberg customer loyalty"
+        sales_table_desc = "AWS-federated Iceberg daily sales history"
+        agent_desc = "Cross-cloud Froyo lakehouse analyst spanning native BigQuery allergen/recipe knowledge and AWS-federated customer loyalty and sales Iceberg tables."
 
     tables = (
         TableRef(
@@ -232,25 +249,21 @@ def build_agent_definition(
         TableRef(
             fed,
             config.loyalty_table,
-            "AWS-federated Iceberg customer loyalty: customer_id, region, "
+            f"{table_type_desc}: customer_id, region, "
             "loyalty_tier, favorite_flavor, avg_monthly_spend, "
             "soy_sensitive_flag, last_order_date.",
         ),
         TableRef(
             fed,
             config.sales_table,
-            "AWS-federated Iceberg daily sales history: sale_date, "
+            f"{sales_table_desc}: sale_date, "
             "product_name, region, units_sold, revenue.",
         ),
     )
 
     return AgentDefinition(
         agent_id=agent_id,
-        description=(
-            "Cross-cloud Froyo lakehouse analyst spanning native BigQuery "
-            "allergen/recipe knowledge and AWS-federated customer loyalty and "
-            "sales Iceberg tables."
-        ),
+        description=agent_desc,
         tables=tables,
         system_instruction=_system_instruction(config),
     )

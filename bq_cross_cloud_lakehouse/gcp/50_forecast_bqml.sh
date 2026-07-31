@@ -13,7 +13,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
 
-SALES="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_SALES_TABLE}"
+if [[ "${NO_AWS:-false}" == "true" ]]; then
+  SALES="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}.${FROYO_SALES_TABLE}"
+else
+  SALES="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_SALES_TABLE}"
+fi
 MODEL="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}.midnight_swirl_arima"
 HORIZON="${1:-92}"   # Q3 2026 contains 92 days.
 
