@@ -50,10 +50,10 @@ WORKSPACE_REFERENCE.md
 **/.ruff_cache/
 **/.pytest_cache/
 temp/*
-
 _config.yml
 .antigravitycli
 **/.antigravitycli
+.opus_evals
 
 # BigQuery FinOps Cookbook results
 bq_finops_cookbook/analysis_results/
