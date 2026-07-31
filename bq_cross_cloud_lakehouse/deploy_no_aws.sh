@@ -21,11 +21,17 @@ if [[ ! -f "config.local.env" ]]; then
 fi
 
 source config.local.env
+source ./lib/no_aws.sh
 
-if [[ "${NO_AWS:-false}" != "true" ]]; then
+if ! is_no_aws; then
   echo "ERROR: NO_AWS must be set to true in config.local.env for this deployment." >&2
   exit 1
 fi
+
+# Every child process (query scripts, create_agent.py, register_ge_agent.py)
+# resolves the loyalty/sales location from this flag, so export it once here
+# rather than prefixing each invocation.
+export NO_AWS=true
 
 # Enable required GCP APIs automatically
 echo "Enabling required GCP services..."
@@ -117,8 +123,8 @@ fi
 
 echo "Deploying Conversational Analytics data agent..."
 cd agent
-# Run with NO_AWS=true in environment so create_agent.py (which uses agent_definition.py) picks it up
-NO_AWS=true GOOGLE_API_USE_CLIENT_CERTIFICATE=false uv run python scripts/create_agent.py || { echo "❌ ERROR: Failed to create CA agent." >&2; exit 1; }
+# NO_AWS is exported above; create_agent.py resolves it via LakehouseConfig.
+GOOGLE_API_USE_CLIENT_CERTIFICATE=false uv run python scripts/create_agent.py || { echo "❌ ERROR: Failed to create CA agent." >&2; exit 1; }
 
 # Load agent env to check if we can register in GE
 run_registration=true
@@ -137,7 +143,7 @@ fi
 
 if [ "$run_registration" = true ]; then
   echo "Registering agent in Gemini Enterprise..."
-  NO_AWS=true GOOGLE_API_USE_CLIENT_CERTIFICATE=false uv run python scripts/register_ge_agent.py --force || { echo "❌ ERROR: Failed to register agent in GE." >&2; exit 1; }
+  GOOGLE_API_USE_CLIENT_CERTIFICATE=false uv run python scripts/register_ge_agent.py --force || { echo "❌ ERROR: Failed to register agent in GE." >&2; exit 1; }
 fi
 cd ..
 
