@@ -87,9 +87,7 @@ SCOPES = [
 
 # Must match an Authorized Redirect URI on the OAuth client. On Cloud Run this
 # has to be the deployed service URL, not localhost.
-REDIRECT_URI = os.getenv(
-    "OAUTH_REDIRECT_URI", "http://localhost:8080/auth/callback"
-)
+REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8080/auth/callback")
 
 _SESSIONS: dict[str, dict[str, Any]] = {}
 
@@ -111,6 +109,15 @@ if ALLOW_MOCK_LOGIN and USE_ADC_FOR_API:
 
 
 def validate_oauth_state(expected: str | None, received: str | None) -> bool:
+    """Compares the stored and returned OAuth state values in constant time.
+
+    Args:
+        expected: State value generated when the flow started.
+        received: State value echoed back on the callback.
+
+    Returns:
+        True when both are present and equal.
+    """
     if not expected or not received:
         return False
     return secrets.compare_digest(str(expected), str(received))
@@ -119,6 +126,16 @@ def validate_oauth_state(expected: str | None, received: str | None) -> bool:
 def is_token_expired(
     expiry_iso: str | None, *, now: datetime | None = None, skew_seconds: int = 60
 ) -> bool:
+    """Reports whether an ISO-8601 expiry has passed, allowing for clock skew.
+
+    Args:
+        expiry_iso: Token expiry timestamp, or None when unknown.
+        now: Current time; defaults to the current UTC time.
+        skew_seconds: Treat the token as expired this many seconds early.
+
+    Returns:
+        True when the token is missing, unparseable, or within the skew window.
+    """
     if not expiry_iso:
         return True
     try:
@@ -132,6 +149,7 @@ def is_token_expired(
 
 
 # --- server-side session helpers -------------------------------------------
+
 
 def _session_data() -> dict[str, Any]:
     sid = session.get("sid")
@@ -190,22 +208,33 @@ def _ensure_valid_token(data: dict[str, Any]) -> tuple[str | None, str | None]:
     return credentials.token, None
 
 
-def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
-    # Build endpoint URL based on location setting
+def _query_ca_api(message: str, access_token: str) -> Any:
+    """Sends a question to the Conversational Analytics API and folds the stream.
+
+    Args:
+        message: The user's natural-language question.
+        access_token: Bearer token used for the call. This is the signed-in
+            user's OAuth token unless USE_ADC_FOR_API is enabled.
+
+    Returns:
+        A response body dict, or a ``(body, status)`` tuple on failure.
+    """
     location = GOOGLE_CLOUD_LOCATION
     project_id = PROJECT_ID
     agent_id = AGENT_ID
-    
+
     if not location or location == "global":
         base_url = "https://geminidataanalytics.googleapis.com"
     elif "-" in location:
         base_url = f"https://geminidataanalytics-{location}.googleapis.com"
     else:
         base_url = f"https://geminidataanalytics.{location}.rep.googleapis.com"
-        
+
     chat_url = f"{base_url}/v1beta/projects/{project_id}/locations/{location}:chat"
-    data_agent_name = f"projects/{project_id}/locations/{location}/dataAgents/{agent_id}"
-    
+    data_agent_name = (
+        f"projects/{project_id}/locations/{location}/dataAgents/{agent_id}"
+    )
+
     if USE_ADC_FOR_API:
         try:
             import google.auth
@@ -230,22 +259,30 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
         "messages": [{"userMessage": {"text": message}}],
         "dataAgentContext": {"dataAgent": data_agent_name},
     }
-    
+
     try:
-        response = requests.post(chat_url, json=payload, headers=headers, stream=True, timeout=120)
+        response = requests.post(
+            chat_url, json=payload, headers=headers, stream=True, timeout=120
+        )
     except requests.exceptions.RequestException as e:
         return {"error": f"Failed to connect to Conversational Analytics API: {e}"}, 500
-        
+
     if response.status_code != 200:
-        return {"error": f"Conversational Analytics API failed ({response.status_code}): {response.text}"}, 500
-        
+        logger.error("Conversational Analytics API returned %s", response.status_code)
+        return {
+            "error": (
+                f"Conversational Analytics API failed "
+                f"({response.status_code}): {response.text}"
+            )
+        }, 500
+
     accumulated_text = ""
     generated_sql = ""
-    sql_status = "SUCCESS"
     rows_returned = 0
     raw_rows = []
     vega_config = None
-    
+    executed = False
+
     accumulator = ""
     for line in response.iter_lines():
         if not line:
@@ -259,20 +296,20 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
             continue
         else:
             accumulator += decoded
-            
+
         try:
             data_json = json.loads(accumulator)
         except ValueError:
             continue
-            
+
         if "error" in data_json:
             return {"error": f"API streamed error: {data_json['error']}"}, 500
-            
+
         msg = data_json.get("systemMessage")
         if not msg:
             accumulator = ""
             continue
-            
+
         if "text" in msg:
             text_block = msg["text"]
             text_type = text_block.get("textType") or text_block.get("text_type")
@@ -282,7 +319,7 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
             else:
                 parts = text_block.get("parts", [])
                 accumulated_text += "".join(parts)
-            
+
         if "data" in msg:
             data_block = msg["data"]
             if "generatedSql" in data_block:
@@ -290,6 +327,7 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
             if "result" in data_block:
                 raw_rows = data_block["result"].get("data", [])
                 rows_returned = len(raw_rows)
+                executed = True
 
         if "chart" in msg:
             chart_block = msg["chart"]
@@ -297,33 +335,44 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
                 vega_config = chart_block["vegaConfig"]
             elif "vega_config" in chart_block:
                 vega_config = chart_block["vega_config"]
-                
+
         accumulator = ""
-        
+
     if raw_rows:
         final_response = json.dumps(raw_rows)
     else:
         final_response = accumulated_text
-        
+
+    # Report what the stream actually contained rather than assuming success:
+    # the agent may answer from context without emitting SQL, or emit SQL that
+    # never produced a result block.
+    if executed:
+        status = "SUCCESS"
+    elif generated_sql:
+        status = "NO_RESULT"
+    else:
+        status = "NO_SQL"
+
     provenance = {
-        "status": sql_status,
+        "status": status,
         "catalog_route": "Conversational Analytics Route",
         "sql": generated_sql,
         "dry_run": False,
-        "execution": {"rows_returned": rows_returned} if generated_sql else None
+        "execution": {"rows_returned": rows_returned} if executed else None,
     }
-    
+
     return {
         "response": final_response,
         "vega_config": vega_config,
         "provenance": provenance,
         "session_id": "live-ca-session",
         "runtime_mode": "live_ca_api",
-        "app_name": agent_id
+        "app_name": agent_id,
     }
 
 
 def get_oauth_flow():
+    """Builds the Google OAuth authorization-code flow for this app."""
     client_config = {
         "web": {
             "client_id": CLIENT_ID,
@@ -340,6 +389,7 @@ def get_oauth_flow():
 
 @app.route("/")
 def index():
+    """Renders the landing page, or redirects an authenticated user to chat."""
     if _session_data().get("access_token"):
         return redirect(url_for("chat"))
     return render_template("index.html")
@@ -381,6 +431,7 @@ def login():
 
 @app.route("/auth/callback")
 def callback():
+    """Completes the OAuth flow and establishes a server-side session."""
     if not validate_oauth_state(session.get("oauth_state"), request.args.get("state")):
         return "OAuth state mismatch; possible CSRF. Please retry sign-in.", 400
 
@@ -413,6 +464,7 @@ def callback():
 
 @app.route("/chat")
 def chat():
+    """Renders the chat page for an authenticated user."""
     data = _session_data()
     if not data.get("access_token"):
         return redirect(url_for("index"))
@@ -426,6 +478,7 @@ def chat():
 
 @app.route("/api/query", methods=["POST"])
 def query():
+    """Answers a chat question via the Conversational Analytics API."""
     data = _session_data()
     if not data.get("access_token"):
         return {"error": "Not authenticated"}, 401
@@ -439,11 +492,12 @@ def query():
     if error:
         return {"error": error, "reauth": True}, 401
 
-    return _query_ca_api(message, access_token, data)
+    return _query_ca_api(message, access_token)
 
 
 @app.route("/auth/logout")
 def logout():
+    """Discards the session and returns to the landing page."""
     _clear_session()
     return redirect(url_for("index"))
 
@@ -459,5 +513,7 @@ if __name__ == "__main__":
 
     port = int(os.getenv("PORT", "8080"))
     logger.info("Starting development server on http://localhost:%s", port)
-    logger.info("Project=%s location=%s agent=%s", PROJECT_ID, GOOGLE_CLOUD_LOCATION, AGENT_ID)
+    logger.info(
+        "Project=%s location=%s agent=%s", PROJECT_ID, GOOGLE_CLOUD_LOCATION, AGENT_ID
+    )
     app.run(host="127.0.0.1", port=port, debug=env_flag("FLASK_DEBUG"))

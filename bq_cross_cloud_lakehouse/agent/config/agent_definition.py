@@ -172,8 +172,7 @@ def _system_instruction(config: LakehouseConfig) -> str:
         location_desc = "all tables live natively in Google Cloud BigQuery."
         table_source_desc = "Native BigQuery tables"
         rule_desc = (
-            "all tables are native to BigQuery. Join them using ordinary "
-            "BigQuery SQL."
+            "all tables are native to BigQuery. Join them using ordinary BigQuery SQL."
         )
     else:
         location_desc = (
@@ -182,8 +181,7 @@ def _system_instruction(config: LakehouseConfig) -> str:
             "S3/Glue as Apache Iceberg tables, federated into BigQuery."
         )
         table_source_desc = (
-            "AWS-federated Iceberg tables (physically in AWS S3/Glue, read "
-            "cross-cloud)"
+            "AWS-federated Iceberg tables (physically in AWS S3/Glue, read cross-cloud)"
         )
         rule_desc = (
             "the loyalty and sales tables are AWS-resident but directly "
@@ -220,7 +218,8 @@ def _system_instruction(config: LakehouseConfig) -> str:
         "Join relationships (join by product name string):\n"
         f"- {native}.product_allergens.product_name = {loyalty}.favorite_flavor\n"
         f"- {native}.product_allergens.product_name = {sales}.product_name\n"
-        f"- {native}.recipes.ingredient_id = {native}.ingredient_allergens.ingredient_id\n\n"
+        f"- {native}.recipes.ingredient_id"
+        f" = {native}.ingredient_allergens.ingredient_id\n\n"
         "Critical business rules:\n"
         "1. Allergen safety: Midnight Swirl contains the ingredient 'Midnight Base "
         "204', which declares a Soy allergen (source_doc "
