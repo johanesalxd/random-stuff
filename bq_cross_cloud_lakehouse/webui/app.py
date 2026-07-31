@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import logging
 import os
 import secrets
 from typing import Any
@@ -22,6 +23,23 @@ load_dotenv(os.path.join(_ROOT, "..", "config.local.env"), override=False)
 load_dotenv(os.path.join(_ROOT, "..", "agent", ".env"), override=True)
 load_dotenv(os.path.join(_ROOT, ".env"), override=True)
 
+logger = logging.getLogger(__name__)
+
+
+def env_flag(name: str, default: str = "0") -> bool:
+    """Reads an environment variable as a boolean flag.
+
+    Args:
+        name: Environment variable name.
+        default: Value assumed when the variable is unset.
+
+    Returns:
+        True when the value is one of ``1``, ``true``, ``yes`` or ``on``
+        (case-insensitive).
+    """
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
 app = Flask(__name__)
 
 # A stable secret keeps signed session cookies valid across restarts. An ephemeral
@@ -29,16 +47,15 @@ app = Flask(__name__)
 _secret = os.getenv("FLASK_SECRET_KEY")
 if not _secret:
     _secret = secrets.token_hex(32)
-    print(
-        "WARNING: FLASK_SECRET_KEY is not set; using an ephemeral secret. "
+    logger.warning(
+        "FLASK_SECRET_KEY is not set; using an ephemeral secret. "
         "Sessions will not survive a restart."
     )
 app.secret_key = _secret
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE", "0").strip().lower()
-    in {"1", "true", "yes", "on"},
+    SESSION_COOKIE_SECURE=env_flag("COOKIE_SECURE"),
 )
 
 # Allow OAuth scope changes (Google may add scopes like bigquery)
@@ -53,14 +70,44 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
 AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_analyst")
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
+# Mock sign-in bypasses OAuth entirely and must never be enabled on a deployed,
+# publicly reachable service. It exists only for offline UI work.
+ALLOW_MOCK_LOGIN = env_flag("ALLOW_MOCK_LOGIN")
+
+# Route Conversational Analytics calls through the service's own Application
+# Default Credentials instead of the signed-in user's token. This discards
+# per-user authorization, so it is refused unless explicitly acknowledged.
+USE_ADC_FOR_API = env_flag("USE_ADC_FOR_API")
+
 SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
 ]
-REDIRECT_URI = "http://localhost:8080/auth/callback"
+
+# Must match an Authorized Redirect URI on the OAuth client. On Cloud Run this
+# has to be the deployed service URL, not localhost.
+REDIRECT_URI = os.getenv(
+    "OAUTH_REDIRECT_URI", "http://localhost:8080/auth/callback"
+)
 
 _SESSIONS: dict[str, dict[str, Any]] = {}
+
+if ALLOW_MOCK_LOGIN:
+    logger.warning(
+        "ALLOW_MOCK_LOGIN is enabled; anyone reaching this service can sign in "
+        "without credentials. Use only for local development."
+    )
+if USE_ADC_FOR_API and not ALLOW_MOCK_LOGIN:
+    logger.warning(
+        "USE_ADC_FOR_API is enabled; Conversational Analytics queries run as the "
+        "service identity rather than the signed-in user."
+    )
+if ALLOW_MOCK_LOGIN and USE_ADC_FOR_API:
+    raise RuntimeError(
+        "ALLOW_MOCK_LOGIN and USE_ADC_FOR_API must not be enabled together: "
+        "unauthenticated callers would query BigQuery as the service identity."
+    )
 
 
 def validate_oauth_state(expected: str | None, received: str | None) -> bool:
@@ -159,16 +206,18 @@ def _query_ca_api(message: str, access_token: str, data: dict[str, Any]):
     chat_url = f"{base_url}/v1beta/projects/{project_id}/locations/{location}:chat"
     data_agent_name = f"projects/{project_id}/locations/{location}/dataAgents/{agent_id}"
     
-    if os.getenv("USE_ADC_FOR_API", "0").strip().lower() in {"1", "true", "yes", "on"}:
+    if USE_ADC_FOR_API:
         try:
             import google.auth
             import google.auth.transport.requests
-            credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-            auth_req = google.auth.transport.requests.Request()
-            credentials.refresh(auth_req)
+
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            credentials.refresh(google.auth.transport.requests.Request())
             api_token = credentials.token
-        except Exception as e:
-            print(f"Failed to get ADC token: {e}")
+        except Exception:
+            logger.exception("Failed to obtain an ADC token")
             api_token = access_token
     else:
         api_token = access_token
@@ -298,13 +347,26 @@ def index():
 
 @app.route("/auth/login")
 def login():
-    # If OAuth Client Credentials are not set, auto-login with mock user
+    """Starts the OAuth authorization-code flow."""
     if not CLIENT_ID or not CLIENT_SECRET:
-        print("Bypassing OAuth: logging in with mock user froyo-staff@google.com.")
+        if not ALLOW_MOCK_LOGIN:
+            logger.error(
+                "OAUTH_CLIENT_ID/OAUTH_CLIENT_SECRET are not configured and "
+                "ALLOW_MOCK_LOGIN is off; refusing to issue a session."
+            )
+            return (
+                "Sign-in is not configured. Set OAUTH_CLIENT_ID and "
+                "OAUTH_CLIENT_SECRET, or set ALLOW_MOCK_LOGIN=1 for local "
+                "development only.",
+                503,
+            )
+        logger.warning("Bypassing OAuth: issuing a mock development session.")
         data = _new_session()
         data["access_token"] = "mock-access-token"
-        data["user_email"] = "froyo-staff@google.com"
-        data["token_expiry"] = (datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)).isoformat()
+        data["user_email"] = "mock-user@example.invalid"
+        data["token_expiry"] = (
+            datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)
+        ).isoformat()
         return redirect(url_for("chat"))
 
     flow = get_oauth_flow()
@@ -387,11 +449,15 @@ def logout():
 
 
 if __name__ == "__main__":
+    # Development entrypoint only. Deployments serve this module through
+    # gunicorn (see Dockerfile), which never executes this block.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    # Permits the OAuth token exchange over plain HTTP for http://localhost.
+    # Never set this when the app is reachable over a network.
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    print("\nTest Web App Starting...")
-    print("  Runtime Mode: live_ca_api")
-    print(f"  Project: {PROJECT_ID}")
-    print(f"  Location: {GOOGLE_CLOUD_LOCATION}")
-    print(f"  Agent ID: {AGENT_ID}")
-    print("\nOpen http://localhost:8080 in your browser\n")
-    app.run(host="0.0.0.0", port=8080, debug=True)
+
+    port = int(os.getenv("PORT", "8080"))
+    logger.info("Starting development server on http://localhost:%s", port)
+    logger.info("Project=%s location=%s agent=%s", PROJECT_ID, GOOGLE_CLOUD_LOCATION, AGENT_ID)
+    app.run(host="127.0.0.1", port=port, debug=env_flag("FLASK_DEBUG"))

@@ -25,4 +25,8 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 
-CMD ["python", "app.py"]
+# Serve through gunicorn, not the Werkzeug development server. Sessions are held
+# in process memory, so the worker count is pinned to 1; scale with Cloud Run
+# --max-instances=1 until session state moves to a shared store.
+CMD exec gunicorn --bind "0.0.0.0:${PORT}" --workers 1 --threads 8 \
+    --timeout 300 --access-logfile - --error-logfile - app:app
