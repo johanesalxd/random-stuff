@@ -143,7 +143,8 @@ This setup runs entirely within GCP by seeding mock customer loyalty and sales t
    ```bash
    cp config.example.env config.local.env
    ```
-2. Open `config.local.env` and set `NO_AWS` to `"true"`:
+2. In `config.local.env`, flip the deployment mode to GCP-only. All `AWS_*`,
+   `S3_*` and `FEDERATED_CATALOG` values are ignored in this mode:
    ```bash
    export NO_AWS="true"
    ```
@@ -152,10 +153,19 @@ This setup runs entirely within GCP by seeding mock customer loyalty and sales t
    gcloud auth login
    gcloud auth application-default login
    ```
-4. Run the GCP-only deployment script:
+4. Provide OAuth credentials for the Web UI in `agent/.env`. The deployed Cloud
+   Run service is publicly reachable and refuses to start without them:
+   ```bash
+   OAUTH_CLIENT_ID="...apps.googleusercontent.com"
+   OAUTH_CLIENT_SECRET="..."
+   FLASK_SECRET_KEY="..."   # optional; generated per-deploy when omitted
+   ```
+5. Run the GCP-only deployment script:
    ```bash
    ./deploy_no_aws.sh
    ```
+   It prints the Cloud Run URL at the end. Register `<url>/auth/callback` as an
+   Authorized Redirect URI on your OAuth client, or sign-in will fail.
 
 #### Option B2: Step-by-Step Manual Setup
 If you want to run the GCP-only steps manually:
@@ -169,9 +179,10 @@ If you want to run the GCP-only steps manually:
    ./gcp/05_seed_native_bq.sh       # Seeds allergen/recipe catalog
    ./gcp/04_seed_mock_aws_data.sh   # Seeds mock global_loyalty & sales tables in BigQuery
    ```
-3. Execute query verifications and ARIMA BQML forecasting:
+3. Execute query verifications and ARIMA BQML forecasting. Both scripts resolve
+   the loyalty/sales table names from `NO_AWS` via `lib/no_aws.sh`:
    ```bash
-   ./gcp/40_query_froyo.sh          # Performs dynamic local query resolution
+   ./gcp/40_query_froyo.sh          # Allergen join against the native tables
    ./gcp/50_forecast_bqml.sh 92     # Trains ARIMA model on local mock sales history
    ```
 
