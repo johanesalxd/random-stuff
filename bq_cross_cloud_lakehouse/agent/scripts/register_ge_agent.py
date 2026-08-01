@@ -12,7 +12,7 @@ Usage::
 
     # Override the agent id / auth id explicitly
     uv run python scripts/register_ge_agent.py \\
-        --agent froyo_lakehouse_analyst --auth-id froyo-lakehouse-oauth --force
+        --agent froyo_lakehouse_agent --auth-id froyo-lakehouse-oauth --force
 
     # List agents registered in the GE app
     uv run python scripts/register_ge_agent.py --list
@@ -60,7 +60,7 @@ APP_ID = os.getenv("GEMINI_APP_ID")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
-DEFAULT_AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_analyst")
+DEFAULT_AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_agent")
 DEFAULT_AUTH_ID = os.getenv("AUTH_RESOURCE", "froyo-lakehouse-oauth")
 
 DE_BASE = f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha"
@@ -155,65 +155,67 @@ def _request(
     return data
 
 
-# Maps the CA API's wrapper key to the A2A SecurityScheme discriminator "type".
-_SECURITY_SCHEME_TYPES = {
-    "oauth2SecurityScheme": "oauth2",
-    "apiKeySecurityScheme": "apiKey",
-    "httpAuthSecurityScheme": "http",
-    "openIdConnectSecurityScheme": "openIdConnect",
-    "mutualTlsSecurityScheme": "mutualTLS",
-}
+# Redundant in Gemini Enterprise: the agent is authenticated through
+# ``authorizationConfig.agentAuthorization`` (the OAuth authorization resource),
+# not through the card. The CA API began emitting these fields after mid-2026 in
+# a shape GE's A2A validator rejects outright, so they are dropped rather than
+# reshaped.
+_STRIPPED_CARD_FIELDS = ("security", "securitySchemes")
+
+# Gemini Enterprise freezes the agent card at registration time and negotiates
+# A2A extensions from that snapshot. The CA API has since added extensions that
+# make the negotiated request fail before it reaches the chat backend: the call
+# is authenticated and audit-logged, then dropped without ever dispatching to
+# ChatInternal, so the stream closes empty and GE's A2A client fails with
+# "async generator raised StopAsyncIteration".
+#
+# Confirmed against the endpoint by activating extensions via X-A2A-Extensions:
+#   a2ui/v0.9   the card advertises v0.8 *and* v0.9; activating both returns
+#               400 "You provide multiple versions of the a2ui extension".
+#               Unlike the "Input is required" errors -- which GE resolves by
+#               supplying the input, as client-id/v1 and authorizations/v1 show
+#               on working agents -- no caller-supplied input can resolve this.
+#   model/v1    returns 400 "Input is required"; absent from working agents.
+#   stateless/v1, sse/v1
+#               absent from working agents.
+#
+# Stripping these reproduces the extension set carried by the agents registered
+# before the CA API change, which continue to work through GE.
+_STRIPPED_EXTENSION_URIS = (
+    "a2a-extension/a2ui/v0.9",
+    "gemini-enterprise/a2a/extensions/model/v1",
+    "conversational-analytics-api/reference/a2a/extensions/stateless/v1",
+    "conversational-analytics-api/reference/a2a/extensions/sse/v1",
+)
 
 
 def normalize_agent_card(card: dict) -> dict:
-    """Normalize the CA API agent card to the A2A shape Gemini Enterprise accepts.
+    """Remove card declarations that break Gemini Enterprise A2A calls.
 
-    The CA API ``getCard`` endpoint returns two fields in a non-standard shape
-    that GE's A2A validator rejects:
-
-    1. ``security`` entries are wrapped as ``{"schemes": {"<name>": {"list":
-       [...]}}}``. A2A expects each entry to map a scheme name directly to a list
-       of scopes, i.e. ``{"<name>": ["scope", ...]}``.
-    2. Each ``securitySchemes`` value is wrapped as
-       ``{"oauth2SecurityScheme": {...}}`` without the discriminator ``type``.
-       A2A expects the scheme object inline with a ``type`` field, e.g.
-       ``{"type": "oauth2", "flows": {...}}``.
+    Drops the redundant security declaration and the SSE extension. See
+    ``_STRIPPED_CARD_FIELDS`` and ``_STRIPPED_EXTENSION_URIS`` for why each is
+    removed.
 
     Args:
         card: The agent card dict from the CA API.
 
     Returns:
-        The same card dict with GE-compatible ``security`` and
-        ``securitySchemes`` fields.
+        The same card dict, with the offending declarations removed.
     """
-    security = card.get("security")
-    if isinstance(security, list):
-        normalized: list[dict] = []
-        for entry in security:
-            if isinstance(entry, dict) and "schemes" in entry:
-                fixed: dict[str, list[str]] = {}
-                for scheme_name, value in entry["schemes"].items():
-                    if isinstance(value, dict) and "list" in value:
-                        fixed[scheme_name] = value["list"]
-                    else:
-                        fixed[scheme_name] = value
-                normalized.append(fixed)
-            else:
-                normalized.append(entry)
-        card["security"] = normalized
+    for field in _STRIPPED_CARD_FIELDS:
+        card.pop(field, None)
 
-    schemes = card.get("securitySchemes")
-    if isinstance(schemes, dict):
-        fixed_schemes: dict[str, dict] = {}
-        for name, value in schemes.items():
-            if isinstance(value, dict) and len(value) == 1:
-                wrapper_key = next(iter(value))
-                scheme_type = _SECURITY_SCHEME_TYPES.get(wrapper_key)
-                if scheme_type and isinstance(value[wrapper_key], dict):
-                    fixed_schemes[name] = {"type": scheme_type, **value[wrapper_key]}
-                    continue
-            fixed_schemes[name] = value
-        card["securitySchemes"] = fixed_schemes
+    capabilities = card.get("capabilities")
+    if isinstance(capabilities, dict):
+        extensions = capabilities.get("extensions")
+        if isinstance(extensions, list):
+            capabilities["extensions"] = [
+                extension
+                for extension in extensions
+                if not any(
+                    uri in extension.get("uri", "") for uri in _STRIPPED_EXTENSION_URIS
+                )
+            ]
 
     return card
 
@@ -328,20 +330,20 @@ def list_ge_agents(token: str) -> None:
         logger.info("%-25s %-30s %-8s %s", ge_id, display, kind, state)
 
 
-def _find_existing_ge_agent(display_name: str, token: str) -> str | None:
-    """Return the GE agent id if one with the given display name exists.
+def _find_existing_ge_agent(display_name: str, token: str) -> dict | None:
+    """Return the GE agent resource with the given display name, if it exists.
 
     Args:
         display_name: Display name to search for.
         token: Bearer access token.
 
     Returns:
-        GE agent id string, or None if not found.
+        The agent resource dict, or None if not found.
     """
     data = _request("GET", _ge_agents_url(), token)
     for agent in data.get("agents", []):
         if agent.get("displayName") == display_name:
-            return agent["name"].split("/")[-1]
+            return agent
     return None
 
 
@@ -351,6 +353,7 @@ def register_agent(
     auth_id: str | None,
     display_name: str | None,
     force: bool,
+    share_scope: str | None = None,
 ) -> None:
     """Fetch the agent card and register (or update) it in GE as an A2A agent.
 
@@ -360,6 +363,8 @@ def register_agent(
         auth_id: Optional authorization resource id to attach.
         display_name: Optional display name override.
         force: If True, update (PATCH) when the agent already exists.
+        share_scope: Sharing scope to apply (``ALL_USERS`` or ``RESTRICTED``).
+            When None, an existing agent keeps its current scope.
     """
     card = normalize_agent_card(get_agent_card(agent_id, token))
     derived_display_name = display_name or agent_id.replace("_", " ").title()
@@ -377,26 +382,44 @@ def register_agent(
             )
         }
 
-    existing_id = _find_existing_ge_agent(derived_display_name, token)
+    existing = _find_existing_ge_agent(derived_display_name, token)
 
-    if existing_id and not force:
+    if existing and not force:
         logger.info(
             "Agent '%s' already exists in GE (id: %s). Use --force to update.",
             derived_display_name,
-            existing_id,
+            existing["name"].split("/")[-1],
         )
         return
 
-    if existing_id and force:
+    if share_scope:
+        payload["sharingConfig"] = {"scope": share_scope}
+    elif existing and existing.get("sharingConfig"):
+        # A PATCH without an update mask replaces the resource, so any field
+        # omitted from the payload is cleared. Carry the current scope forward,
+        # otherwise --force silently un-shares the agent and it disappears for
+        # every non-admin user.
+        payload["sharingConfig"] = existing["sharingConfig"]
+
+    if existing and force:
+        existing_id = existing["name"].split("/")[-1]
         url = f"{_ge_agents_url()}/{existing_id}"
         logger.info("Updating GE agent: %s (id: %s)", derived_display_name, existing_id)
         result = _request("PATCH", url, token, payload)
-        logger.info("Updated: %s", result.get("name"))
+        logger.info(
+            "Updated: %s (sharing: %s)",
+            result.get("name"),
+            result.get("sharingConfig", {}).get("scope", "unset"),
+        )
     else:
         logger.info("Registering new GE agent: %s", derived_display_name)
         result = _request("POST", _ge_agents_url(), token, payload)
-        ge_id = result.get("name", "").split("/")[-1]
-        logger.info("Registered: %s (GE id: %s)", derived_display_name, ge_id)
+        logger.info(
+            "Registered: %s (GE id: %s, sharing: %s)",
+            derived_display_name,
+            result.get("name", "").split("/")[-1],
+            result.get("sharingConfig", {}).get("scope", "unset"),
+        )
 
 
 def delete_ge_agent(ge_agent_id: str, token: str) -> None:
@@ -457,6 +480,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Update (PATCH) the agent if it already exists in GE.",
     )
+    parser.add_argument(
+        "--share",
+        choices=["all-users", "restricted"],
+        default=None,
+        help=(
+            "Sharing scope for the agent. 'all-users' makes it visible to every "
+            "user of the GE app; 'restricted' limits it to its owner. Defaults "
+            "to keeping the scope the agent already has."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -497,6 +530,8 @@ def main() -> None:
             sys.exit(1)
         create_auth_resource(auth_id, token)
 
+    share_scope = {"all-users": "ALL_USERS", "restricted": "RESTRICTED"}.get(args.share)
+
     try:
         register_agent(
             agent_id=args.agent,
@@ -504,6 +539,7 @@ def main() -> None:
             auth_id=auth_id,
             display_name=args.display_name,
             force=args.force,
+            share_scope=share_scope,
         )
     except RuntimeError as e:
         logger.error("Failed to register agent '%s': %s", args.agent, e)

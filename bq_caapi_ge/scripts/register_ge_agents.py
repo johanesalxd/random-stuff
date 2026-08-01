@@ -143,6 +143,71 @@ def get_agent_card(agent_id: str, token: str) -> dict:
     return _request("GET", url, token)
 
 
+# Redundant in Gemini Enterprise: the agent is authenticated through
+# ``authorizationConfig.agentAuthorization`` (the OAuth authorization resource),
+# not through the card. The CA API began emitting these fields after mid-2026 in
+# a shape GE's A2A validator rejects outright, so they are dropped rather than
+# reshaped.
+_STRIPPED_CARD_FIELDS = ("security", "securitySchemes")
+
+# Gemini Enterprise freezes the agent card at registration time and negotiates
+# A2A extensions from that snapshot. The CA API has since added extensions that
+# make the negotiated request fail before it reaches the chat backend: the call
+# is authenticated and audit-logged, then dropped without ever dispatching to
+# ChatInternal, so the stream closes empty and GE's A2A client fails with
+# "async generator raised StopAsyncIteration".
+#
+# Confirmed against the endpoint by activating extensions via X-A2A-Extensions:
+#   a2ui/v0.9   the card advertises v0.8 *and* v0.9; activating both returns
+#               400 "You provide multiple versions of the a2ui extension".
+#               Unlike the "Input is required" errors -- which GE resolves by
+#               supplying the input, as client-id/v1 and authorizations/v1 show
+#               on working agents -- no caller-supplied input can resolve this.
+#   model/v1    returns 400 "Input is required"; absent from working agents.
+#   stateless/v1, sse/v1
+#               absent from working agents.
+#
+# The agents registered before the CA API change carry a card without these and
+# keep working, but they only re-read the card when re-registered -- so any
+# re-registration without this cleanup would break a currently working agent.
+_STRIPPED_EXTENSION_URIS = (
+    "a2a-extension/a2ui/v0.9",
+    "gemini-enterprise/a2a/extensions/model/v1",
+    "conversational-analytics-api/reference/a2a/extensions/stateless/v1",
+    "conversational-analytics-api/reference/a2a/extensions/sse/v1",
+)
+
+
+def normalize_agent_card(card: dict) -> dict:
+    """Remove card declarations that break Gemini Enterprise A2A calls.
+
+    Drops the redundant security declaration and the extensions that GE cannot
+    negotiate. See ``_STRIPPED_CARD_FIELDS`` and ``_STRIPPED_EXTENSION_URIS``.
+
+    Args:
+        card: The agent card dict from the CA API.
+
+    Returns:
+        The same card dict, with the offending declarations removed.
+    """
+    for field in _STRIPPED_CARD_FIELDS:
+        card.pop(field, None)
+
+    capabilities = card.get("capabilities")
+    if isinstance(capabilities, dict):
+        extensions = capabilities.get("extensions")
+        if isinstance(extensions, list):
+            capabilities["extensions"] = [
+                extension
+                for extension in extensions
+                if not any(
+                    uri in extension.get("uri", "") for uri in _STRIPPED_EXTENSION_URIS
+                )
+            ]
+
+    return card
+
+
 def create_auth_resource(auth_id: str, token: str) -> None:
     """Create an OAuth authorization resource in Gemini Enterprise.
 
@@ -240,6 +305,7 @@ def register_agent(
     auth_id: str | None = None,
     display_name: str | None = None,
     force: bool = False,
+    share_scope: str | None = None,
 ) -> None:
     """Fetch agent card from CA API and register it in GE as an A2A agent.
 
@@ -249,8 +315,10 @@ def register_agent(
         auth_id: Optional authorization resource ID to attach.
         display_name: Optional display name override. Defaults to title-cased agent_id.
         force: If True, update (PATCH) if the agent already exists.
+        share_scope: Sharing scope to apply (``ALL_USERS`` or ``RESTRICTED``).
+            When None, an existing agent keeps its current scope.
     """
-    card = get_agent_card(agent_id, token)
+    card = normalize_agent_card(get_agent_card(agent_id, token))
 
     derived_display_name = display_name or agent_id.replace("_", " ").title()
 
@@ -269,44 +337,62 @@ def register_agent(
         }
 
     # Check if an agent with this display name already exists.
-    existing_id = _find_existing_ge_agent(derived_display_name, token)
+    existing = _find_existing_ge_agent(derived_display_name, token)
 
-    if existing_id and not force:
+    if existing and not force:
         logger.info(
             "Agent '%s' already exists in GE (ID: %s). Use --force to update.",
             derived_display_name,
-            existing_id,
+            existing["name"].split("/")[-1],
         )
         return
 
-    if existing_id and force:
+    if share_scope:
+        payload["sharingConfig"] = {"scope": share_scope}
+    elif existing and existing.get("sharingConfig"):
+        # A PATCH without an update mask replaces the resource, so any field
+        # omitted from the payload is cleared. Carry the current scope forward,
+        # otherwise --force silently un-shares the agent and it disappears for
+        # every non-admin user.
+        payload["sharingConfig"] = existing["sharingConfig"]
+
+    if existing and force:
+        existing_id = existing["name"].split("/")[-1]
         url = f"{_ge_agents_url()}/{existing_id}"
         logger.info(
             "Updating existing GE agent: %s (ID: %s)", derived_display_name, existing_id
         )
         result = _request("PATCH", url, token, payload)
-        logger.info("Updated: %s", result.get("name"))
+        logger.info(
+            "Updated: %s (sharing: %s)",
+            result.get("name"),
+            result.get("sharingConfig", {}).get("scope", "unset"),
+        )
     else:
         logger.info("Registering new GE agent: %s", derived_display_name)
         result = _request("POST", _ge_agents_url(), token, payload)
-        ge_id = result.get("name", "").split("/")[-1]
-        logger.info("Registered: %s (GE ID: %s)", derived_display_name, ge_id)
+        logger.info(
+            "Registered: %s (GE ID: %s, sharing: %s)",
+            derived_display_name,
+            result.get("name", "").split("/")[-1],
+            result.get("sharingConfig", {}).get("scope", "unset"),
+        )
 
 
-def _find_existing_ge_agent(display_name: str, token: str) -> str | None:
-    """Return the GE agent ID if an agent with the given display name exists.
+def _find_existing_ge_agent(display_name: str, token: str) -> dict | None:
+    """Return the GE agent resource with the given display name, if it exists.
 
     Args:
         display_name: Display name to search for.
         token: Bearer access token.
 
     Returns:
-        GE agent ID string, or None if not found.
+        The agent resource dict, or None if not found.
     """
     data = _request("GET", _ge_agents_url(), token)
     for agent in data.get("agents", []):
         if agent.get("displayName") == display_name:
-            return agent["name"].split("/")[-1]
+            return agent
     return None
 
 
@@ -373,6 +459,16 @@ def main() -> None:
         action="store_true",
         help="Update (PATCH) agents that already exist in GE instead of skipping.",
     )
+    parser.add_argument(
+        "--share",
+        choices=["all-users", "restricted"],
+        default=None,
+        help=(
+            "Sharing scope for the agents. 'all-users' makes them visible to "
+            "every user of the GE app; 'restricted' limits them to their owner. "
+            "Defaults to keeping the scope each agent already has."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -422,6 +518,8 @@ def main() -> None:
     else:
         auth_ids = [None] * len(args.agents)
 
+    share_scope = {"all-users": "ALL_USERS", "restricted": "RESTRICTED"}.get(args.share)
+
     for agent_id, display_name, auth_id in zip(args.agents, display_names, auth_ids):
         try:
             register_agent(
@@ -430,6 +528,7 @@ def main() -> None:
                 auth_id=auth_id,
                 display_name=display_name,
                 force=args.force,
+                share_scope=share_scope,
             )
         except RuntimeError as e:
             logger.error("Failed to register agent '%s': %s", agent_id, e)
