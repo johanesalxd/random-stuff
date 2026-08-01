@@ -142,6 +142,12 @@ Deployment steps (install → create agent → register in GE → validate) live
 technical runbook: **[`README.md`](README.md)**. Configuration is read from the
 demo's `../config.local.env` plus this package's `.env`.
 
+**Before the demo:** if the agent answers in BigQuery Studio but every Gemini
+Enterprise chat fails with `A2A request failed: async generator raised
+StopAsyncIteration`, re-register it — the stored A2A card is frozen at
+registration time and may carry declarations GE cannot negotiate. See
+[A2A card compatibility](README.md#a2a-card-compatibility-gemini-enterprise).
+
 ---
 
 ## 7. 10-Minute C-Level Presentation Guide

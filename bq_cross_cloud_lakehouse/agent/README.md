@@ -153,14 +153,24 @@ available to query. Use the questions in [`DEMO_RUNDOWN.md`](DEMO_RUNDOWN.md).
 
 ### Deployment gotchas
 
-- **CA agent location vs data region.** Data lives in `us-east4` (regional); the
-  agent defaults to `global`. If `global` rejects the regional Lakehouse data,
-  set `GOOGLE_CLOUD_LOCATION=us-east4` in `.env` — the scripts automatically use
-  the matching regional CA API endpoint.
+- **Keep the CA agent in `global`.** Although the data is regional, the CA engine
+  resolves the BigQuery job location from the tables the agent references, so a
+  `global` agent queries the `us-east4` dataset and the AWS-federated catalog
+  correctly. Creating the agent in a region also hides it from the BigQuery
+  Studio agent list, which only surfaces `global` agents. The scripts still
+  support a regional `GOOGLE_CLOUD_LOCATION` and switch to the matching regional
+  endpoint, but there is no reason to use it here.
 - **GE app location is separate.** `GEMINI_APP_LOCATION` (default `global`)
   controls the Gemini Enterprise / Discovery Engine endpoints independently of
-  the CA agent location, so you can run the agent in `us-east4` while GE stays
-  `global`. Leave it at `global` unless your GE app is regional.
+  the CA agent location. Leave it at `global` unless your GE app is regional.
+- **Deleted agent ids are reserved for 30 days.** `DeleteDataAgent` soft-deletes:
+  the id stays claimed (the resource reports a `purgeTime` 30 days out), a
+  re-create returns `409 AlreadyExists`, and the API exposes no restore or
+  undelete method. If you need the agent back sooner, register it under a new
+  `AGENT_ID`.
+- **Re-registering replaces the stored A2A card.** That is how you pick up card
+  fixes, but read [A2A card compatibility](#a2a-card-compatibility-gemini-enterprise)
+  before re-registering an agent that currently works.
 
 ## Configuration
 
@@ -178,8 +188,8 @@ adds the GE/OAuth settings).
 
 | From `agent/.env` | Purpose |
 |---|---|
-| `GOOGLE_CLOUD_LOCATION` | CA API resource location (`global`; set `us-east4` to use the regional endpoint) |
-| `AGENT_ID` | CA API data agent id |
+| `GOOGLE_CLOUD_LOCATION` | CA API resource location. Keep `global`; a regional value hides the agent from the BigQuery Studio agent list |
+| `AGENT_ID` | CA API data agent id. Deleted ids stay reserved for 30 days, so a rebuild may need a new one |
 | `GEMINI_APP_ID` | Target Gemini Enterprise app |
 | `GEMINI_APP_LOCATION` | GE / Discovery Engine app location (`global`; independent of the CA agent location) |
 | `GOOGLE_CLOUD_PROJECT_NUMBER` | Builds the GE authorization resource path |
@@ -191,7 +201,7 @@ adds the GE/OAuth settings).
 | Script | What it does |
 |---|---|
 | `scripts/create_agent.py` | Idempotently creates/updates the CA API data agent over the six native + federated tables. Endpoint-aware for `global` vs regional locations. |
-| `scripts/register_ge_agent.py` | Fetches the A2A card (`getCard`), creates the OAuth authorization resource, and registers/updates the agent in GE. Also `--list` and `--delete`. |
+| `scripts/register_ge_agent.py` | Fetches the A2A card (`getCard`), strips the declarations GE cannot negotiate (see [A2A card compatibility](#a2a-card-compatibility-gemini-enterprise)), creates the OAuth authorization resource, and registers/updates the agent in GE. Preserves the sharing scope on update; `--share` overrides it. Also `--list` and `--delete`. |
 | `scripts/validate_agent.py` | Streams the storyline questions through the CA API `:chat` endpoint and prints text, generated SQL, and row counts. |
 | `scripts/enrich_bigquery_metadata.py` | **Showcase:** runs Dataplex data profile + data documentation scans on the agent's tables (see [Metadata enrichment](#metadata-enrichment-showcase)). Not required to run the agent. |
 
@@ -204,7 +214,96 @@ uv run python scripts/register_ge_agent.py --delete <GE_AGENT_ID>
 
 # Register without attaching an OAuth resource (not recommended for multi-user)
 uv run python scripts/register_ge_agent.py --no-auth --force
+
+# Force the sharing scope (default: keep whatever the agent already has)
+uv run python scripts/register_ge_agent.py --force --share all-users
 ```
+
+## A2A card compatibility (Gemini Enterprise)
+
+Gemini Enterprise **freezes the agent card at registration time**. It stores a
+snapshot in `a2aAgentDefinition.jsonAgentCard` and never re-reads the CA API, so
+an agent keeps running against the card it was registered with. Re-registering
+with `--force` replaces that snapshot with whatever `getCard` returns *today*.
+
+That has a non-obvious consequence: an agent registered months ago and an agent
+registered now behave differently even though nothing in this repo changed. The
+CA API has added card declarations that Gemini Enterprise cannot negotiate, and
+only newly registered agents inherit them. `normalize_agent_card()` in
+`scripts/register_ge_agent.py` strips them:
+
+| Stripped from the card | Why |
+|---|---|
+| `security`, `securitySchemes` | Redundant: GE authenticates the agent through `authorizationConfig.agentAuthorization`. Also emitted in a shape GE's A2A validator rejects at registration. |
+| `a2ui/v0.9` | The card advertises `v0.8` **and** `v0.9`. Activating both returns `400 You provide multiple versions of the a2ui extension`, and no caller-supplied input can resolve it. `v0.8` is kept, so rendering still works. |
+| `model/v1`, `stateless/v1`, `sse/v1` | Absent from the agents registered before the change, which work today. Removed to reproduce that known-good extension set. |
+
+The same cleanup exists in `bq_caapi_ge/scripts/register_ge_agents.py`. Agents
+registered by that script before the CA API change are only safe while they are
+not re-registered; re-registering without the cleanup would break a working
+agent.
+
+### Symptom
+
+The agent registers, reports `ENABLED`, answers correctly in BigQuery Studio and
+through the CA API `:chat` endpoint — but every Gemini Enterprise chat fails:
+
+```
+A2A request failed: async generator raised StopAsyncIteration
+```
+
+This means only that the response stream was empty. It does not identify the
+cause, and it is identical for authentication, routing, and card problems.
+
+### Diagnosing
+
+The request fails during extension negotiation, before the chat backend runs, so
+a failing call is authenticated and audit-logged but **never dispatched**:
+
+```bash
+gcloud logging read \
+  'protoPayload.methodName="a2a.v1.A2AService.SendStreamingMessage" OR
+   protoPayload.methodName="google.cloud.geminidataanalytics.v1main.DataChatService.ChatInternal"' \
+  --project="$GCP_PROJECT" --freshness=1h \
+  --format='value(timestamp, protoPayload.methodName, protoPayload.resourceName)'
+```
+
+A healthy call logs `SendStreamingMessage` followed by `ChatInternal` within a
+second. A failing one logs `SendStreamingMessage` with no `ChatInternal`. This
+distinguishes a card problem from an authentication problem: if the audit entry
+is missing entirely the request never reached the service, and if
+`authorizationInfo.granted` is false it is an IAM problem instead.
+
+Compare a broken agent against a working one using the **stored** cards. The
+live `getCard` output is identical for both, so it proves nothing:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/$GOOGLE_CLOUD_PROJECT_NUMBER/locations/global/collections/default_collection/engines/$GEMINI_APP_ID/assistants/default_assistant/agents" \
+| python3 -c '
+import json, sys
+for a in json.load(sys.stdin).get("agents", []):
+    card = json.loads(a["a2aAgentDefinition"]["jsonAgentCard"])
+    exts = [e["uri"] for e in card.get("capabilities", {}).get("extensions", [])]
+    print(a["displayName"], len(exts), "security" if card.get("security") else "-")
+'
+```
+
+To test one extension in isolation, activate it with the `X-A2A-Extensions`
+header against `.../v1/message:stream`. Note that `400 Input is required for
+<uri>` is **not** evidence of a broken extension — `client-id/v1` and
+`authorizations/v1` both return it for a bare `curl` yet work in GE, because GE
+supplies the input. Only errors that no input can resolve (such as the duplicate
+`a2ui` version) indicate a real incompatibility.
+
+### Sharing is part of the registration payload
+
+Gemini Enterprise applies `PATCH` without an update mask, so it replaces the
+whole resource and clears any field the payload omits. `register_agent()`
+therefore carries the existing `sharingConfig` forward; otherwise `--force`
+silently un-shares the agent and it disappears for every non-admin user while
+still looking healthy to the operator. Use `--share` to set it explicitly, and
+check the scope reported in the registration log line.
 
 ## Adapting this agent for your own data
 
