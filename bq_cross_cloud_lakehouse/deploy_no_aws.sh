@@ -204,7 +204,7 @@ done
 # on this project. Setting USE_ADC_FOR_API would remove that check and let any
 # visitor query as the service account, so it is deliberately left unset.
 echo "Deploying container to Cloud Run..."
-COMMON_ENV="GCP_PROJECT=$GCP_PROJECT,GOOGLE_CLOUD_PROJECT=$GCP_PROJECT,AGENT_ID=froyo_lakehouse_analyst,GOOGLE_CLOUD_LOCATION=global,NO_AWS=true,COOKIE_SECURE=1"
+COMMON_ENV="GCP_PROJECT=$GCP_PROJECT,GOOGLE_CLOUD_PROJECT=$GCP_PROJECT,AGENT_ID=froyo_lakehouse_agent,GOOGLE_CLOUD_LOCATION=global,NO_AWS=true,COOKIE_SECURE=1"
 
 deploy_webui() {
   gcloud run deploy froyo-agent-hub \

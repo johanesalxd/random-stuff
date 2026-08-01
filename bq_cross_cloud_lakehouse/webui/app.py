@@ -67,7 +67,7 @@ CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
 
 # Live CA API configuration
-AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_analyst")
+AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_agent")
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
 # Mock sign-in bypasses OAuth entirely and must never be enabled on a deployed,

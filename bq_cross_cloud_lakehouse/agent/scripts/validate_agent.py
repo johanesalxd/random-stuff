@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT", "")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_analyst")
+AGENT_ID = os.getenv("AGENT_ID", "froyo_lakehouse_agent")
 
 # Storyline questions (see DEMO_RUNDOWN.md).
 QUESTIONS = [

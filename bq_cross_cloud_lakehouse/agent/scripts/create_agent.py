@@ -186,7 +186,7 @@ def main() -> None:
     """Create or update the Froyo Lakehouse CA data agent."""
     config = load_lakehouse_config()
     location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-    agent_id = os.getenv("AGENT_ID", "froyo_lakehouse_analyst")
+    agent_id = os.getenv("AGENT_ID", "froyo_lakehouse_agent")
 
     definition = build_agent_definition(config, agent_id)
 

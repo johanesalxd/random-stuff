@@ -30,7 +30,7 @@ local `.env` in this directory, with later files winning.
 | `OAUTH_CLIENT_ID` | yes | — | Google OAuth client id |
 | `OAUTH_CLIENT_SECRET` | yes | — | Google OAuth client secret |
 | `GCP_PROJECT` / `GOOGLE_CLOUD_PROJECT` | yes | — | Project owning the data agent |
-| `AGENT_ID` | no | `froyo_lakehouse_analyst` | CA API data agent id |
+| `AGENT_ID` | no | `froyo_lakehouse_agent` | CA API data agent id |
 | `GOOGLE_CLOUD_LOCATION` | no | `global` | CA API location |
 | `OAUTH_REDIRECT_URI` | no | `http://localhost:8080/auth/callback` | Must match an Authorized Redirect URI on the OAuth client |
 | `FLASK_SECRET_KEY` | recommended | ephemeral | Stable value keeps sessions valid across restarts |

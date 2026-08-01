@@ -232,7 +232,7 @@ if [[ "$deploy_webapp" =~ ^[Yy]$ ]]; then
     --region "us-central1" \
     --allow-unauthenticated \
     --project "$GCP_PROJECT" \
-    --set-env-vars="GCP_PROJECT=$GCP_PROJECT,USE_LIVE_CA_API=1,AGENT_ID=froyo_lakehouse_analyst,GOOGLE_CLOUD_LOCATION=us-east4" || { echo "❌ ERROR: Cloud Run deployment failed." >&2; exit 1; }
+    --set-env-vars="GCP_PROJECT=$GCP_PROJECT,USE_LIVE_CA_API=1,AGENT_ID=froyo_lakehouse_agent,GOOGLE_CLOUD_LOCATION=global" || { echo "❌ ERROR: Cloud Run deployment failed." >&2; exit 1; }
 
   RUN_URL=$(gcloud run services describe froyo-agent-hub --region "us-central1" --project "$GCP_PROJECT" --format="value(status.url)")
   echo ""

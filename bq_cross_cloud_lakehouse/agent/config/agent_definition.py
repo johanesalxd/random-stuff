@@ -339,7 +339,7 @@ def is_federated_dataset_id(dataset_id: str) -> bool:
 
 def native_table_ids(
     config: LakehouseConfig,
-    agent_id: str = "froyo_lakehouse_analyst",
+    agent_id: str = "froyo_lakehouse_agent",
 ) -> tuple[str, ...]:
     """Return the native (single-dataset) BigQuery table ids for the agent.
 
@@ -364,7 +364,7 @@ def native_table_ids(
 
 def federated_table_refs(
     config: LakehouseConfig,
-    agent_id: str = "froyo_lakehouse_analyst",
+    agent_id: str = "froyo_lakehouse_agent",
 ) -> tuple[tuple[str, str], ...]:
     """Return ``(dataset_id, table_id)`` pairs for federated Iceberg tables.
 

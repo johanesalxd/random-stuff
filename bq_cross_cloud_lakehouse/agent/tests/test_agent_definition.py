@@ -29,7 +29,7 @@ def test_federated_dataset_id_is_catalog_dot_namespace():
 
 def test_agent_spans_native_and_federated_tables():
     """The agent covers the four native tables plus the two AWS Iceberg tables."""
-    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_analyst")
+    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
 
     refs = {(t.dataset_id, t.table_id) for t in definition.tables}
     assert refs == {
@@ -50,7 +50,7 @@ def test_agent_id_is_applied():
 
 def test_system_instruction_encodes_soy_exclusion_rule():
     """The soy-exclusion safety rule must be present in the instruction."""
-    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_analyst")
+    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
     instruction = definition.system_instruction.lower()
 
     assert "soy" in instruction
@@ -60,7 +60,7 @@ def test_system_instruction_encodes_soy_exclusion_rule():
 
 def test_system_instruction_names_cross_cloud_sources():
     """The instruction should reference both native and federated sources."""
-    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_analyst")
+    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
     instruction = definition.system_instruction
 
     assert "demo-project.froyo_demo_ue4.product_allergens" in instruction
@@ -70,7 +70,7 @@ def test_system_instruction_names_cross_cloud_sources():
 
 def test_no_aws_collapses_analytics_tables_into_the_native_dataset():
     """In GCP-only mode loyalty and sales are ordinary native BigQuery tables."""
-    definition = build_agent_definition(_NO_AWS_CONFIG, "froyo_lakehouse_analyst")
+    definition = build_agent_definition(_NO_AWS_CONFIG, "froyo_lakehouse_agent")
 
     refs = {(t.dataset_id, t.table_id) for t in definition.tables}
     assert refs == {
@@ -86,7 +86,7 @@ def test_no_aws_collapses_analytics_tables_into_the_native_dataset():
 def test_no_aws_instruction_drops_cross_cloud_claims():
     """The agent must not describe native tables as AWS-resident."""
     instruction = build_agent_definition(
-        _NO_AWS_CONFIG, "froyo_lakehouse_analyst"
+        _NO_AWS_CONFIG, "froyo_lakehouse_agent"
     ).system_instruction
 
     assert "demo-project.froyo_demo_ue4.global_loyalty" in instruction
@@ -98,7 +98,7 @@ def test_no_aws_instruction_drops_cross_cloud_claims():
 def test_no_aws_preserves_the_soy_exclusion_rule():
     """The allergen safety rule is independent of where the tables live."""
     instruction = build_agent_definition(
-        _NO_AWS_CONFIG, "froyo_lakehouse_analyst"
+        _NO_AWS_CONFIG, "froyo_lakehouse_agent"
     ).system_instruction.lower()
 
     assert "soy_sensitive_flag" in instruction
@@ -117,7 +117,7 @@ def test_no_aws_changes_the_agent_description():
 def test_build_agent_definition_ignores_ambient_no_aws_env(monkeypatch):
     """Mode comes from the config object, never from the process environment."""
     monkeypatch.setenv("NO_AWS", "true")
-    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_analyst")
+    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
 
     refs = {t.dataset_id for t in definition.tables}
     assert "demo_glue_cat.froyo_lakehouse" in refs
