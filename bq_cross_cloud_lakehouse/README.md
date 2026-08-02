@@ -65,13 +65,26 @@ flowchart LR
 
 ## Quick start
 
-Prereqs: `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`, an
-allowlisted and billed GCP project, and temporary AWS credentials from AWS IAM
-Identity Center (`aws configure sso` then `aws sso login`), or any `~/.aws`
-profile. The GCP operator needs BigLake Admin, BigQuery Data Editor,
-BigQuery Job User, Dataplex DataScan Editor, Dataplex Catalog Editor, and Service
-Usage Admin. Query users need BigLake Viewer, BigQuery Data Viewer, and BigQuery
-Job User. Full run is approximately 10–15 minutes. Cost is less than $5.
+Prereqs:
+
+- **Tools** — `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`,
+  `curl`, `openssl`.
+- **GCP** — an allowlisted and billed project. The operator needs BigLake Admin,
+  BigQuery Data Editor, BigQuery Job User, Dataplex DataScan Editor, Dataplex
+  Catalog Editor, and Service Usage Admin. The optional
+  `gcp/06_knowledge_catalog.sh` additionally needs Project IAM Admin, because it
+  grants roles to the Dataplex and BigQuery connection service accounts. Query
+  users need BigLake Viewer, BigQuery Data Viewer, and BigQuery Job User.
+- **AWS** — temporary credentials from AWS IAM Identity Center (`aws configure
+  sso` then `aws sso login`), or any `~/.aws` profile, able to create S3
+  buckets, Glue databases, Athena tables, and IAM OIDC roles.
+  `aws/21_readonly_user.sh` additionally needs `iam:CreateUser`,
+  `iam:CreateLoginProfile`, and `iam:PutUserPolicy`.
+- **Athena** — the workgroup must be on **engine version 3**;
+  `aws/01_verify.sh` exits if it is not. Set `ATHENA_WORKGROUP` in
+  `config.local.env` to use a workgroup other than `primary`.
+
+Full run is approximately 10–15 minutes. Cost is less than $5.
 
 ```bash
 cd bq_cross_cloud_lakehouse
@@ -150,6 +163,15 @@ cross-cloud soy-safe target list → regional revenue). See
 [`agent/README.md`](agent/README.md) to deploy and
 [`agent/DEMO_RUNDOWN.md`](agent/DEMO_RUNDOWN.md) for the talk-track. Based on the
 `bq_caapi_ge` project.
+
+The agent needs three APIs beyond the two the pipeline above enables:
+
+```bash
+gcloud services enable --project="$GCP_PROJECT" \
+  geminidataanalytics.googleapis.com \
+  discoveryengine.googleapis.com \
+  cloudaicompanion.googleapis.com
+```
 
 ## Data model
 
