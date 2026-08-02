@@ -75,6 +75,19 @@ if bq --project_id="${GCP_PROJECT}" show --connection "${CONN}" >/dev/null 2>&1;
       --member="serviceAccount:${connection_sa}" --role=roles/aiplatform.user \
       --condition=None --quiet
   fi
+  # gcp/06 also grants this SA storage.objectViewer on the PDF bucket. Revoke it
+  # here, while the connection still exists and its SA id is resolvable. Only
+  # shared buckets need it -- a dedicated bucket is deleted wholesale below.
+  if [[ "${GCS_PDF_BUCKET_MODE}" == "shared" ]] \
+      && gcloud storage buckets describe "gs://${GCS_PDF_BUCKET}" >/dev/null 2>&1; then
+    if gcloud storage buckets get-iam-policy "gs://${GCS_PDF_BUCKET}" \
+        --format='value(bindings.members)' 2>/dev/null \
+        | grep -q "${connection_sa}"; then
+      run gcloud storage buckets remove-iam-policy-binding "gs://${GCS_PDF_BUCKET}" \
+        --member="serviceAccount:${connection_sa}" \
+        --role=roles/storage.objectViewer
+    fi
+  fi
   run bq --project_id="${GCP_PROJECT}" rm --connection --force "${CONN}"
 fi
 if gcloud storage buckets describe "gs://${GCS_PDF_BUCKET}" >/dev/null 2>&1; then
