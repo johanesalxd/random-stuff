@@ -67,7 +67,7 @@ until `froyo_lakehouse` and both tables appear.
 ./gcp/05_seed_native_bq.sh          # deterministic allergen/recipe/product knowledge
 # ./gcp/06_knowledge_catalog.sh     # OPTIONAL: preview semantic inference (~20m)
 ./gcp/40_query_froyo.sh             # allergen find + cross-cloud target list
-./gcp/50_forecast_bqml.sh 92        # BQML ARIMA_PLUS Q3 forecast on AWS-resident data
+./gcp/50_forecast_bqml.sh 92        # BQML ARIMA_PLUS 92-day forecast on AWS-resident data
 ```
 
 ## Demo talk-track (~6 min)
@@ -85,7 +85,7 @@ until `froyo_lakehouse` and both tables appear.
     - "No persistent copy or ETL. BigLake assumes an AWS IAM role over OIDC and
       reads S3 over the public internet with short-lived vended credentials."
 4. **Forecast (`gcp/50`).** "Finally, BigQuery ML `ARIMA_PLUS` — trained *directly
-   on the AWS-resident* `sales_history` — projects Q3 revenue per region. Raw,
+   on the AWS-resident* `sales_history` — projects next-quarter revenue per region. Raw,
    multi-cloud data to a forecast, in SQL."
 5. **Close.** "Hidden risk found in dark data, multi-cloud data joined with zero
    ETL, and a forecast built with zero manual code — all from BigQuery."

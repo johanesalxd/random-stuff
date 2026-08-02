@@ -18,6 +18,14 @@ ATHENA_OUTPUT="s3://${S3_BUCKET}/athena-results/"
 LOYALTY_LOC="s3://${S3_BUCKET}/warehouse/${FROYO_LOYALTY_TABLE}"
 SALES_LOC="s3://${S3_BUCKET}/warehouse/${FROYO_SALES_TABLE}"
 
+# sales_history covers the 730 days ending today, so "the last 12 months"
+# always resolves against real rows no matter when the demo is deployed.
+# Computed here rather than in SQL to keep the INSERT portable, and with
+# python3 rather than date(1) because BSD and GNU date take different flags.
+read -r SALES_START SALES_END <<<"$(python3 -c 'import datetime
+end = datetime.date.today()
+print(end - datetime.timedelta(days=729), end)')"
+
 # Submit a query, poll to completion, print the QueryExecutionId on stdout.
 # All human-readable progress goes to stderr so stdout stays capturable.
 _athena_run() {
@@ -121,7 +129,7 @@ run_athena "CREATE TABLE IF NOT EXISTS ${FROYO_SALES_TABLE} (
 LOCATION '${SALES_LOC}'
 TBLPROPERTIES ('table_type'='ICEBERG', 'format'='parquet');"
 
-echo "== Seed sales_history (idempotent; 2024-07-01..2026-06-30 daily x 3 regions) =="
+echo "== Seed sales_history (idempotent; ${SALES_START}..${SALES_END} daily x 3 regions) =="
 SALES_ROWS="$(athena_scalar "SELECT COUNT(*) FROM ${FROYO_SALES_TABLE};")"
 if [[ "${SALES_ROWS}" == "0" ]]; then
   run_athena "INSERT INTO ${FROYO_SALES_TABLE}
@@ -135,13 +143,13 @@ if [[ "${SALES_ROWS}" == "0" ]]; then
     SELECT dt, r,
       CAST(GREATEST(5, round(
           40
-        + 0.04 * date_diff('day', DATE '2024-07-01', dt)          -- upward trend
+        + 0.04 * date_diff('day', DATE '${SALES_START}', dt)      -- upward trend
         + 12   * sin(2 * pi() * day_of_week(dt) / 7.0)            -- weekly seasonality
-        + (mod(date_diff('day', DATE '2024-07-01', dt) * 17
+        + (mod(date_diff('day', DATE '${SALES_START}', dt) * 17
             + CASE r WHEN 'APAC' THEN 3 WHEN 'EMEA' THEN 5 ELSE 7 END, 9) - 4)
         + (CASE r WHEN 'APAC' THEN 20 WHEN 'EMEA' THEN 10 ELSE 0 END)
       )) AS integer) AS u
-    FROM UNNEST(sequence(DATE '2024-07-01', DATE '2026-06-30', INTERVAL '1' day)) AS t(dt)
+    FROM UNNEST(sequence(DATE '${SALES_START}', DATE '${SALES_END}', INTERVAL '1' day)) AS t(dt)
     CROSS JOIN (VALUES ('APAC'), ('EMEA'), ('AMER')) AS x(r)
   );"
 else

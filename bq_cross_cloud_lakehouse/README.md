@@ -26,7 +26,7 @@ inspiration, not a dependency.
    Midnight Swirl campaign list — excluding soy-sensitive customers — in a single
    query, with no persistent replication and no AWS keys stored in Google Cloud.
 3. **Forecast.** BigQuery ML `ARIMA_PLUS`, trained directly on the **AWS-resident**
-   `sales_history` Iceberg table, projects Q3 revenue per region.
+   `sales_history` Iceberg table, projects next-quarter revenue per region.
 
 The reliable Beat 1 path uses PDF-grounded seed tables; Knowledge Catalog is an
 optional preview path. Beats 2–3 run entirely in BigQuery.
@@ -99,7 +99,7 @@ sleep 120                                   # let AWS IAM propagate
 ./gcp/05_seed_native_bq.sh                  # allergen/recipe/product knowledge (deterministic)
 # ./gcp/06_knowledge_catalog.sh             # OPTIONAL: preview semantic inference
 ./gcp/40_query_froyo.sh                     # allergen find + cross-cloud target list
-./gcp/50_forecast_bqml.sh 92                # BQML ARIMA_PLUS Q3 forecast on AWS data
+./gcp/50_forecast_bqml.sh 92                # BQML ARIMA_PLUS 92-day forecast on AWS data
 ```
 
 ## Run order
@@ -118,7 +118,7 @@ sleep 120                                   # let AWS IAM propagate
 | 10 | `gcp/05_seed_native_bq.sh` | Seed native allergen/recipe/product knowledge | 15s |
 | 11 | `gcp/06_knowledge_catalog.sh` | **Optional:** PDF discovery + semantic inference | ~20m |
 | 12 | `gcp/40_query_froyo.sh` | Allergen find + cross-cloud target list | 15s |
-| 13 | `gcp/50_forecast_bqml.sh` | BQML `ARIMA_PLUS` Q3 revenue forecast | ~1m |
+| 13 | `gcp/50_forecast_bqml.sh` | BQML `ARIMA_PLUS` 92-day revenue forecast | ~1m |
 
 > Script number prefixes group related steps (`aws/*`, `gcp/*`); the table above is
 > the actual execution order. `gcp/05` intentionally runs after `gcp/30` (federation

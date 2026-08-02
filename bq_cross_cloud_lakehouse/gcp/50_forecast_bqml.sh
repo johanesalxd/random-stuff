@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 4b: forecast Q3 revenue for Midnight Swirl with BigQuery ML ARIMA_PLUS,
+# Phase 4b: forecast next-quarter revenue for Midnight Swirl with BigQuery ML
 # trained DIRECTLY on the AWS-federated sales_history Iceberg table.
 #
 # This is the BigQuery-native forecast (keynote beat 7). The Serverless Spark /
@@ -15,7 +15,7 @@ source ./config.local.env
 
 SALES="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_SALES_TABLE}"
 MODEL="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}.midnight_swirl_arima"
-HORIZON="${1:-92}"   # Q3 2026 contains 92 days.
+HORIZON="${1:-92}"   # One quarter past the last day of sales_history.
 
 bq_query() { bq --location="${GCP_REGION}" --project_id="${GCP_PROJECT}" query --use_legacy_sql=false "$1"; }
 
@@ -48,7 +48,7 @@ ORDER BY region, forecast_timestamp
 LIMIT 20"
 
 echo
-echo "== Projected Midnight Swirl revenue over the next ${HORIZON} days (the 'Q3' number) =="
+echo "== Projected Midnight Swirl revenue over the next ${HORIZON} days =="
 bq_query "
 SELECT
   region,
