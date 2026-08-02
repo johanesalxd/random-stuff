@@ -53,6 +53,22 @@ def test_system_instruction_encodes_soy_exclusion_rule():
     assert "midnight base 204" in instruction
 
 
+def test_system_instruction_mandates_allergen_derivation():
+    """Allergens must be derived by query, not asserted as a known fact.
+
+    Stating the conclusion ("Midnight Swirl contains Soy") lets the agent skip
+    the native allergen tables and filter ``soy_sensitive_flag`` directly, which
+    collapses the cross-cloud join the demo is built to show.
+    """
+    definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
+    instruction = definition.system_instruction.lower()
+
+    assert "never assume or hard-code which allergens" in instruction
+    assert "demo-project.froyo_demo_ue4.product_allergens and" in instruction
+    assert "in the same sql" in instruction
+    assert "therefore midnight swirl contains soy" not in instruction
+
+
 def test_system_instruction_names_cross_cloud_sources():
     """The instruction should reference both native and federated sources."""
     definition = build_agent_definition(_CONFIG, "froyo_lakehouse_agent")
