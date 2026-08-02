@@ -92,25 +92,30 @@ run_athena "CREATE TABLE IF NOT EXISTS ${FROYO_LOYALTY_TABLE} (
 LOCATION '${LOYALTY_LOC}'
 TBLPROPERTIES ('table_type'='ICEBERG', 'format'='parquet');"
 
-echo "== Seed global_loyalty (idempotent) =="
+# Last-order dates are relative to the deploy date so the loyalty base still
+# looks active whenever the demo is rebuilt. The per-customer day offsets below
+# preserve the original spacing and ordering; only the anchor moves.
+LOYALTY_ANCHOR="$(python3 -c 'import datetime; print(datetime.date.today())')"
+
+echo "== Seed global_loyalty (idempotent; last orders ${LOYALTY_ANCHOR} minus 2..74 days) =="
 LOYALTY_ROWS="$(athena_scalar "SELECT COUNT(*) FROM ${FROYO_LOYALTY_TABLE};")"
 if [[ "${LOYALTY_ROWS}" == "0" ]]; then
   run_athena "INSERT INTO ${FROYO_LOYALTY_TABLE} VALUES
-    (1001, 'APAC', 'Platinum', 'Midnight Swirl',       82.50, false, DATE '2026-03-28'),
-    (1002, 'APAC', 'Gold',     'Midnight Swirl',       47.00, true,  DATE '2026-03-30'),
-    (1003, 'APAC', 'Silver',   'Midnight Papaya Halo', 23.75, false, DATE '2026-02-14'),
-    (1004, 'EMEA', 'Gold',     'Midnight Swirl',       55.20, false, DATE '2026-04-01'),
-    (1005, 'EMEA', 'Bronze',   'Arctic Basil Flow',    12.10, true,  DATE '2026-01-22'),
-    (1006, 'EMEA', 'Platinum', 'Midnight Swirl',       96.00, false, DATE '2026-04-03'),
-    (1007, 'AMER', 'Gold',     'Aura Berry Impact',    61.40, true,  DATE '2026-03-11'),
-    (1008, 'AMER', 'Silver',   'Midnight Swirl',       29.90, false, DATE '2026-03-19'),
-    (1009, 'AMER', 'Platinum', 'Midnight Swirl',       88.30, false, DATE '2026-04-02'),
-    (1010, 'APAC', 'Gold',     'Midnight Swirl',       44.65, true,  DATE '2026-03-27'),
-    (1011, 'EMEA', 'Silver',   'Midnight Swirl',       31.20, false, DATE '2026-03-05'),
-    (1012, 'AMER', 'Bronze',   'Midnight Papaya Halo', 15.00, false, DATE '2026-02-28'),
-    (1013, 'APAC', 'Platinum', 'Midnight Swirl',       74.80, false, DATE '2026-04-04'),
-    (1014, 'EMEA', 'Gold',     'Aura Berry Impact',    52.10, true,  DATE '2026-03-21'),
-    (1015, 'AMER', 'Gold',     'Midnight Swirl',       58.40, false, DATE '2026-03-30');"
+    (1001, 'APAC', 'Platinum', 'Midnight Swirl',       82.50, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '9' DAY),
+    (1002, 'APAC', 'Gold',     'Midnight Swirl',       47.00, true,  DATE '${LOYALTY_ANCHOR}' - INTERVAL '7' DAY),
+    (1003, 'APAC', 'Silver',   'Midnight Papaya Halo', 23.75, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '51' DAY),
+    (1004, 'EMEA', 'Gold',     'Midnight Swirl',       55.20, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '5' DAY),
+    (1005, 'EMEA', 'Bronze',   'Arctic Basil Flow',    12.10, true,  DATE '${LOYALTY_ANCHOR}' - INTERVAL '74' DAY),
+    (1006, 'EMEA', 'Platinum', 'Midnight Swirl',       96.00, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '3' DAY),
+    (1007, 'AMER', 'Gold',     'Aura Berry Impact',    61.40, true,  DATE '${LOYALTY_ANCHOR}' - INTERVAL '26' DAY),
+    (1008, 'AMER', 'Silver',   'Midnight Swirl',       29.90, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '18' DAY),
+    (1009, 'AMER', 'Platinum', 'Midnight Swirl',       88.30, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '4' DAY),
+    (1010, 'APAC', 'Gold',     'Midnight Swirl',       44.65, true,  DATE '${LOYALTY_ANCHOR}' - INTERVAL '10' DAY),
+    (1011, 'EMEA', 'Silver',   'Midnight Swirl',       31.20, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '32' DAY),
+    (1012, 'AMER', 'Bronze',   'Midnight Papaya Halo', 15.00, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '37' DAY),
+    (1013, 'APAC', 'Platinum', 'Midnight Swirl',       74.80, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '2' DAY),
+    (1014, 'EMEA', 'Gold',     'Aura Berry Impact',    52.10, true,  DATE '${LOYALTY_ANCHOR}' - INTERVAL '16' DAY),
+    (1015, 'AMER', 'Gold',     'Midnight Swirl',       58.40, false, DATE '${LOYALTY_ANCHOR}' - INTERVAL '7' DAY);"
 else
   echo "  table already has ${LOYALTY_ROWS} rows; skipping insert."
 fi
