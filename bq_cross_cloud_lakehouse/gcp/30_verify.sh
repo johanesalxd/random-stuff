@@ -16,8 +16,9 @@ for attempt in $(seq 1 12); do
         --use_legacy_sql=false \
         "SELECT COUNT(*) AS row_count FROM \`${fqtn}\`" 2>/dev/null)"; then
       row_count="$(QUERY_JSON="${query_json}" python3 -c \
-        'import json,os; print(json.loads(os.environ["QUERY_JSON"])[0]["row_count"])')"
-      if ((row_count > 0)); then
+        'import json,os; print(json.loads(os.environ["QUERY_JSON"])[0]["row_count"])' \
+        2>/dev/null)" || row_count=""
+      if [[ -n "${row_count}" ]] && ((row_count > 0)); then
         echo "  ${fqtn}: ${row_count} rows"
       else
         all_ready="false"
@@ -35,5 +36,5 @@ for attempt in $(seq 1 12); do
   sleep 10
 done
 
-echo "ERROR: Federated tables were not queryable after two minutes." >&2
+echo "ERROR: Federated tables were not queryable after 12 attempts." >&2
 exit 1

@@ -96,11 +96,15 @@ if ! gcloud dataplex datascans describe "${DATASCAN_ID}" \
 fi
 
 echo "== Wait for the DataScan and run discovery =="
+# Creation is asynchronous, so describe returns NOT_FOUND for the first few
+# attempts. Under "set -e" a bare assignment from a failing command aborts the
+# script, which would kill the very loop that exists to wait this out; the
+# "|| var=" keeps a failed lookup as an empty state and retries.
 scan_state=""
 for attempt in $(seq 1 24); do
   scan_state="$(gcloud dataplex datascans describe "${DATASCAN_ID}" \
     --project="${GCP_PROJECT}" --location="${GCP_REGION}" \
-    --format='value(state)' 2>/dev/null)"
+    --format='value(state)' 2>/dev/null)" || scan_state=""
   [[ "${scan_state}" == "ACTIVE" ]] && break
   sleep 10
 done
@@ -147,7 +151,7 @@ retried_transient="false"
 for attempt in $(seq 1 60); do
   state="$(gcloud dataplex datascans jobs describe "${job_id}" \
     --project="${GCP_PROJECT}" --datascan="${DATASCAN_ID}" \
-    --location="${GCP_REGION}" --format='value(state)' 2>/dev/null)"
+    --location="${GCP_REGION}" --format='value(state)' 2>/dev/null)" || state=""
   echo "  [$((attempt * 30))s] job=${state:-unknown}"
   case "${state}" in
     SUCCEEDED|SUCCEEDED_WITH_ERRORS)
@@ -157,7 +161,7 @@ for attempt in $(seq 1 60); do
       message="$(gcloud dataplex datascans jobs describe "${job_id}" \
         --project="${GCP_PROJECT}" --datascan="${DATASCAN_ID}" \
         --location="${GCP_REGION}" \
-        --format='value(partialFailureMessage,message)' 2>/dev/null)"
+        --format='value(partialFailureMessage,message)' 2>/dev/null)" || message=""
       if [[ "${retried_transient}" == "false" \
             && "${message}" == *"unable to acquire necessary resources"* ]]; then
         echo "  transient: ${message}; retrying in 60s" >&2
