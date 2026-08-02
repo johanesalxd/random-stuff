@@ -11,22 +11,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source ./config.local.env
-source ./lib/no_aws.sh
 
-LOYALTY="$(analytics_table_ref "${FROYO_LOYALTY_TABLE}")"
+LOYALTY="${GCP_PROJECT}.${FEDERATED_CATALOG}.${GLUE_DATABASE}.${FROYO_LOYALTY_TABLE}"
 FQDS="${GCP_PROJECT}.${FROYO_NATIVE_DATASET}"
 
 bq_query() { bq --location="${GCP_REGION}" --project_id="${GCP_PROJECT}" query --use_legacy_sql=false "$1"; }
 
-if is_no_aws; then
-  SOURCE_LABEL="native"
-  Q3_LABEL="Customer target list"
-else
-  SOURCE_LABEL="AWS-federated"
-  Q3_LABEL="Cross-cloud customer target list"
-fi
-
-echo "== Q1: live read of ${SOURCE_LABEL} ${LOYALTY} (LIMIT 10) =="
+echo "== Q1: live read of AWS-federated ${LOYALTY} (LIMIT 10) =="
 bq_query "SELECT * FROM \`${LOYALTY}\` LIMIT 10"
 
 echo
@@ -36,7 +27,7 @@ bq_query "SELECT product_name, allergen, ingredient_name, supplier, source_doc
           WHERE product_name = 'Midnight Swirl'"
 
 echo
-echo "== Q3: ${Q3_LABEL} for Midnight Swirl =="
+echo "== Q3: Cross-cloud customer target list for Midnight Swirl =="
 echo "   (exclude soy-sensitive customers, since the product contains soy)"
 bq_query "
 WITH ms_allergens AS (
