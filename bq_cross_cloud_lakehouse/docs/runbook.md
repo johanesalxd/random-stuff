@@ -30,8 +30,20 @@ sequenceDiagram
 
 ## Phase 1 — Tooling + guardrails (prep)
 
+- Tools: `gcloud` with the `alpha` component, `bq`, AWS CLI v2, `python3`, `curl`,
+  `openssl`. See [`../README.md`](../README.md) for the full prerequisite list.
+- `cp config.example.env config.local.env` and fill in your real values.
+- Authenticate to GCP: `gcloud auth login` and
+  `gcloud auth application-default login` (the agent scripts use ADC).
 - Install AWS CLI v2 and run `aws configure sso` then `aws sso login` for temporary credentials.
+- The Athena workgroup must be on **engine version 3**; `./aws/01_verify.sh`
+  exits if it is not. Set `ATHENA_WORKGROUP` to use one other than `primary`.
 - `./aws/01_verify.sh` → confirms account + region.
+- IAM: the GCP operator needs BigLake Admin, BigQuery Data Editor, BigQuery Job
+  User, Dataplex DataScan Editor, Dataplex Catalog Editor and Service Usage
+  Admin, plus Project IAM Admin for the optional `gcp/06_knowledge_catalog.sh`.
+  On the AWS side, `./aws/21_readonly_user.sh` needs `iam:CreateUser`,
+  `iam:CreateLoginProfile` and `iam:PutUserPolicy`.
 - AWS guardrails (console, as root): root MFA, a **Zero-spend** budget, a **$1**
   monthly budget with email alerts, and **Cost Anomaly Detection** enabled.
 - GCP guardrails: a budget + alert; enable APIs with
