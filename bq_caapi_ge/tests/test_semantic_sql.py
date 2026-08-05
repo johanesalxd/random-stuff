@@ -1,23 +1,23 @@
-"""Tests for Phase 8 guarded SQL generation and execution."""
+"""Tests for V2 one-shot SQL generation and execution."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 import sys
 
 import pytest
+from pydantic import Field
 
 pytest.importorskip("google.adk")
 
 from google.adk.agents import LlmAgent  # noqa: E402
+from google.adk.events.event import Event  # noqa: E402
 from google.adk.models import BaseLlm, LlmRequest, LlmResponse  # noqa: E402
 from google.adk.runners import Runner  # noqa: E402
 from google.adk.sessions import InMemorySessionService  # noqa: E402
 from google.adk.workflow import Workflow  # noqa: E402
 from google.genai import types  # noqa: E402
-from pydantic import Field  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -26,162 +26,98 @@ if str(PROJECT_ROOT) not in sys.path:
 from semantic import sql_runtime  # noqa: E402
 from semantic.execution import (  # noqa: E402
     ADC_AUTH_MODE,
-    DEVELOPER_MODE,
-    PLAN_MODE,
     USER_AUTH_MODE,
     AdkBigQueryExecutor,
     ExecResult,
     SqlExecutionError,
     build_sql_executor,
     resolve_auth_mode,
-    resolve_execution_mode,
-)
-from semantic.sql_policy import (  # noqa: E402
-    extract_table_references,
-    validate_sql,
 )
 from semantic.sql_runtime import (  # noqa: E402
     GENERATE_SQL_INSTRUCTION,
-    GeneratedSql,
-    apply_sql_policy,
-    dry_run_sql,
-    enforce_sql_policy,
+    SUMMARIZE_RESULT_INSTRUCTION,
     enter_sql_generation,
-    finish_sql_refusal,
-    finish_sql_result,
-    maybe_execute_sql,
-    plan_repair,
-    recover_invalid_sql,
-    repair_sql,
+    execute_sql_once,
+    finish_answer,
+    finish_query_error,
+    normalize_sql,
+    prepare_result_summary,
     resolve_sql_auth,
-    run_dry_run,
-    run_execution,
 )
 
 _READINGS = "example-project.climate.readings"
-_PERMITTED = [_READINGS]
+_SQL = f"SELECT COUNT(DISTINCT reading_id) AS total FROM `{_READINGS}`"
 
 
-# --- SQL policy ------------------------------------------------------------
-
-
-def test_policy_allows_in_scope_select():
-    result = validate_sql(
-        f"SELECT station_id FROM `{_READINGS}`", permitted_sources=_PERMITTED
-    )
-    assert result.allowed
-    assert result.referenced_sources == (_READINGS,)
-    assert result.out_of_scope == ()
-
-
-def test_policy_extracts_tables_excluding_ctes():
-    qualified, unqualified = extract_table_references(
-        f"WITH x AS (SELECT * FROM `{_READINGS}`) SELECT * FROM x"
-    )
-    assert qualified == (_READINGS,)
-    assert unqualified == ()
-
-
-def test_policy_rejects_out_of_scope_source():
-    result = validate_sql(
-        "SELECT * FROM `example-project.climate.secret`", permitted_sources=_PERMITTED
-    )
-    assert not result.allowed
-    assert result.out_of_scope == ("example-project.climate.secret",)
-
-
-def test_policy_rejects_unqualified_reference():
-    result = validate_sql("SELECT * FROM readings", permitted_sources=_PERMITTED)
-    assert not result.allowed
-    assert any("fully qualified" in v for v in result.violations)
-
-
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "DELETE FROM `example-project.climate.readings` WHERE TRUE",
-        "CREATE TABLE `example-project.climate.x` AS SELECT 1",
-        "UPDATE `example-project.climate.readings` SET a = 1 WHERE TRUE",
-        "CALL example.proc()",
-    ],
-)
-def test_policy_rejects_non_select(sql):
-    result = validate_sql(sql, permitted_sources=_PERMITTED)
-    assert not result.allowed
-
-
-def test_policy_rejects_multiple_statements():
-    result = validate_sql(
-        f"SELECT 1 FROM `{_READINGS}`; SELECT 2 FROM `{_READINGS}`",
-        permitted_sources=_PERMITTED,
-    )
-    assert not result.allowed
-    assert any("exactly one statement" in v for v in result.violations)
-
-
-def test_policy_rejects_empty_and_unparseable():
-    assert not validate_sql("", permitted_sources=_PERMITTED).allowed
-    assert not validate_sql("SELECT FROM WHERE", permitted_sources=_PERMITTED).allowed
-
-
-# --- execution boundary ----------------------------------------------------
-
-
-def _fake_execute_fn(dry_result=None, exec_result=None, error=None):
+def _fake_execute_fn(result=None, error=None):
     def fake(**kwargs):
         if error is not None:
             return {"status": "ERROR", "error_details": error}
-        if kwargs["dry_run"]:
-            return dry_result
-        return exec_result
+        return result or {"status": "SUCCESS", "rows": [{"total": 3}]}
 
     return fake
 
 
-def test_executor_maps_dry_run_bytes():
-    fn = _fake_execute_fn(
-        dry_result={
-            "status": "SUCCESS",
-            "dry_run_info": {"statistics": {"totalBytesProcessed": "2048"}},
-        }
-    )
-    executor = AdkBigQueryExecutor(project="p", credentials=object(), execute_fn=fn)
-    result = executor.dry_run("SELECT 1 FROM `p.d.t`")
-    assert result.ok
-    assert result.mode == PLAN_MODE
-    assert result.total_bytes_processed == 2048
+def test_executor_executes_once_and_maps_rows():
+    calls = []
 
-
-def test_executor_maps_execute_rows_and_truncation():
-    fn = _fake_execute_fn(
-        exec_result={
+    def execute(**kwargs):
+        calls.append(kwargs)
+        return {
             "status": "SUCCESS",
-            "rows": [{"a": 1}, {"a": 2}],
+            "rows": [{"total": 3}, {"total": 4}],
             "result_is_likely_truncated": True,
         }
+
+    executor = AdkBigQueryExecutor(
+        project="compute-project",
+        credentials=object(),
+        execute_fn=execute,
     )
-    executor = AdkBigQueryExecutor(project="p", credentials=object(), execute_fn=fn)
-    result = executor.execute("SELECT a FROM `p.d.t`")
+
+    result = executor.execute(_SQL)
+
     assert result.ok
-    assert result.mode == DEVELOPER_MODE
-    assert result.row_count == 2
+    assert result.rows == ({"total": 3}, {"total": 4})
     assert result.truncated is True
-    assert result.to_context()["rows"] == [{"a": 1}, {"a": 2}]
+    assert len(calls) == 1
+    assert calls[0]["dry_run"] is False
 
 
 def test_executor_maps_error():
-    fn = _fake_execute_fn(error="bad query")
-    executor = AdkBigQueryExecutor(project="p", credentials=object(), execute_fn=fn)
-    result = executor.dry_run("SELECT 1 FROM `p.d.t`")
+    executor = AdkBigQueryExecutor(
+        project="compute-project",
+        credentials=object(),
+        execute_fn=_fake_execute_fn(error="bad query"),
+    )
+    result = executor.execute("bad")
     assert not result.ok
     assert result.error == "bad query"
 
 
-def test_executor_uses_blocked_read_only_settings():
+def test_executor_clamps_rows_independently():
+    executor = AdkBigQueryExecutor(
+        project="compute-project",
+        max_result_rows=2,
+        credentials=object(),
+        execute_fn=_fake_execute_fn(
+            result={
+                "status": "SUCCESS",
+                "rows": [{"n": 1}, {"n": 2}, {"n": 3}],
+            }
+        ),
+    )
+    result = executor.execute(_SQL)
+    assert result.rows == ({"n": 1}, {"n": 2})
+    assert result.truncated is True
+
+
+def test_executor_uses_blocked_write_mode_without_cost_cap():
     executor = AdkBigQueryExecutor(project="compute-project", credentials=object())
     settings = executor._get_settings()
     assert str(settings.write_mode).endswith("BLOCKED")
     assert settings.compute_project_id == "compute-project"
+    assert settings.maximum_bytes_billed is None
 
 
 def test_build_sql_executor_requires_project(monkeypatch):
@@ -190,27 +126,12 @@ def test_build_sql_executor_requires_project(monkeypatch):
         build_sql_executor()
 
 
-def test_build_sql_executor_returns_adk_executor(monkeypatch):
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
-    assert isinstance(build_sql_executor(), AdkBigQueryExecutor)
-
-
-def test_resolve_execution_mode_defaults_to_plan(monkeypatch):
-    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
-    assert resolve_execution_mode() == PLAN_MODE
-    assert resolve_execution_mode("developer") == DEVELOPER_MODE
-    assert resolve_execution_mode("anything-else") == PLAN_MODE
-
-
-# --- auth mode (Phase 9 Slice 1) -------------------------------------------
-
-
-def test_resolve_auth_mode_defaults_to_adc(monkeypatch):
+def test_resolve_auth_mode_is_strict(monkeypatch):
     monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
     assert resolve_auth_mode() == ADC_AUTH_MODE
     assert resolve_auth_mode("user") == USER_AUTH_MODE
-    assert resolve_auth_mode("USER") == USER_AUTH_MODE
-    assert resolve_auth_mode("anything-else") == ADC_AUTH_MODE
+    with pytest.raises(SqlExecutionError, match="unsupported"):
+        resolve_auth_mode("typo")
 
 
 def test_build_sql_executor_binds_user_token(monkeypatch):
@@ -222,201 +143,81 @@ def test_build_sql_executor_binds_user_token(monkeypatch):
 
 def test_build_sql_executor_user_mode_requires_token(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
-    with pytest.raises(SqlExecutionError):
+    with pytest.raises(SqlExecutionError, match="access token"):
         build_sql_executor(auth_mode="user")
 
 
-def test_build_sql_executor_adc_mode_has_no_bound_credentials(monkeypatch):
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "compute-project")
-    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
-    executor = build_sql_executor()
-    assert executor._credentials is None
-
-
-def test_resolve_sql_auth_reads_token_from_state(monkeypatch):
-    monkeypatch.setenv("SQL_AUTH_MODE", "user")
-    monkeypatch.delenv("ADK_OAUTH_TOKEN_STATE_KEY", raising=False)
-    mode, token, error = resolve_sql_auth(
-        {"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-abc"}
-    )
-    assert mode == USER_AUTH_MODE
-    assert token == "tok-abc"
-    assert error is None
-
-
-def test_resolve_sql_auth_fails_closed_without_token(monkeypatch):
-    monkeypatch.setenv("SQL_AUTH_MODE", "user")
-    mode, token, error = resolve_sql_auth({})
-    assert mode == USER_AUTH_MODE
-    assert token is None
-    assert error and "no access token" in error
-
-
-def test_resolve_sql_auth_adc_ignores_token(monkeypatch):
-    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
-    mode, token, error = resolve_sql_auth({"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "x"})
-    assert mode == ADC_AUTH_MODE
-    assert token is None
-    assert error is None
-
-
-def test_resolve_sql_auth_honors_custom_state_key(monkeypatch):
+def test_resolve_sql_auth_reads_configured_state_key(monkeypatch):
     monkeypatch.setenv("SQL_AUTH_MODE", "user")
     monkeypatch.setenv("ADK_OAUTH_TOKEN_STATE_KEY", "custom_token")
-    mode, token, error = resolve_sql_auth({"custom_token": "tok-9"})
-    assert token == "tok-9"
-    assert error is None
+    assert resolve_sql_auth({"custom_token": "tok-9"}) == ("user", "tok-9")
+    with pytest.raises(ValueError, match="OAuth"):
+        resolve_sql_auth({})
 
 
-# --- runtime pure logic ----------------------------------------------------
+def test_normalize_sql_removes_one_outer_fence():
+    assert normalize_sql(f"```sql\n{_SQL}\n```") == _SQL
+    assert normalize_sql(_SQL) == _SQL
+    assert normalize_sql("```python\nprint('x')\n```").startswith("```python")
 
 
-class _FakeExecutor:
-    def __init__(self, dry=None, execu=None):
-        self._dry = dry or ExecResult(
-            status="SUCCESS", mode=PLAN_MODE, total_bytes_processed=1000
-        )
-        self._exec = execu or ExecResult(
-            status="SUCCESS", mode=DEVELOPER_MODE, rows=({"n": 1},), row_count=1
-        )
-        self.dry_calls: list[str] = []
-        self.exec_calls: list[str] = []
-
-    def dry_run(self, sql):
-        self.dry_calls.append(sql)
-        return self._dry
-
-    def execute(self, sql):
-        self.exec_calls.append(sql)
-        return self._exec
-
-
-def _generated(sql):
+def _grounded_payload():
     return {
-        "sql": sql,
-        "interpretation": "interpretation",
-        "unresolved_assumptions": [],
-        "referenced_sources": [_READINGS],
+        "question": "Count completed observations",
+        "reasoning_path": "semantic_narrow",
+        "semantic_context_ids": ["weather"],
+        "semantic_context_versions": ["weather:v1"],
+        "semantic_contexts": [
+            {
+                "metrics": [
+                    {
+                        "name": "completed_observations",
+                        "expression": "readings.reading_id",
+                        "required_filters": ["readings.status = 'Complete'"],
+                    }
+                ]
+            }
+        ],
+        "catalog_route": "narrow",
+        "catalog_context": [
+            {
+                "source": _READINGS,
+                "fields": [
+                    {"name": "reading_id", "type": "STRING"},
+                    {"name": "status", "type": "STRING"},
+                ],
+            }
+        ],
+        "knowledge_catalog_context": [
+            {"context": {"relationships": [{"name": "reading_status"}]}}
+        ],
+        "catalog_permitted_sources": [_READINGS],
     }
 
 
-def test_apply_sql_policy_routes_allowed_and_rejected():
-    payload, route = apply_sql_policy(
-        _generated(f"SELECT station_id FROM `{_READINGS}`"), _PERMITTED
-    )
-    assert route == "allowed"
-    assert payload["sql_policy"]["allowed"] is True
-    assert payload["interpretation"] == "interpretation"
-
-    _, rejected = apply_sql_policy(
-        _generated("SELECT * FROM `example-project.climate.secret`"), _PERMITTED
-    )
-    assert rejected == "rejected"
+def test_enter_sql_generation_preserves_semantics_and_catalog_context():
+    event = enter_sql_generation(_grounded_payload())
+    assert event.output["semantic_contexts"][0]["metrics"][0]["required_filters"] == [
+        "readings.status = 'Complete'"
+    ]
+    assert event.output["knowledge_catalog_context"]
+    assert event.output["candidate_sources"] == [_READINGS]
+    stored = event.actions.state_delta["sql_generation_context"]
+    assert stored == event.output
 
 
-def test_run_dry_run_routes_by_executor_result():
-    ok_payload, ok_route = run_dry_run({"sql": "SELECT 1"}, _FakeExecutor())
-    assert ok_route == "valid"
-    assert ok_payload["dry_run"]["total_bytes_processed"] == 1000
-
-    executor = _FakeExecutor(dry=ExecResult(status="ERROR", mode=PLAN_MODE, error="x"))
-    _, bad_route = run_dry_run({"sql": "SELECT 1"}, executor)
-    assert bad_route == "invalid"
-
-
-def test_run_execution_skips_in_plan_mode():
-    executor = _FakeExecutor()
-    plan = run_execution({"sql": "SELECT 1"}, None, mode=PLAN_MODE)
-    assert plan["execution"]["status"] == "SKIPPED"
-    assert executor.exec_calls == []
-
-    developer = run_execution({"sql": "SELECT 1"}, executor, mode=DEVELOPER_MODE)
-    assert developer["execution"]["status"] == "SUCCESS"
-    assert executor.exec_calls == ["SELECT 1"]
-
-
-def test_plan_repair_retries_then_exhausts():
-    payload, route, attempts = plan_repair(
-        {"sql": "bad", "sql_policy": {"violations": ["out-of-scope"]}},
-        generation_context={"question": "q", "permitted_sources": _PERMITTED},
-        attempts=0,
-    )
-    assert route == "retry"
-    assert attempts == 1
-    assert payload["previous_error"]
-
-    exhausted, route2, attempts2 = plan_repair(
-        {"sql": "bad", "sql_policy": {"violations": ["out-of-scope"]}},
-        generation_context={},
-        attempts=1,
-    )
-    assert route2 == "exhausted"
-    assert attempts2 == 1
-    assert exhausted["refusal_reason"]
-
-
-def test_enter_sql_generation_persists_permitted_sources():
-    event = enter_sql_generation(
-        {
-            "question": "count",
-            "catalog_route": "narrow",
-            "catalog_context": [{"source": _READINGS}],
-            "catalog_permitted_sources": [_READINGS],
-        }
-    )
-    assert event.output["permitted_sources"] == [_READINGS]
-    assert event.actions.state_delta["sql_permitted_sources"] == [_READINGS]
-    assert event.actions.state_delta["temp:sql_repair_attempts"] == 0
-
-
-def test_enter_sql_generation_uses_broad_discovered_sources():
-    event = enter_sql_generation(
-        {
-            "question": "count",
-            "catalog_route": "broad",
-            "catalog_discovered_sources": [_READINGS],
-        }
-    )
-    assert event.output["permitted_sources"] == [_READINGS]
-
-
-def test_finish_terminals_set_status():
-    planned = finish_sql_result(
-        run_execution({"sql": "SELECT 1"}, None, mode=PLAN_MODE)
-    )
-    assert planned["status"] == "sql_planned"
-    assert planned["next_step"] == "return_result"
-
-    refusal = finish_sql_refusal(
-        {"sql_policy": {"violations": ["sql references out-of-scope sources: x"]}}
-    )
-    assert refusal["status"] == "sql_refused"
-    assert "out-of-scope" in refusal["refusal_reason"]
-
-
-def test_recover_invalid_sql_replaces_malformed_output():
-    response = LlmResponse(
-        content=types.Content(role="model", parts=[types.Part(text='{"sql": 123}')])
-    )
-    recovered = recover_invalid_sql(None, response)
-    assert recovered is not None
-    payload = json.loads(recovered.content.parts[0].text)
-    assert payload["sql"] == ""
-
-
-def test_recover_invalid_sql_preserves_valid_and_provider_errors():
-    valid = LlmResponse(
-        content=types.Content(
-            role="model",
-            parts=[types.Part(text=GeneratedSql(sql="SELECT 1").model_dump_json())],
+class _FakeExecutor:
+    def __init__(self, result=None):
+        self.result = result or ExecResult(
+            status="SUCCESS",
+            rows=({"total": 3},),
+            row_count=1,
         )
-    )
-    assert recover_invalid_sql(None, valid) is None
-    provider_error = LlmResponse(error_code="RESOURCE_EXHAUSTED", error_message="q")
-    assert recover_invalid_sql(None, provider_error) is None
+        self.calls: list[str] = []
 
-
-# --- workflow integration --------------------------------------------------
+    def execute(self, sql):
+        self.calls.append(sql)
+        return self.result
 
 
 class _ScriptedLlm(BaseLlm):
@@ -429,72 +230,60 @@ class _ScriptedLlm(BaseLlm):
         yield self.response
 
 
-def _sql_response(payload):
-    return LlmResponse(
-        content=types.Content(
-            role="model", parts=[types.Part(text=json.dumps(payload))]
-        )
+def _scripted_model(text):
+    return _ScriptedLlm(
+        model="scripted",
+        response=LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(text=text)])
+        ),
     )
 
 
 def _grounded(node_input):
-    from google.adk.events.event import Event
-
-    return Event(
-        output={
-            "question": "count observations by station",
-            "catalog_route": "narrow",
-            "catalog_context": [
-                {"source": _READINGS, "fields": [{"name": "reading_id"}]}
-            ],
-            "catalog_permitted_sources": [_READINGS],
-            "status": "catalog_context_grounded",
-        }
-    )
+    del node_input
+    return Event(output=_grounded_payload())
 
 
-def _sql_agent(payload):
-    scripted = _ScriptedLlm(model="scripted-sql", response=_sql_response(payload))
-    return LlmAgent(
-        name="guarded_sql_generator",
-        model=scripted,
+async def _run_query(generator_model, summarizer_model, state=None):
+    generator = LlmAgent(
+        name="test_sql_generator",
+        model=generator_model,
         instruction=GENERATE_SQL_INSTRUCTION,
-        output_schema=GeneratedSql,
-        after_model_callback=recover_invalid_sql,
     )
-
-
-async def _run_sql(sql_agent, state=None):
+    summarizer = LlmAgent(
+        name="test_result_summarizer",
+        model=summarizer_model,
+        instruction=SUMMARIZE_RESULT_INSTRUCTION,
+    )
     workflow = Workflow(
-        name="sql_generation_test",
+        name="query_test",
         edges=[
             ("START", _grounded, enter_sql_generation),
-            (enter_sql_generation, sql_agent),
-            (sql_agent, enforce_sql_policy),
-            (enforce_sql_policy, {"allowed": dry_run_sql, "rejected": repair_sql}),
+            (enter_sql_generation, generator),
+            (generator, execute_sql_once),
             (
-                dry_run_sql,
+                execute_sql_once,
                 {
-                    "valid": maybe_execute_sql,
-                    "invalid": repair_sql,
-                    "unauthorized": finish_sql_refusal,
+                    "success": prepare_result_summary,
+                    "error": finish_query_error,
                 },
             ),
-            (repair_sql, {"retry": sql_agent, "exhausted": finish_sql_refusal}),
-            (maybe_execute_sql, finish_sql_result),
+            (prepare_result_summary, summarizer),
+            (summarizer, finish_answer),
         ],
     )
-    session_service = InMemorySessionService()
-    await session_service.create_session(
-        app_name="sql_test", user_id="user", session_id="session", state=state or {}
+    service = InMemorySessionService()
+    await service.create_session(
+        app_name="query_test",
+        user_id="u",
+        session_id="s",
+        state=state or {},
     )
-    runner = Runner(
-        agent=workflow, app_name="sql_test", session_service=session_service
-    )
+    runner = Runner(agent=workflow, app_name="query_test", session_service=service)
     outputs = []
     async for event in runner.run_async(
-        user_id="user",
-        session_id="session",
+        user_id="u",
+        session_id="s",
         new_message=types.Content(role="user", parts=[types.Part(text="q")]),
     ):
         if event.output is not None:
@@ -502,132 +291,83 @@ async def _run_sql(sql_agent, state=None):
     return outputs
 
 
-def test_workflow_plan_mode_generates_and_stops_at_dry_run(monkeypatch):
-    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
-    executor = _FakeExecutor()
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
-    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
-
-    outputs = asyncio.run(_run_sql(agent))
-
-    final = outputs[-1]
-    assert final["status"] == "sql_planned"
-    assert final["sql_policy"]["allowed"] is True
-    assert final["dry_run"]["total_bytes_processed"] == 1000
-    assert final["execution"]["status"] == "SKIPPED"
-    assert executor.exec_calls == []
-
-
-def test_workflow_developer_mode_executes(monkeypatch):
-    monkeypatch.setenv("SQL_EXECUTION_MODE", "developer")
-    executor = _FakeExecutor()
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
-    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
-
-    outputs = asyncio.run(_run_sql(agent))
-
-    final = outputs[-1]
-    assert final["status"] == "sql_executed"
-    assert final["execution"]["status"] == "SUCCESS"
-    assert executor.exec_calls == [f"SELECT station_id FROM `{_READINGS}`"]
-
-
-def test_workflow_out_of_scope_sql_refused_after_repair(monkeypatch):
-    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
-    executor = _FakeExecutor()
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
-    agent = _sql_agent(_generated("SELECT * FROM `example-project.climate.secret`"))
-
-    outputs = asyncio.run(_run_sql(agent))
-
-    final = outputs[-1]
-    assert final["status"] == "sql_refused"
-    assert "out-of-scope" in final["refusal_reason"]
-    # One initial attempt plus exactly one bounded repair retry.
-    assert len(agent.model.requests) == 2
-    assert executor.dry_calls == []
-
-
-def test_workflow_dry_run_error_refused(monkeypatch):
-    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
-    executor = _FakeExecutor(
-        dry=ExecResult(status="ERROR", mode=PLAN_MODE, error="unknown column")
+def _request_text(model):
+    return "".join(
+        part.text or ""
+        for content in model.requests[0].contents
+        for part in content.parts or []
     )
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
-    agent = _sql_agent(_generated(f"SELECT bad FROM `{_READINGS}`"))
-
-    outputs = asyncio.run(_run_sql(agent))
-
-    final = outputs[-1]
-    assert final["status"] == "sql_refused"
-    assert "unknown column" in final["refusal_reason"]
 
 
-def test_workflow_user_mode_without_token_refuses(monkeypatch):
+def test_workflow_executes_once_and_summarizes(monkeypatch):
+    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
+    executor = _FakeExecutor()
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda **_kwargs: executor)
+    generator_model = _scripted_model(f"```sql\n{_SQL}\n```")
+    summarizer_model = _scripted_model("There are 3 completed observations.")
+
+    final = asyncio.run(_run_query(generator_model, summarizer_model))[-1]
+
+    assert final["status"] == "answered"
+    assert final["answer"] == "There are 3 completed observations."
+    assert final["sql"] == _SQL
+    assert final["rows"] == [{"total": 3}]
+    assert final["semantic_context_ids"] == ["weather"]
+    assert final["auth"]["mode"] == "adc"
+    assert executor.calls == [_SQL]
+    assert "required_filters" in _request_text(generator_model)
+    assert "readings.status = 'Complete'" in _request_text(generator_model)
+    assert '"total":3' in _request_text(summarizer_model).replace(" ", "")
+
+
+def test_workflow_execution_error_returns_without_summary(monkeypatch):
+    executor = _FakeExecutor(ExecResult(status="ERROR", error="unknown column"))
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda **_kwargs: executor)
+    generator_model = _scripted_model(_SQL)
+    summarizer_model = _scripted_model("must not run")
+
+    final = asyncio.run(_run_query(generator_model, summarizer_model))[-1]
+
+    assert final["status"] == "query_error"
+    assert final["error"] == "unknown column"
+    assert executor.calls == [_SQL]
+    assert summarizer_model.requests == []
+
+
+def test_workflow_user_mode_fails_without_token(monkeypatch):
     monkeypatch.setenv("SQL_AUTH_MODE", "user")
-    monkeypatch.delenv("SQL_EXECUTION_MODE", raising=False)
-    calls: list[dict] = []
+    calls = []
 
-    def fake_build(**kwargs):
+    def build(**kwargs):
         calls.append(kwargs)
         return _FakeExecutor()
 
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", fake_build)
-    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
-
-    outputs = asyncio.run(_run_sql(agent))
-
-    final = outputs[-1]
-    assert final["status"] == "sql_refused"
-    assert "no access token" in final["refusal_reason"]
-    assert final["auth"] == {"mode": "user", "authorized": False}
-    # Fails closed before any executor is built (no ADC fallback).
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", build)
+    final = asyncio.run(_run_query(_scripted_model(_SQL), _scripted_model("unused")))[
+        -1
+    ]
+    assert final["status"] == "query_error"
+    assert "OAuth access token" in final["error"]
     assert calls == []
 
 
-def test_workflow_user_mode_with_token_executes(monkeypatch):
+def test_workflow_user_mode_binds_token(monkeypatch):
     monkeypatch.setenv("SQL_AUTH_MODE", "user")
-    monkeypatch.setenv("SQL_EXECUTION_MODE", "developer")
-    calls: list[dict] = []
-
-    def fake_build(**kwargs):
-        calls.append(kwargs)
-        return _FakeExecutor()
-
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", fake_build)
-    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
-
-    outputs = asyncio.run(
-        _run_sql(agent, state={"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-xyz"})
-    )
-
-    final = outputs[-1]
-    assert final["status"] == "sql_executed"
-    assert final["auth"] == {
-        "mode": "user",
-        "authorized": True,
-        "source": "user-token",
-    }
-    # Both dry run and execution build the executor with the user token, no ADC.
-    assert calls == [
-        {"access_token": "tok-xyz", "auth_mode": "user"},
-        {"access_token": "tok-xyz", "auth_mode": "user"},
-    ]
-
-
-def test_workflow_adc_mode_records_auth_provenance(monkeypatch):
-    monkeypatch.delenv("SQL_AUTH_MODE", raising=False)
-    monkeypatch.setenv("SQL_EXECUTION_MODE", "developer")
     executor = _FakeExecutor()
-    monkeypatch.setattr(sql_runtime, "build_sql_executor", lambda: executor)
-    agent = _sql_agent(_generated(f"SELECT station_id FROM `{_READINGS}`"))
+    calls = []
 
-    outputs = asyncio.run(_run_sql(agent))
+    def build(**kwargs):
+        calls.append(kwargs)
+        return executor
 
-    final = outputs[-1]
-    assert final["status"] == "sql_executed"
-    assert final["auth"] == {
-        "mode": "adc",
-        "authorized": True,
-        "source": "application-default",
-    }
+    monkeypatch.setattr(sql_runtime, "build_sql_executor", build)
+    final = asyncio.run(
+        _run_query(
+            _scripted_model(_SQL),
+            _scripted_model("There are 3."),
+            state={"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-xyz"},
+        )
+    )[-1]
+    assert final["status"] == "answered"
+    assert final["auth"] == {"mode": "user", "source": "user-token"}
+    assert calls == [{"access_token": "tok-xyz", "auth_mode": "user"}]

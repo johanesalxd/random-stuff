@@ -1,4 +1,7 @@
-# ADK Semantic Analytics Plan
+# ADK Semantic Analytics Plan (Historical V1)
+
+This document records the superseded V1 design. The implemented V2 design is in
+[`adk_semantic_layer_plan_v2.md`](./adk_semantic_layer_plan_v2.md).
 
 ## Objective
 

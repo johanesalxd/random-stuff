@@ -166,11 +166,10 @@ def extract_provenance(output: Any) -> dict[str, Any]:
         "catalog_discovery_backend",
         "auth",
         "sql",
-        "sql_policy",
-        "dry_run",
         "execution",
-        "refusal_reason",
-        "auth_error",
+        "row_count",
+        "truncated",
+        "error",
     )
     return {key: output[key] for key in keys if key in output}
 

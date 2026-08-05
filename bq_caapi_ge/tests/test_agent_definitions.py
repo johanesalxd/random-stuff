@@ -21,22 +21,12 @@ def _agent_by_env_id(env_agent_id: str):
     )
 
 
-def test_semantic_ca_agent_spans_full_thelook_dataset():
-    """Tests the fallback agent is dataset-wide, not a domain subset."""
-    orders = _agent_by_env_id("AGENT_ORDERS_ID")
-    inventory = _agent_by_env_id("AGENT_INVENTORY_ID")
-    semantic_ca = _agent_by_env_id("AGENT_SEMANTIC_CA_ID")
-
-    assert semantic_ca.default_agent_id == "semantic_ca_agent"
-    # The fallback must cover every table the narrow specialists cover.
-    assert set(semantic_ca.tables) == set(orders.tables) | set(inventory.tables)
-    assert set(semantic_ca.tables) >= set(orders.tables)
-    assert set(semantic_ca.tables) >= set(inventory.tables)
-
-
-def test_semantic_ca_agent_adds_no_new_enrichment_tables():
-    """Tests the wide agent reuses existing tables, so enrichment scope is stable."""
+def test_agent_definitions_contain_only_domain_baselines():
+    """Tests the remaining CA agents are the two domain baselines."""
     orders = _agent_by_env_id("AGENT_ORDERS_ID")
     inventory = _agent_by_env_id("AGENT_INVENTORY_ID")
 
+    assert len(AGENT_DEFINITIONS) == 2
+    assert orders.default_agent_id == "order_user_agent"
+    assert inventory.default_agent_id == "inventory_product_agent"
     assert set(unique_table_ids()) == set(orders.tables) | set(inventory.tables)

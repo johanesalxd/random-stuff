@@ -5,17 +5,18 @@ This directory contains two parallel ADK paths:
 - Independent orders and inventory CA API baselines that deploy to Agent Engine
   and call CA API data agents with end-user OAuth.
 - A local-first `semantic_analytics` Workflow that selects bounded semantic
-  concepts from portable YAML, grounds them against the catalog (narrow or broad),
-  and generates guarded, read-only BigQuery SQL. It validates read-only and
-  source-scope policy, dry-runs, and executes only in developer mode (plan mode by
-  default). See [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
+  concepts from portable YAML, grounds narrow requests against exact sources or
+  broad requests through Knowledge Catalog, generates SQL once, executes it with
+  ADK BigQuery write mode blocked, and summarizes the returned rows. See
+  [`docs/adk_semantic_layer_plan_v2.md`](../docs/adk_semantic_layer_plan_v2.md).
   The CA data agents are evaluated with Prism; see
   [`docs/eval-with-prism.md`](../docs/eval-with-prism.md).
 
 The historical deterministic compiler and execution adapters were removed from
 `semantic/` in the Phase 7 cleanup; they are recoverable from git history if a
 strict-compilation mode is revisited. See
-[`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md).
+ [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md) for the
+ superseded V1 design.
 
 Use this approach when you need:
 
@@ -84,7 +85,7 @@ Install the advanced dependencies:
 uv sync --extra advanced
 ```
 
-This adds `google-adk`, BigQuery, and Dataplex client dependencies.
+This adds `google-adk`, Anthropic, BigQuery, and Dataplex client dependencies.
 
 ## Deployment
 
@@ -148,6 +149,10 @@ Run the semantic workflow with:
 ```bash
 uv run --extra advanced adk run advanced/app/semantic_analytics
 ```
+
+The workflow uses `SEMANTIC_SELECTOR_MODEL`, `SQL_GENERATOR_MODEL`, and
+`RESULT_SUMMARIZER_MODEL` independently. Broad discovery is default-deny and
+requires `CATALOG_ALLOWED_PROJECTS` or `CATALOG_ALLOWED_DATASETS`.
 
 ## Local Testing with OAuth
 

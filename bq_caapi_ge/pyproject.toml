@@ -13,10 +13,10 @@ dependencies = [
 
 [project.optional-dependencies]
 advanced = [
+    "anthropic[vertex]>=0.78",
     "google-adk>=2.0.0",
     "google-cloud-bigquery>=3.42.2",
     "google-cloud-dataplex>=2.13.0",
-    "sqlglot>=27.0.0",
 ]
 web = [
     "flask>=3.0.0",

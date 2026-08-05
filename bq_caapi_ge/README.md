@@ -39,7 +39,8 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 │   ├── scripts/                  # Deploy, auth, and registration scripts
 │   └── test_web/                 # Flask OAuth test harness
 ├── docs/
-│   ├── adk_semantic_layer_plan.md  # Custom semantic workflow roadmap
+│   ├── adk_semantic_layer_plan_v2.md # Current semantic workflow design
+│   ├── adk_semantic_layer_plan.md    # Historical V1 design
 │   ├── eval-with-prism.md          # CA data-agent evaluation with Prism
 │   └── gemini-enterprise-demo.png
 ├── .env.example
@@ -271,9 +272,8 @@ uv sync --extra advanced
 ```
 
 The ADK node modules under `semantic/` (`runtime.py`, `catalog_runtime.py`,
-`sql_runtime.py`) require the `advanced` extra. The base install exposes only the
-pure-logic modules (`sql_policy`, `execution`, `catalog`, `context`, `registry`,
-`types`), which can be referenced without ADK installed.
+`sql_runtime.py`, `execution.py`) require the `advanced` extra. The base install
+exposes the catalog, context, registry, and type modules without ADK installed.
 
 ## Demo
 

@@ -1,14 +1,13 @@
-"""Domain-neutral ADK nodes for Knowledge Catalog grounding (Phase 7).
+"""Domain-neutral ADK nodes for V2 Knowledge Catalog grounding.
 
 These nodes consume the Phase 6 semantic handoff, ground it against current
 catalog metadata through an injectable adapter, assess context sufficiency with
-deterministic rules, and hand off to guarded SQL generation or to clarification.
+deterministic rules, and hand off to one-shot SQL generation or clarification.
 No node in this module generates or executes SQL.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from google.adk.agents.context import Context
@@ -93,10 +92,10 @@ async def assess_broad_context(ctx: Context, node_input: dict[str, Any]) -> Even
 
 
 def finish_catalog_grounding(node_input: dict[str, Any]) -> dict[str, Any]:
-    """Returns grounded context at the guarded SQL-generation boundary."""
+    """Returns grounded context at the one-shot SQL-generation boundary."""
     payload = dict(node_input)
     payload["status"] = "catalog_context_grounded"
-    payload["next_step"] = "guarded_sql_generation"
+    payload["next_step"] = "one_shot_sql_generation"
     return payload
 
 
@@ -111,16 +110,12 @@ def finish_clarification(node_input: dict[str, Any]) -> dict[str, Any]:
 def ground_narrow(
     handoff: dict[str, Any],
     adapter: CatalogAdapter,
-    *,
-    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Fetches bounded metadata for exactly the selected narrow sources.
 
     Args:
         handoff: Phase 6 narrow handoff payload.
         adapter: Injected catalog adapter.
-        now: Injected timestamp for deterministic tests.
-
     Returns:
         The handoff augmented with narrow catalog context and any access error.
     """
@@ -142,6 +137,12 @@ def ground_narrow(
     in_scope = [item for item in metadata if item.source in permitted]
     resolved = {item.source for item in in_scope if item.fields}
     payload["catalog_context"] = [item.to_context() for item in in_scope]
+    payload["knowledge_catalog_context"] = list(
+        adapter.fetch_knowledge_context(
+            tuple(source for source in sources if source.qualified_name in permitted),
+            question=str(handoff.get("question", "")),
+        )
+    )
     payload["catalog_permitted_sources"] = sorted(permitted)
     payload["catalog_missing_sources"] = sorted(permitted - resolved)
     return payload
@@ -181,7 +182,6 @@ def ground_broad(
     *,
     allowed_projects: frozenset[str],
     allowed_datasets: frozenset[str],
-    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Searches configured project and dataset allowlists for candidate sources.
 
@@ -190,8 +190,6 @@ def ground_broad(
         adapter: Injected catalog adapter.
         allowed_projects: Permitted project IDs.
         allowed_datasets: Permitted ``project.dataset`` IDs.
-        now: Injected timestamp for deterministic tests.
-
     Returns:
         The handoff augmented with in-scope broad catalog context. Absent or
         invalid allowlists fail closed with an empty result.
@@ -232,9 +230,16 @@ def ground_broad(
     bounded = bound_table_results(in_scope)
     payload["catalog_context"] = [item.to_context() for item in bounded]
     payload["catalog_discovered_sources"] = sorted(item.source for item in bounded)
+    context_sources = tuple(parse_catalog_source(item.source) for item in bounded)
+    payload["knowledge_catalog_context"] = list(
+        adapter.fetch_knowledge_context(
+            context_sources,
+            question=str(handoff.get("question", "")),
+        )
+    )
     payload["catalog_discovery_backend"] = getattr(
-        adapter, "last_search_backend", None
-    ) or getattr(adapter, "discovery_backend", "name_match")
+        adapter, "discovery_backend", "knowledge_catalog_semantic"
+    )
     return payload
 
 

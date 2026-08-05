@@ -91,14 +91,14 @@ and calls `/run`. The backend session is reused across queries and recreated onl
 when the token is refreshed.
 
 The current `semantic_analytics` workflow selects semantic context, grounds it
-against the catalog (`semantic_narrow` or `catalog_broad`), and generates guarded,
-read-only SQL. It dry-runs every query and executes only when
-`SQL_EXECUTION_MODE=developer` (plan mode, dry-run only, is the default).
+against exact YAML sources or Knowledge Catalog (`semantic_narrow` or
+`catalog_broad`), generates SQL once, executes it with writes blocked, and
+summarizes the returned rows.
 
 Whose credentials run the query is governed separately by `SQL_AUTH_MODE`. The
 default `adc` uses Application Default Credentials. Setting `SQL_AUTH_MODE=user`
 binds each query to the per-request OAuth access token this harness writes to
-`ADK_OAUTH_TOKEN_STATE_KEY`, and fails closed to a refusal when the token is
+`ADK_OAUTH_TOKEN_STATE_KEY`, and fails closed with a query error when the token is
 absent.
 
 ## Agent Engine Mode
