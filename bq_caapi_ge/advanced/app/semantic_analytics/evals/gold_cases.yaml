@@ -1,0 +1,256 @@
+cases:
+  - id: completed_orders_total
+    question: How many completed orders were placed?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [completed_order_count]
+      dimension_ids: []
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.orders
+    gold_sql: |
+      SELECT
+        COUNT(DISTINCT order_id) AS completed_orders
+      FROM `johanesa-playground-326616.thelook_ecommerce.orders`
+      WHERE status = 'Complete'
+    ordered: true
+
+  - id: completed_orders_by_country
+    question: How many completed orders were placed by country?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [completed_order_count]
+      dimension_ids: [country]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.orders
+      - johanesa-playground-326616.thelook_ecommerce.users
+    gold_sql: |
+      SELECT
+        u.country,
+        COUNT(DISTINCT o.order_id) AS completed_orders
+      FROM `johanesa-playground-326616.thelook_ecommerce.orders` AS o
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.users` AS u
+        ON o.user_id = u.id
+      WHERE o.status = 'Complete'
+      GROUP BY u.country
+      ORDER BY completed_orders DESC, u.country
+    ordered: false
+
+  - id: completed_orders_in_us
+    question: How many completed orders were placed in the United States?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [completed_order_count]
+      dimension_ids: [country]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.orders
+      - johanesa-playground-326616.thelook_ecommerce.users
+    gold_sql: |
+      SELECT
+        COUNT(DISTINCT o.order_id) AS completed_orders
+      FROM `johanesa-playground-326616.thelook_ecommerce.orders` AS o
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.users` AS u
+        ON o.user_id = u.id
+      WHERE
+        o.status = 'Complete'
+        AND u.country = 'United States'
+    ordered: true
+
+  - id: completed_revenue_total
+    question: What is the total completed revenue?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [completed_revenue]
+      dimension_ids: []
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.order_items
+    gold_sql: |
+      SELECT
+        SUM(sale_price) AS completed_revenue
+      FROM `johanesa-playground-326616.thelook_ecommerce.order_items`
+      WHERE status = 'Complete'
+    ordered: true
+    float_absolute_tolerance: 0.01
+
+  - id: aov_by_country
+    question: What is the average completed order value by country?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [average_order_value]
+      dimension_ids: [country]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.order_items
+      - johanesa-playground-326616.thelook_ecommerce.orders
+      - johanesa-playground-326616.thelook_ecommerce.users
+    gold_sql: |
+      SELECT
+        u.country,
+        SAFE_DIVIDE(
+          SUM(oi.sale_price),
+          COUNT(DISTINCT oi.order_id)
+        ) AS average_order_value
+      FROM `johanesa-playground-326616.thelook_ecommerce.order_items` AS oi
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.orders` AS o
+        ON oi.order_id = o.order_id
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.users` AS u
+        ON o.user_id = u.id
+      WHERE oi.status = 'Complete'
+      GROUP BY u.country
+      ORDER BY average_order_value DESC, u.country
+    ordered: false
+
+  - id: top_users_by_revenue
+    question: Which 10 users generated the most completed revenue?
+    selection:
+      context_id: thelook_orders
+      context_version: 1
+      metric_ids: [top_users_by_completed_revenue]
+      dimension_ids: [user_id]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.order_items
+      - johanesa-playground-326616.thelook_ecommerce.orders
+      - johanesa-playground-326616.thelook_ecommerce.users
+    gold_sql: |
+      SELECT
+        u.id AS user_id,
+        SUM(oi.sale_price) AS completed_revenue
+      FROM `johanesa-playground-326616.thelook_ecommerce.order_items` AS oi
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.orders` AS o
+        ON oi.order_id = o.order_id
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.users` AS u
+        ON o.user_id = u.id
+      WHERE oi.status = 'Complete'
+      GROUP BY u.id
+      ORDER BY completed_revenue DESC, user_id
+      LIMIT 10
+    ordered: false
+    float_absolute_tolerance: 0.01
+
+  - id: product_count_total
+    question: How many distinct products are in the catalog?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [product_count]
+      dimension_ids: []
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.products
+    gold_sql: |
+      SELECT
+        COUNT(DISTINCT id) AS product_count
+      FROM `johanesa-playground-326616.thelook_ecommerce.products`
+    ordered: true
+
+  - id: products_by_category
+    question: How many distinct products are in each product category?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [product_count]
+      dimension_ids: [product_category]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.products
+    gold_sql: |
+      SELECT
+        category AS product_category,
+        COUNT(DISTINCT id) AS product_count
+      FROM `johanesa-playground-326616.thelook_ecommerce.products`
+      GROUP BY category
+      ORDER BY product_count DESC, product_category
+    ordered: false
+
+  - id: accessories_product_count
+    question: How many distinct products are in the Accessories category?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [product_count]
+      dimension_ids: [product_category]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.products
+    gold_sql: |
+      SELECT
+        COUNT(DISTINCT id) AS product_count
+      FROM `johanesa-playground-326616.thelook_ecommerce.products`
+      WHERE category = 'Accessories'
+    ordered: true
+
+  - id: available_inventory_total
+    question: How many inventory items are currently available?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [available_inventory_item_count]
+      dimension_ids: []
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.inventory_items
+    gold_sql: |
+      SELECT
+        COUNT(DISTINCT id) AS available_inventory_items
+      FROM `johanesa-playground-326616.thelook_ecommerce.inventory_items`
+      WHERE sold_at IS NULL
+    ordered: true
+
+  - id: available_inventory_by_brand
+    question: Which 10 product brands have the most available inventory items?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [available_inventory_item_count]
+      dimension_ids: [product_brand]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.inventory_items
+      - johanesa-playground-326616.thelook_ecommerce.products
+    gold_sql: |
+      SELECT
+        p.brand AS product_brand,
+        COUNT(DISTINCT ii.id) AS available_inventory_items
+      FROM `johanesa-playground-326616.thelook_ecommerce.inventory_items` AS ii
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.products` AS p
+        ON ii.product_id = p.id
+      WHERE ii.sold_at IS NULL
+      GROUP BY p.brand
+      ORDER BY available_inventory_items DESC, product_brand
+      LIMIT 10
+    ordered: false
+
+  - id: available_inventory_by_dc
+    question: How many available inventory items are held by each distribution center?
+    selection:
+      context_id: thelook_inventory
+      context_version: 1
+      metric_ids: [available_inventory_item_count]
+      dimension_ids: [distribution_center]
+      relationship_ids: []
+    expected_sources:
+      - johanesa-playground-326616.thelook_ecommerce.distribution_centers
+      - johanesa-playground-326616.thelook_ecommerce.inventory_items
+      - johanesa-playground-326616.thelook_ecommerce.products
+    gold_sql: |
+      SELECT
+        dc.name AS distribution_center,
+        COUNT(DISTINCT ii.id) AS available_inventory_items
+      FROM `johanesa-playground-326616.thelook_ecommerce.inventory_items` AS ii
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.products` AS p
+        ON ii.product_id = p.id
+      INNER JOIN `johanesa-playground-326616.thelook_ecommerce.distribution_centers` AS dc
+        ON p.distribution_center_id = dc.id
+      WHERE ii.sold_at IS NULL
+      GROUP BY dc.name
+      ORDER BY available_inventory_items DESC, distribution_center
+    ordered: false

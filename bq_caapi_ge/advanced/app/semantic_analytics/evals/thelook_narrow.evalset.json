@@ -1,0 +1,211 @@
+{
+  "eval_set_id": "thelook_narrow_v1",
+  "name": "Thelook narrow semantic evaluation",
+  "description": "End-to-end ADK evaluation of twelve oracle-authored business questions.",
+  "eval_cases": [
+    {
+      "eval_id": "completed_orders_total",
+      "conversation": [
+        {
+          "invocation_id": "completed_orders_total",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many completed orders were placed?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "completed_orders_by_country",
+      "conversation": [
+        {
+          "invocation_id": "completed_orders_by_country",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many completed orders were placed by country?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "completed_orders_in_us",
+      "conversation": [
+        {
+          "invocation_id": "completed_orders_in_us",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many completed orders were placed in the United States?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "completed_revenue_total",
+      "conversation": [
+        {
+          "invocation_id": "completed_revenue_total",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "What is the total completed revenue?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "aov_by_country",
+      "conversation": [
+        {
+          "invocation_id": "aov_by_country",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "What is the average completed order value by country?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "top_users_by_revenue",
+      "conversation": [
+        {
+          "invocation_id": "top_users_by_revenue",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Which 10 users generated the most completed revenue?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "product_count_total",
+      "conversation": [
+        {
+          "invocation_id": "product_count_total",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many distinct products are in the catalog?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "products_by_category",
+      "conversation": [
+        {
+          "invocation_id": "products_by_category",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many distinct products are in each product category?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "accessories_product_count",
+      "conversation": [
+        {
+          "invocation_id": "accessories_product_count",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many distinct products are in the Accessories category?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "available_inventory_total",
+      "conversation": [
+        {
+          "invocation_id": "available_inventory_total",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many inventory items are currently available?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "available_inventory_by_brand",
+      "conversation": [
+        {
+          "invocation_id": "available_inventory_by_brand",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Which 10 product brands have the most available inventory items?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "available_inventory_by_dc",
+      "conversation": [
+        {
+          "invocation_id": "available_inventory_by_dc",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "How many available inventory items are held by each distribution center?"}]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "semantic_analytics",
+        "user_id": "semantic_eval",
+        "state": {}
+      }
+    }
+  ]
+}

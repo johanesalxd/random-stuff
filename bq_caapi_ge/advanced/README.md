@@ -154,6 +154,9 @@ The workflow uses `SEMANTIC_SELECTOR_MODEL`, `SQL_GENERATOR_MODEL`, and
 `RESULT_SUMMARIZER_MODEL` independently. Broad discovery is default-deny and
 requires `CATALOG_ALLOWED_PROJECTS` or `CATALOG_ALLOWED_DATASETS`.
 
+Run the native ADK semantic evaluation suite with the instructions in
+[`app/semantic_analytics/evals/README.md`](app/semantic_analytics/evals/README.md).
+
 ## Local Testing with OAuth
 
 See [`test_web/README.md`](test_web/README.md) for local ADK and Agent Engine

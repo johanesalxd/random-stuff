@@ -1,0 +1,20 @@
+{
+  "criteria": {
+    "semantic_selection_match": 1.0,
+    "bigquery_result_match": 1.0
+  },
+  "custom_metrics": {
+    "semantic_selection_match": {
+      "code_config": {
+        "name": "advanced.app.semantic_analytics.evals.metrics.semantic_selection_match"
+      },
+      "description": "Checks the selector output against the expected semantic IDs."
+    },
+    "bigquery_result_match": {
+      "code_config": {
+        "name": "advanced.app.semantic_analytics.evals.metrics.bigquery_result_match"
+      },
+      "description": "Executes generated and gold SQL and compares exact result sets."
+    }
+  }
+}

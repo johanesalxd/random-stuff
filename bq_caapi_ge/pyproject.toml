@@ -24,6 +24,9 @@ web = [
     "requests>=2.32.0",
     "python-dotenv>=1.2.1",
 ]
+evaluation = [
+    "google-adk[eval]>=2.0.0",
+]
 
 [dependency-groups]
 dev = [
