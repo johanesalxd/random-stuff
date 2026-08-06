@@ -38,7 +38,6 @@ dist/
 
 # Internal Google-specific content
 internal/
-bq_caapi_ge/demos/
 
 # Python version management
 .python-version
