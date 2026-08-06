@@ -5,10 +5,26 @@ BigQuery dataset and tables. Run it before creating or updating CA API data
 agents so Gemini has profile results, table documentation, and dataset insights
 available through BigQuery and Knowledge Catalog.
 
+Running the scans is only half the job: by default the generated documentation
+is also published back to each table, so it is visible where people actually
+look.
+
+- ``publish_documentation_to_table`` sets the Dataplex publish labels, which
+  surface the generated descriptions on the BigQuery Studio "Insights" tab.
+- ``apply_documentation_to_schema`` writes the generated table overview and
+  column descriptions into the table schema itself. This is the programmatic
+  equivalent of the console "Save to schema" action, and it requires ``--wait``
+  (the descriptions only exist once the documentation job has finished).
+
+The generic Dataplex REST plumbing is kept byte-compatible with
+``bq_cross_cloud_lakehouse/agent/scripts/enrich_bigquery_metadata.py`` so the
+two stay easy to sync.
+
 Usage::
 
     uv run python scripts/enrich_bigquery_metadata.py
     uv run python scripts/enrich_bigquery_metadata.py --wait
+    uv run python scripts/enrich_bigquery_metadata.py --dry-run
 """
 
 from __future__ import annotations
@@ -47,6 +63,7 @@ DATAPLEX_LOCATION = os.getenv("DATAPLEX_LOCATION", os.getenv("BIGQUERY_LOCATION"
 DATAPLEX_SCAN_PREFIX = os.getenv("DATAPLEX_SCAN_PREFIX", "bq-caapi")
 
 DATAPLEX_BASE = "https://dataplex.googleapis.com/v1"
+BIGQUERY_BASE = "https://bigquery.googleapis.com/bigquery/v2"
 OPERATION_POLL_INTERVAL = 2
 SUCCESS_JOB_STATES = {"SUCCEEDED", "SUCCEEDED_WITH_ERRORS"}
 TERMINAL_JOB_STATES = {
@@ -58,6 +75,34 @@ TERMINAL_JOB_STATES = {
     "CANCELED",
 }
 PROFILE_MODES = {"LIGHTWEIGHT", "STANDARD"}
+
+# BigQuery multi-regions are NOT valid Dataplex locations. Dataplex DataScans
+# must live in a single region, even when the BigQuery dataset they scan is in a
+# multi-region. Passing "us" yields an opaque 400 "Malformed name", so catch it
+# here and say what to do instead.
+BIGQUERY_MULTI_REGIONS = {"us", "eu"}
+MULTI_REGION_SUGGESTIONS = {"us": "us-central1", "eu": "europe-west1"}
+
+
+def validate_dataplex_location(location: str) -> None:
+    """Reject BigQuery multi-regions, which Dataplex does not accept.
+
+    Args:
+        location: The configured Dataplex location.
+
+    Raises:
+        ValueError: If the location is a BigQuery multi-region.
+    """
+    if location.strip().lower() not in BIGQUERY_MULTI_REGIONS:
+        return
+    suggestion = MULTI_REGION_SUGGESTIONS[location.strip().lower()]
+    raise ValueError(
+        f"DATAPLEX_LOCATION={location!r} is a BigQuery multi-region, not a "
+        f"Dataplex location. Dataplex DataScans must be created in a single "
+        f"region even when the BigQuery dataset they scan is multi-region. "
+        f"Set DATAPLEX_LOCATION={suggestion!r} (a region inside the "
+        f"{location.upper()} multi-region) and re-run."
+    )
 
 
 def get_access_token() -> str:
@@ -216,27 +261,29 @@ def scan_id(kind: str, dataset_id: str, table_id: str | None = None) -> str:
 
 def build_data_documentation_payload(
     resource: str,
-    generation_scope: str,
+    generation_scope: str | None,
     publish: bool,
 ) -> dict:
     """Build a Dataplex data documentation scan payload.
 
     Args:
         resource: BigQuery dataset or table resource URI.
-        generation_scope: Dataplex DataDocumentationSpec generation scope.
+        generation_scope: Dataplex DataDocumentationSpec generation scope for
+            table scans. Pass ``None`` for dataset-level scans, which do not
+            support generation scopes.
         publish: Whether to publish results to Dataplex Catalog.
 
     Returns:
         DataScan create payload.
     """
+    spec: dict = {"catalogPublishingEnabled": publish}
+    if generation_scope:
+        spec["generationScopes"] = [generation_scope]
     return {
         "data": {"resource": resource},
         "executionSpec": {"trigger": {"onDemand": {}}},
         "type": "DATA_DOCUMENTATION",
-        "dataDocumentationSpec": {
-            "generationScopes": [generation_scope],
-            "catalogPublishingEnabled": publish,
-        },
+        "dataDocumentationSpec": spec,
     }
 
 
@@ -502,6 +549,242 @@ def create_and_run_scan(
     return None
 
 
+def count_non_partitioned_tables(dataset_id: str, token: str) -> int:
+    """Count non-partitioned base tables in a dataset.
+
+    Dataset-level data documentation requires at least two of these. Checking up
+    front turns an opaque Dataplex 400 into a clear, cheap skip.
+
+    Args:
+        dataset_id: BigQuery dataset ID.
+        token: Bearer token.
+
+    Returns:
+        Number of non-partitioned tables, or -1 if the check could not run.
+    """
+    url = f"{BIGQUERY_BASE}/projects/{PROJECT_ID}/datasets/{dataset_id}/tables"
+    try:
+        listing = request("GET", url, token)
+    except RuntimeError as e:
+        logger.debug("Could not list tables in %s: %s", dataset_id, e)
+        return -1
+
+    count = 0
+    for table in listing.get("tables", []):
+        if table.get("type") not in (None, "TABLE"):
+            continue
+        if table.get("timePartitioning") or table.get("rangePartitioning"):
+            continue
+        count += 1
+    return count
+
+
+def documentation_labels(scan_name: str) -> dict[str, str]:
+    """Build the labels that publish documentation results to a BigQuery table.
+
+    Attaching these labels surfaces the generated table/column descriptions on
+    the BigQuery Studio "Insights" tab.
+
+    Args:
+        scan_name: The data documentation scan ID whose results to publish.
+
+    Returns:
+        Label key/value pairs to set on the table.
+    """
+    return {
+        "dataplex-data-documentation-published-scan": scan_name,
+        "dataplex-data-documentation-published-project": PROJECT_ID,
+        "dataplex-data-documentation-published-location": DATAPLEX_LOCATION,
+    }
+
+
+def publish_documentation_to_table(
+    dataset_id: str,
+    table_id: str,
+    scan_name: str,
+    token: str,
+    dry_run: bool,
+) -> None:
+    """Publish documentation scan results back to a BigQuery table.
+
+    This patches the table's labels so the generated descriptions surface on the
+    BigQuery Studio "Insights" tab.
+
+    Args:
+        dataset_id: BigQuery dataset ID.
+        table_id: BigQuery table ID.
+        scan_name: The data documentation scan ID whose results to publish.
+        token: Bearer token.
+        dry_run: Whether to skip the API call.
+    """
+    labels = documentation_labels(scan_name)
+    if dry_run:
+        logger.info(
+            "Dry-run publish documentation to table %s.%s labels=%s",
+            dataset_id,
+            table_id,
+            labels,
+        )
+        return
+
+    url = (
+        f"{BIGQUERY_BASE}/projects/{PROJECT_ID}/datasets/{dataset_id}/tables/{table_id}"
+    )
+    request("PATCH", url, token, {"labels": labels})
+    logger.info(
+        "Published documentation to table %s.%s (visible on the Insights tab).",
+        dataset_id,
+        table_id,
+    )
+
+
+def extract_table_documentation(job: dict | None) -> tuple[str, dict[str, str]]:
+    """Extract the generated overview and column descriptions from a docs job.
+
+    Args:
+        job: A completed DATA_DOCUMENTATION scan job (``view=FULL``), or None
+            (for example when the run did not ``--wait``).
+
+    Returns:
+        A ``(table_overview, {column_name: description})`` tuple; empty when the
+        result is unavailable.
+    """
+    if not job:
+        return "", {}
+    table_result = job.get("dataDocumentationResult", {}).get("tableResult", {})
+    overview = table_result.get("overview", "") or ""
+    fields = table_result.get("schema", {}).get("fields", []) or []
+    descriptions = {
+        field_["name"]: field_.get("description", "")
+        for field_ in fields
+        if field_.get("name") and field_.get("description")
+    }
+    return overview, descriptions
+
+
+def merge_field_descriptions(
+    existing_fields: list[dict],
+    descriptions: dict[str, str],
+) -> list[dict]:
+    """Return schema fields with generated descriptions merged in.
+
+    Existing field attributes are preserved; ``description`` is set only for
+    fields present in the descriptions map.
+
+    Args:
+        existing_fields: Current table schema fields (from ``tables.get``).
+        descriptions: Column name to generated description.
+
+    Returns:
+        A new list of schema field dicts.
+    """
+    merged: list[dict] = []
+    for field_ in existing_fields:
+        new_field = dict(field_)
+        desc = descriptions.get(new_field.get("name", ""))
+        if desc:
+            new_field["description"] = desc
+        merged.append(new_field)
+    return merged
+
+
+def get_table(dataset_id: str, table_id: str, token: str) -> dict:
+    """Fetch a BigQuery table resource.
+
+    Args:
+        dataset_id: BigQuery dataset ID.
+        table_id: BigQuery table ID.
+        token: Bearer token.
+
+    Returns:
+        The table resource JSON.
+    """
+    url = (
+        f"{BIGQUERY_BASE}/projects/{PROJECT_ID}/datasets/{dataset_id}/tables/{table_id}"
+    )
+    return request("GET", url, token)
+
+
+def apply_documentation_to_schema(
+    dataset_id: str,
+    table_id: str,
+    overview: str,
+    descriptions: dict[str, str],
+    token: str,
+    dry_run: bool,
+) -> None:
+    """Write generated table/column descriptions into the table schema.
+
+    This is the programmatic equivalent of the console "Save to schema" action,
+    so descriptions appear in the table's schema and are picked up as agent
+    context.
+
+    Args:
+        dataset_id: BigQuery dataset ID.
+        table_id: BigQuery table ID.
+        overview: Generated table overview to set as the table description.
+        descriptions: Column name to generated description.
+        token: Bearer token.
+        dry_run: Whether to skip the API call.
+    """
+    if not overview and not descriptions:
+        logger.info(
+            "No generated descriptions to write for %s.%s (run with --wait to "
+            "capture and save them to the schema).",
+            dataset_id,
+            table_id,
+        )
+        return
+    if dry_run:
+        logger.info(
+            "Dry-run write descriptions to %s.%s schema (%d columns).",
+            dataset_id,
+            table_id,
+            len(descriptions),
+        )
+        return
+
+    table = get_table(dataset_id, table_id, token)
+    fields = table.get("schema", {}).get("fields", []) or []
+    patch: dict = {"schema": {"fields": merge_field_descriptions(fields, descriptions)}}
+    if overview:
+        patch["description"] = overview
+    url = (
+        f"{BIGQUERY_BASE}/projects/{PROJECT_ID}/datasets/{dataset_id}/tables/{table_id}"
+    )
+    request("PATCH", url, token, patch)
+    logger.info(
+        "Wrote overview + %d column descriptions into %s.%s schema.",
+        len(descriptions),
+        dataset_id,
+        table_id,
+    )
+
+
+def log_view_links(dataset_id: str, table_ids: list[str]) -> None:
+    """Log where to view the generated metadata for the enriched tables.
+
+    Args:
+        dataset_id: BigQuery dataset ID.
+        table_ids: Table IDs that were enriched.
+    """
+    logger.info("View generated metadata:")
+    for table_id in table_ids:
+        logger.info(
+            "  BigQuery Studio Insights: https://console.cloud.google.com/bigquery"
+            "?project=%s&ws=!1m5!1m4!4m3!1s%s!2s%s!3s%s",
+            PROJECT_ID,
+            PROJECT_ID,
+            dataset_id,
+            table_id,
+        )
+    logger.info(
+        "  Knowledge Catalog search: "
+        "https://console.cloud.google.com/dataplex/search?project=%s",
+        PROJECT_ID,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments.
 
@@ -517,6 +800,15 @@ def parse_args() -> argparse.Namespace:
             f"DATA_PROFILE_MODE must be LIGHTWEIGHT or STANDARD: {env_profile_mode}"
         )
 
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "BigQuery dataset to enrich. Overrides BIGQUERY_DATASET_ID. Needed "
+            "because .env is loaded with override=True, so a shell variable "
+            "cannot win against it."
+        ),
+    )
     parser.add_argument(
         "--tables",
         nargs="+",
@@ -573,7 +865,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-publish",
         action="store_true",
-        help="Do not publish scan results to Dataplex Catalog/Knowledge Catalog.",
+        help="Do not publish scan results to Knowledge Catalog or back to the table.",
+    )
+    parser.add_argument(
+        "--skip-schema-write-back",
+        action="store_true",
+        help="Publish to Knowledge Catalog but do not write generated descriptions "
+        "into the table schema. Requires --wait to have any effect either way.",
     )
     parser.add_argument(
         "--wait",
@@ -583,8 +881,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--poll-interval",
         type=int,
-        default=15,
-        help="Seconds between Dataplex job polling attempts.",
+        default=5,
+        help=(
+            "Seconds between Dataplex job polling attempts. Profile jobs finish "
+            "in about 5s and documentation jobs in about 60s, so a large "
+            "interval spends most of the wall clock asleep."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -594,14 +896,77 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def enrich_table(
+    table_id: str,
+    args: argparse.Namespace,
+    token: str,
+    sampling_percent: float | None,
+    export_results_table: str | None,
+    publish: bool,
+) -> None:
+    """Run profile + documentation scans for one table and publish the results.
+
+    Args:
+        table_id: BigQuery table ID.
+        args: Parsed CLI arguments.
+        token: Bearer token.
+        sampling_percent: Resolved sampling percentage (STANDARD mode).
+        export_results_table: Optional profile export table URI.
+        publish: Whether to publish results.
+    """
+    table_resource = bigquery_table_resource(PROJECT_ID, DATASET_ID, table_id)
+
+    if not args.skip_profile:
+        name = scan_id("profile", DATASET_ID, table_id)
+        payload = build_data_profile_payload(
+            resource=table_resource,
+            mode=args.profile_mode,
+            publish=publish,
+            sampling_percent=sampling_percent,
+            export_results_table=export_results_table,
+        )
+        create_and_run_scan(
+            name, payload, token, args.wait, args.poll_interval, args.dry_run
+        )
+
+    if args.skip_table_docs:
+        return
+
+    name = scan_id("table-docs", DATASET_ID, table_id)
+    payload = build_data_documentation_payload(
+        resource=table_resource,
+        generation_scope=args.generation_scope,
+        publish=publish,
+    )
+    job = create_and_run_scan(
+        name, payload, token, args.wait, args.poll_interval, args.dry_run
+    )
+    if not publish:
+        return
+
+    # Publish to Knowledge Catalog / the Insights tab (labels) ...
+    publish_documentation_to_table(DATASET_ID, table_id, name, token, args.dry_run)
+    # ... and write the generated descriptions into the table schema.
+    if not args.skip_schema_write_back:
+        overview, descriptions = extract_table_documentation(job)
+        apply_documentation_to_schema(
+            DATASET_ID, table_id, overview, descriptions, token, args.dry_run
+        )
+
+
 def main() -> None:
     """Create and run Dataplex metadata enrichment scans."""
+    global DATASET_ID
+
     if not PROJECT_ID:
         raise ValueError("GOOGLE_CLOUD_PROJECT must be set.")
-    if not DATASET_ID:
-        raise ValueError("BIGQUERY_DATASET_ID must be set.")
+    validate_dataplex_location(DATAPLEX_LOCATION)
 
     args = parse_args()
+    if args.dataset:
+        DATASET_ID = args.dataset
+    if not DATASET_ID:
+        raise ValueError("Set BIGQUERY_DATASET_ID or pass --dataset.")
     export_results_table = normalize_results_table(args.profile_results_table)
     sampling_percent = args.sampling_percent
     if args.profile_mode == "STANDARD" and sampling_percent is None:
@@ -609,57 +974,65 @@ def main() -> None:
     token = "" if args.dry_run else get_access_token()
     publish = not args.no_publish
 
-    if not args.skip_dataset_docs:
+    tables = list(args.tables)
+    logger.info(
+        "Enriching %d tables (project=%s, dataset=%s, location=%s).",
+        len(tables),
+        PROJECT_ID,
+        DATASET_ID,
+        DATAPLEX_LOCATION,
+    )
+    if publish and not args.skip_schema_write_back and not args.wait:
+        logger.warning(
+            "Schema write-back needs --wait: without it the documentation job "
+            "has not finished, so no descriptions are available to save."
+        )
+
+    skip_dataset_docs = args.skip_dataset_docs
+    if not skip_dataset_docs and not args.dry_run:
+        table_count = count_non_partitioned_tables(DATASET_ID, token)
+        if 0 <= table_count < 2:
+            logger.info(
+                "Skipping dataset-level documentation for %s: it has %d "
+                "non-partitioned table(s) and Dataplex requires at least 2.",
+                DATASET_ID,
+                table_count,
+            )
+            skip_dataset_docs = True
+
+    if not skip_dataset_docs:
         name = scan_id("dataset-docs", DATASET_ID)
         payload = build_data_documentation_payload(
             resource=bigquery_dataset_resource(PROJECT_ID, DATASET_ID),
-            generation_scope="ALL",
+            generation_scope=None,
             publish=publish,
         )
-        create_and_run_scan(
-            name,
-            payload,
-            token,
-            args.wait,
-            args.poll_interval,
-            args.dry_run,
+        try:
+            create_and_run_scan(
+                name, payload, token, args.wait, args.poll_interval, args.dry_run
+            )
+        except RuntimeError as e:
+            # Dataset-level documentation needs at least 2 non-partitioned
+            # tables. That is a Dataplex limitation, not a configuration error,
+            # and it must not block the table-level scans that actually carry
+            # the column descriptions.
+            if "at least 2 non-partitioned tables" not in str(e):
+                raise
+            logger.warning(
+                "Skipping dataset-level documentation for %s: Dataplex requires "
+                "at least 2 non-partitioned tables in the dataset. Table-level "
+                "profile and documentation scans continue normally.",
+                DATASET_ID,
+            )
+
+    for table_id in tables:
+        enrich_table(
+            table_id, args, token, sampling_percent, export_results_table, publish
         )
 
-    for table_id in args.tables:
-        table_resource = bigquery_table_resource(PROJECT_ID, DATASET_ID, table_id)
-        if not args.skip_profile:
-            name = scan_id("profile", DATASET_ID, table_id)
-            payload = build_data_profile_payload(
-                resource=table_resource,
-                mode=args.profile_mode,
-                publish=publish,
-                sampling_percent=sampling_percent,
-                export_results_table=export_results_table,
-            )
-            create_and_run_scan(
-                name,
-                payload,
-                token,
-                args.wait,
-                args.poll_interval,
-                args.dry_run,
-            )
-
-        if not args.skip_table_docs:
-            name = scan_id("table-docs", DATASET_ID, table_id)
-            payload = build_data_documentation_payload(
-                resource=table_resource,
-                generation_scope=args.generation_scope,
-                publish=publish,
-            )
-            create_and_run_scan(
-                name,
-                payload,
-                token,
-                args.wait,
-                args.poll_interval,
-                args.dry_run,
-            )
+    if not args.dry_run:
+        log_view_links(DATASET_ID, tables)
+    logger.info("Metadata enrichment finished.")
 
 
 if __name__ == "__main__":

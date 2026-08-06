@@ -115,17 +115,57 @@ uv run python scripts/enrich_bigquery_metadata.py --dry-run
 # Create and run scans asynchronously. Publishing is enabled by default.
 uv run python scripts/enrich_bigquery_metadata.py
 
-# Optional: wait for scan jobs to complete for admin/debugging workflows.
+# Recommended: wait for scan jobs, then write the generated descriptions
+# back into the table schemas.
 uv run python scripts/enrich_bigquery_metadata.py --wait
 ```
 
-Use `--no-publish` only when you want ad hoc scan results that are not persisted
-to the catalog.
+Publishing has two parts, and both are on by default:
 
-After asynchronous scans finish, review the generated descriptions, suggested
-queries, profiles, and relationships in BigQuery or Knowledge Catalog. Add or
-adjust verified queries in the agent later if you need deterministic business
-logic.
+1. **Labels** (`publish_documentation_to_table`) — surfaces the generated
+   descriptions on the BigQuery Studio **Insights** tab.
+2. **Schema write-back** (`apply_documentation_to_schema`) — writes the generated
+   table overview and column descriptions **into the table schema**. This is the
+   programmatic equivalent of the console "Save to schema" action, and it is what
+   makes the enrichment visible to anyone reading the table — and usable as agent
+   context.
+
+> [!IMPORTANT]
+> **Schema write-back requires `--wait`.** The descriptions only exist once the
+> documentation job has finished, so a fire-and-forget run has nothing to save. The
+> script logs a warning if you ask for write-back without `--wait`.
+
+> [!WARNING]
+> **`DATAPLEX_LOCATION` must be a single region, never a BigQuery multi-region.**
+> Dataplex DataScans cannot be created in `us` or `eu` — the API returns an opaque
+> `400 Malformed name`. Use a region inside the multi-region that holds the
+> dataset (`us-central1` for US, `europe-west1` for EU). The script validates this
+> up front. Dataset-level documentation additionally requires **at least two
+> non-partitioned tables** in the dataset; the script counts them first and skips
+> with an explanation rather than failing.
+
+Use `--dataset` to pick the dataset. The `BIGQUERY_DATASET_ID` environment
+variable cannot be overridden from the shell, because `.env` is loaded with
+`override=True`.
+
+Measured timings: profile jobs ~5s, table documentation ~55-60s, dataset-level
+documentation ~120s. The default `--poll-interval` is 5s to avoid spending most
+of the wall clock asleep.
+
+Use `--no-publish` for ad hoc scan results that are not persisted anywhere, or
+`--skip-schema-write-back` to publish to Knowledge Catalog but leave table schemas
+untouched.
+
+At the end of a run the script logs deep links to the BigQuery Studio Insights tab
+for each enriched table and to Knowledge Catalog search.
+
+After the scans finish, review the generated descriptions, suggested queries,
+profiles, and relationships in BigQuery or Knowledge Catalog. Add or adjust
+verified queries in the agent later if you need deterministic business logic.
+
+> The generic Dataplex REST plumbing is kept byte-compatible with
+> `bq_cross_cloud_lakehouse/agent/scripts/enrich_bigquery_metadata.py` so the two
+> stay easy to sync.
 
 ### 4. Create Data Agents
 
