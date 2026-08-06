@@ -33,7 +33,8 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 │   ├── admin_tools.py              # Create/update CA API data agents
 │   └── register_ge_agents.py       # Fetch A2A card and register in GE
 ├── config/
-│   └── agent_definitions.py      # Minimal agent table grouping
+│   ├── agent_definitions.py      # Minimal agent table grouping
+│   └── ca_locations.py           # CA API endpoint resolution by location
 ├── advanced/                     # Custom ADK runtime (see advanced/README.md)
 │   ├── app/                      # ADK agent packages
 │   ├── scripts/                  # Deploy, auth, and registration scripts
@@ -85,8 +86,10 @@ Edit `.env` with your project details:
 ```bash
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_PROJECT_NUMBER=your-project-number
+GOOGLE_CLOUD_LOCATION=global
+GEMINI_APP_LOCATION=global
 BIGQUERY_LOCATION=us
-DATAPLEX_LOCATION=us
+DATAPLEX_LOCATION=us-central1
 BIGQUERY_DATASET_ID=your-dataset-id
 AGENT_ORDERS_ID=order_user_agent
 AGENT_INVENTORY_ID=inventory_product_agent
@@ -96,6 +99,32 @@ OAUTH_CLIENT_SECRET=your-oauth-client-secret
 AUTH_RESOURCE_ORDERS=bq-caapi-oauth-orders
 AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
 ```
+
+#### Locations
+
+Four locations are configured independently, because they are genuinely
+different resources:
+
+| Variable | Applies to | Notes |
+|---|---|---|
+| `GOOGLE_CLOUD_LOCATION` | The CA API data agent | `global`, a region (`asia-southeast1`), or a multi-region (`us`). Selects the CA API endpoint. |
+| `GEMINI_APP_LOCATION` | The Gemini Enterprise app | Usually `global`. A regional data agent can be registered into a global GE app. |
+| `BIGQUERY_LOCATION` | The BigQuery dataset | Multi-regions (`us`, `eu`) are valid here. |
+| `DATAPLEX_LOCATION` | Dataplex DataScans | **Must be a single region.** Multi-regions are rejected up front — see the note under "Enrich BigQuery Metadata". |
+
+A data agent is only reachable through the endpoint serving its location, so
+`GOOGLE_CLOUD_LOCATION` is resolved to a hostname by
+[`config/ca_locations.py`](config/ca_locations.py):
+
+| `GOOGLE_CLOUD_LOCATION` | CA API host |
+|---|---|
+| `global` (default) | `geminidataanalytics.googleapis.com` |
+| `asia-southeast1` (region) | `geminidataanalytics-asia-southeast1.googleapis.com` |
+| `us` (multi-region) | `geminidataanalytics.us.rep.googleapis.com` |
+
+> **`.env` wins over the shell.** These scripts call `load_dotenv(override=True)`,
+> so a value in `.env` overrides an exported environment variable of the same
+> name. Edit `.env` rather than exporting when a setting appears to be ignored.
 
 ### 3. Enrich BigQuery Metadata
 
@@ -314,6 +343,34 @@ uv sync --extra advanced
 The ADK node modules under `semantic/` (`runtime.py`, `catalog_runtime.py`,
 `sql_runtime.py`, `execution.py`) require the `advanced` extra. The base install
 exposes the catalog, context, registry, and type modules without ADK installed.
+
+## Relationship to the cross-cloud lakehouse agent
+
+The [`bq-cross-cloud-lakehouse`](https://github.com/johanesalxd/bq-cross-cloud-lakehouse)
+repository contains an `agent/` package that was extracted from this project. It
+is a **frozen fork**: it is deliberately self-contained (no shared parent
+package, no ADK runtime) so the lakehouse demo can be handed over on its own.
+
+**This project is the canonical baseline.** Fixes flow *from* the fork *into*
+here, never the other way around, unless something is broken badly enough in the
+fork to justify unfreezing it. If you are looking for the up-to-date behaviour,
+it is here.
+
+The remaining differences are intentional:
+
+| Difference | Why |
+|---|---|
+| Fork reads `config.local.env` then `.env`; this project reads `.env` with `override=True` | The fork inherits infrastructure values from the lakehouse deployment |
+| Fork defines one agent; this project defines many (`--agents`, `--auth-ids`, `--display-names`) | This project is the superset |
+| Fork's `TableRef` carries a per-table `dataset_id`; here tables are names inside one `BIGQUERY_DATASET_ID` | The fork needs four-part P.C.N.T references for AWS-federated Iceberg tables |
+| Fork profiles AWS-federated Iceberg tables (`--skip-federated`) | Not applicable here |
+| `semantic/` and `advanced/` exist only here | The fork explicitly excludes the ADK runtime |
+
+Everything else — the Dataplex scan plumbing, documentation write-back, CA API
+endpoint resolution, and Gemini Enterprise registration — should read the same
+in both. This project additionally carries `--dataset`,
+`--skip-schema-write-back`, the Dataplex multi-region guard, and the
+dataset-documentation pre-check, none of which the frozen fork has.
 
 ## Demo
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -32,6 +33,7 @@ from config.agent_definitions import (  # noqa: E402
     AGENT_DEFINITIONS,
     AgentDefinition,
 )
+from config.ca_locations import ca_api_endpoint  # noqa: E402
 
 load_dotenv(override=True)
 
@@ -44,6 +46,27 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 DATASET_ID = os.getenv("BIGQUERY_DATASET_ID")
+
+# A deleted agent ID stays reserved until the soft delete completes, so a
+# recreate has to wait it out.
+SOFT_DELETE_WAIT_SECONDS = 60
+
+
+def make_client(location: str) -> geminidataanalytics.DataAgentServiceClient:
+    """Create a CA API client bound to the endpoint serving a location.
+
+    Args:
+        location: CA API resource location, for example ``global`` or
+            ``asia-southeast1``.
+
+    Returns:
+        A DataAgentServiceClient targeting the matching regional endpoint.
+    """
+    if not location or location == "global":
+        return geminidataanalytics.DataAgentServiceClient()
+    return geminidataanalytics.DataAgentServiceClient(
+        client_options={"api_endpoint": ca_api_endpoint(location)}
+    )
 
 
 def get_bq_refs(
@@ -106,44 +129,41 @@ def upsert_agent(
     )
 
     try:
-        operation = client.create_data_agent(request=request)
-        result = operation.result()
+        result = client.create_data_agent(request=request).result()
         logger.info("Agent created: %s", result.name)
-    except Exception as e:
+        return
+    except Exception as e:  # The CA API raises broad errors here.
         if "already exists" not in str(e).lower():
-            logger.error("Failed to create agent %s", agent_id, exc_info=True)
+            logger.exception("Failed to create agent %s", agent_id)
             raise
 
-        # Agent exists -- update instead.
-        logger.info("Agent %s already exists, updating...", agent_id)
-        agent.name = client.data_agent_path(PROJECT_ID, LOCATION, agent_id)
-
-        update_mask = field_mask_pb2.FieldMask(
+    # Agent exists -- update instead.
+    logger.info("Agent %s already exists, updating...", agent_id)
+    agent.name = client.data_agent_path(PROJECT_ID, LOCATION, agent_id)
+    update_request = geminidataanalytics.UpdateDataAgentRequest(
+        data_agent=agent,
+        update_mask=field_mask_pb2.FieldMask(
             paths=["description", "data_analytics_agent.published_context"]
-        )
-        update_request = geminidataanalytics.UpdateDataAgentRequest(
-            data_agent=agent,
-            update_mask=update_mask,
-        )
-        try:
-            operation = client.update_data_agent(request=update_request)
-            result = operation.result()
-            logger.info("Agent updated: %s", result.name)
-        except Exception as update_err:
-            if "soft deleted" in str(update_err).lower():
-                logger.warning(
-                    "Agent %s is soft-deleted. Waiting 60s for deletion to "
-                    "complete before retrying create...",
-                    agent_id,
-                )
-                import time
+        ),
+    )
 
-                time.sleep(60)
-                operation = client.create_data_agent(request=request)
-                result = operation.result()
-                logger.info("Agent created (after soft-delete wait): %s", result.name)
-            else:
-                raise
+    try:
+        result = client.update_data_agent(request=update_request).result()
+        logger.info("Agent updated: %s", result.name)
+        return
+    except Exception as update_err:
+        if "soft deleted" not in str(update_err).lower():
+            raise
+
+    logger.warning(
+        "Agent %s is soft-deleted. Waiting %ds for deletion to complete before "
+        "retrying create...",
+        agent_id,
+        SOFT_DELETE_WAIT_SECONDS,
+    )
+    time.sleep(SOFT_DELETE_WAIT_SECONDS)
+    result = client.create_data_agent(request=request).result()
+    logger.info("Agent created (after soft-delete wait): %s", result.name)
 
 
 def list_agents(
@@ -173,7 +193,7 @@ def main() -> None:
     if not DATASET_ID:
         raise ValueError("BIGQUERY_DATASET_ID must be set.")
 
-    client = geminidataanalytics.DataAgentServiceClient()
+    client = make_client(LOCATION)
 
     for agent_definition in AGENT_DEFINITIONS:
         agent_id = os.getenv(

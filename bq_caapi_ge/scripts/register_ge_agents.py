@@ -31,8 +31,15 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config.ca_locations import ca_api_endpoint  # noqa: E402
 
 load_dotenv(override=True)
 
@@ -44,13 +51,17 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+# The data agent's location (where the CA API resource lives) and the Gemini
+# Enterprise app's location are independent: a regional agent is routinely
+# registered into a global GE app.
+CA_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+GE_LOCATION = os.getenv("GEMINI_APP_LOCATION", "global")
 APP_ID = os.getenv("GEMINI_APP_ID")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
-CA_API_BASE = "https://geminidataanalytics.googleapis.com"
-DE_BASE = f"https://{LOCATION}-discoveryengine.googleapis.com/v1alpha"
+CA_API_BASE = f"https://{ca_api_endpoint(CA_LOCATION)}"
+DE_BASE = f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha"
 
 
 def get_access_token() -> str:
@@ -114,7 +125,8 @@ def _request(
         raise RuntimeError(f"curl failed: {result.stderr.strip()}")
 
     try:
-        data = json.loads(result.stdout)
+        # A successful DELETE returns an empty body, which is not valid JSON.
+        data = json.loads(result.stdout or "{}")
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Invalid JSON response: {result.stdout[:200]}") from e
 
@@ -136,7 +148,7 @@ def get_agent_card(agent_id: str, token: str) -> dict:
         Agent card dict as returned by the CA API.
     """
     url = (
-        f"{CA_API_BASE}/v1beta/a2a/projects/{PROJECT_ID}/locations/{LOCATION}"
+        f"{CA_API_BASE}/v1beta/a2a/projects/{PROJECT_ID}/locations/{CA_LOCATION}"
         f"/dataAgents/{agent_id}/v1/card"
     )
     logger.info("Fetching agent card for: %s", agent_id)
@@ -238,11 +250,13 @@ def create_auth_resource(auth_id: str, token: str) -> None:
     )
 
     url = (
-        f"{DE_BASE}/projects/{PROJECT_ID}/locations/{LOCATION}"
+        f"{DE_BASE}/projects/{PROJECT_ID}/locations/{GE_LOCATION}"
         f"/authorizations?authorizationId={auth_id}"
     )
     payload = {
-        "name": f"projects/{PROJECT_ID}/locations/{LOCATION}/authorizations/{auth_id}",
+        "name": (
+            f"projects/{PROJECT_ID}/locations/{GE_LOCATION}/authorizations/{auth_id}"
+        ),
         "serverSideOauth2": {
             "clientId": OAUTH_CLIENT_ID,
             "clientSecret": OAUTH_CLIENT_SECRET,
@@ -265,7 +279,7 @@ def create_auth_resource(auth_id: str, token: str) -> None:
 def _ge_agents_url() -> str:
     """Return the Discovery Engine agents endpoint URL."""
     return (
-        f"{DE_BASE}/projects/{PROJECT_ID}/locations/{LOCATION}"
+        f"{DE_BASE}/projects/{PROJECT_ID}/locations/{GE_LOCATION}"
         f"/collections/default_collection/engines/{APP_ID}"
         "/assistants/default_assistant/agents"
     )
@@ -332,7 +346,8 @@ def register_agent(
     if auth_id:
         payload["authorizationConfig"] = {
             "agentAuthorization": (
-                f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{auth_id}"
+                f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}"
+                f"/authorizations/{auth_id}"
             )
         }
 
