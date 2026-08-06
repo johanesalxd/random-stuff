@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -14,15 +15,23 @@ if str(PROJECT_ROOT) not in sys.path:
 from config.agent_definitions import unique_table_ids  # noqa: E402
 from scripts import enrich_bigquery_metadata as enrich  # noqa: E402
 from scripts.enrich_bigquery_metadata import (  # noqa: E402
+    apply_documentation_to_schema,
     bigquery_dataset_resource,
     bigquery_table_resource,
     build_data_documentation_payload,
     build_data_profile_payload,
+    count_non_partitioned_tables,
+    documentation_labels,
+    enrich_table,
+    extract_table_documentation,
+    merge_field_descriptions,
     normalize_results_table,
     parse_args,
+    publish_documentation_to_table,
     scan_id,
     update_mask_for_payload,
     upsert_scan,
+    validate_dataplex_location,
     wait_for_operation,
     wait_for_scan_job,
 )
@@ -58,6 +67,8 @@ def test_scan_id_normalizes_and_limits_length():
     assert len(first) <= 63
     assert first[0].isalpha()
     assert "_" not in first
+    # Truncation must keep the prefix, or scans from different tools collide.
+    assert first.startswith(f"{enrich.DATAPLEX_SCAN_PREFIX}-table-docs-")
 
 
 def test_build_data_documentation_payload_includes_scope_and_publishing():
@@ -73,6 +84,22 @@ def test_build_data_documentation_payload_includes_scope_and_publishing():
         "generationScopes": ["ALL"],
         "catalogPublishingEnabled": True,
     }
+
+
+def test_build_data_documentation_payload_omits_scope_for_dataset_scans():
+    """Tests dataset-level documentation scans send no generation scopes.
+
+    Dataplex rejects a dataset-level scan that carries generationScopes, so the
+    scope must be dropped rather than defaulted.
+    """
+    payload = build_data_documentation_payload(
+        resource="//bigquery.googleapis.com/projects/project-a/datasets/dataset_a",
+        generation_scope=None,
+        publish=True,
+    )
+
+    assert "generationScopes" not in payload["dataDocumentationSpec"]
+    assert payload["dataDocumentationSpec"]["catalogPublishingEnabled"] is True
 
 
 def test_build_data_profile_payload_rejects_lightweight_sampling():
@@ -232,6 +259,12 @@ def test_normalize_results_table_accepts_project_dataset_table():
     )
 
 
+def test_normalize_results_table_rejects_malformed_value():
+    """Tests a bare table name is rejected instead of silently misconfiguring."""
+    with pytest.raises(ValueError, match="resource URI or"):
+        normalize_results_table("just_a_table")
+
+
 def test_unique_table_ids_returns_agent_tables_once():
     """Tests shared config exposes the default-path table set."""
     assert unique_table_ids() == [
@@ -243,3 +276,338 @@ def test_unique_table_ids_returns_agent_tables_once():
         "inventory_items",
         "distribution_centers",
     ]
+
+
+def test_validate_dataplex_location_allows_single_regions():
+    """Tests a single region passes the pre-flight location check."""
+    assert validate_dataplex_location("us-central1") is None
+
+
+def test_validate_dataplex_location_rejects_multi_regions_with_a_replacement():
+    """Tests BigQuery multi-regions are rejected before Dataplex 400s.
+
+    Dataplex DataScans must live in a single region. Passing "us" returns an
+    opaque "Malformed name" error, so the guard must name a usable region.
+    """
+    with pytest.raises(ValueError, match="us-central1"):
+        validate_dataplex_location("us")
+
+    with pytest.raises(ValueError, match="europe-west1"):
+        validate_dataplex_location("EU")
+
+
+def test_count_non_partitioned_tables_excludes_views_and_partitioned(monkeypatch):
+    """Tests only non-partitioned base tables count toward the Dataplex minimum."""
+    listing = {
+        "tables": [
+            {"type": "TABLE"},
+            {"type": "TABLE", "timePartitioning": {"type": "DAY"}},
+            {"type": "TABLE", "rangePartitioning": {"field": "id"}},
+            {"type": "VIEW"},
+            {},
+        ]
+    }
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(
+        enrich, "request", lambda method, url, token, payload=None: listing
+    )
+
+    assert count_non_partitioned_tables("dataset_a", token="token") == 2
+
+
+def test_count_non_partitioned_tables_returns_negative_one_when_listing_fails(
+    monkeypatch,
+):
+    """Tests an unreadable dataset yields -1 so the caller skips the pre-check.
+
+    The count is only an optimisation; losing it must not abort enrichment.
+    """
+
+    def fail(method: str, url: str, token: str, payload: dict | None = None):
+        raise RuntimeError("403 permission denied")
+
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "request", fail)
+
+    assert count_non_partitioned_tables("dataset_a", token="token") == -1
+
+
+def test_documentation_labels_carry_the_scan_reference(monkeypatch):
+    """Tests publish labels point BigQuery at the scan holding the results."""
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "DATAPLEX_LOCATION", "us-central1")
+
+    labels = documentation_labels("bq-caapi-table-docs-orders")
+
+    assert labels == {
+        "dataplex-data-documentation-published-scan": "bq-caapi-table-docs-orders",
+        "dataplex-data-documentation-published-project": "project-a",
+        "dataplex-data-documentation-published-location": "us-central1",
+    }
+
+
+def test_publish_documentation_to_table_patches_labels(monkeypatch):
+    """Tests publishing sets the Dataplex labels on the BigQuery table."""
+    calls: list[tuple[str, str, dict | None]] = []
+
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "DATAPLEX_LOCATION", "us-central1")
+    monkeypatch.setattr(
+        enrich,
+        "request",
+        lambda method, url, token, payload=None: (
+            calls.append((method, url, payload)) or {}
+        ),
+    )
+
+    publish_documentation_to_table(
+        "dataset_a", "orders", "scan-a", token="token", dry_run=False
+    )
+
+    method, url, payload = calls[0]
+    assert method == "PATCH"
+    assert url.endswith("/projects/project-a/datasets/dataset_a/tables/orders")
+    assert payload["labels"]["dataplex-data-documentation-published-scan"] == "scan-a"
+
+
+def test_publish_documentation_to_table_skips_the_api_call_on_dry_run(monkeypatch):
+    """Tests a dry run reports the intent without mutating the table."""
+
+    def fail(method: str, url: str, token: str, payload: dict | None = None):
+        raise AssertionError("dry run must not call the BigQuery API")
+
+    monkeypatch.setattr(enrich, "request", fail)
+
+    publish_documentation_to_table(
+        "dataset_a", "orders", "scan-a", token="token", dry_run=True
+    )
+
+
+def test_extract_table_documentation_reads_overview_and_columns():
+    """Tests the generated overview and described columns are pulled off a job."""
+    job = {
+        "dataDocumentationResult": {
+            "tableResult": {
+                "overview": "Customer orders.",
+                "schema": {
+                    "fields": [
+                        {"name": "order_id", "description": "Unique order id."},
+                        {"name": "status", "description": "Fulfilment status."},
+                        {"name": "undocumented"},
+                    ]
+                },
+            }
+        }
+    }
+
+    overview, descriptions = extract_table_documentation(job)
+
+    assert overview == "Customer orders."
+    assert descriptions == {
+        "order_id": "Unique order id.",
+        "status": "Fulfilment status.",
+    }
+
+
+def test_extract_table_documentation_handles_missing_job():
+    """Tests a run without --wait yields empty documentation, not an error."""
+    assert extract_table_documentation(None) == ("", {})
+
+
+def test_merge_field_descriptions_preserves_type_and_sets_description():
+    """Tests merging keeps field type and mode and only touches described columns.
+
+    A patch that dropped type or mode would rewrite the table schema.
+    """
+    existing = [
+        {"name": "order_id", "type": "INTEGER", "mode": "REQUIRED"},
+        {"name": "status", "type": "STRING", "mode": "NULLABLE"},
+    ]
+
+    merged = merge_field_descriptions(existing, {"status": "Fulfilment status."})
+
+    by_name = {field["name"]: field for field in merged}
+    assert by_name["status"] == {
+        "name": "status",
+        "type": "STRING",
+        "mode": "NULLABLE",
+        "description": "Fulfilment status.",
+    }
+    assert "description" not in by_name["order_id"]
+    assert by_name["order_id"]["mode"] == "REQUIRED"
+
+
+def test_apply_documentation_to_schema_writes_overview_and_columns(monkeypatch):
+    """Tests the schema patch carries the overview and merged field descriptions."""
+    calls: list[tuple[str, str, dict | None]] = []
+
+    def fake_request(method: str, url: str, token: str, payload: dict | None = None):
+        calls.append((method, url, payload))
+        if method == "GET":
+            return {
+                "schema": {
+                    "fields": [
+                        {"name": "order_id", "type": "INTEGER", "mode": "REQUIRED"}
+                    ]
+                }
+            }
+        return {}
+
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "request", fake_request)
+
+    apply_documentation_to_schema(
+        "dataset_a",
+        "orders",
+        overview="Customer orders.",
+        descriptions={"order_id": "Unique order id."},
+        token="token",
+        dry_run=False,
+    )
+
+    assert [call[0] for call in calls] == ["GET", "PATCH"]
+    patch = calls[1][2]
+    assert patch["description"] == "Customer orders."
+    assert patch["schema"]["fields"] == [
+        {
+            "name": "order_id",
+            "type": "INTEGER",
+            "mode": "REQUIRED",
+            "description": "Unique order id.",
+        }
+    ]
+
+
+def test_apply_documentation_to_schema_skips_when_nothing_was_generated(monkeypatch):
+    """Tests an empty documentation result leaves the table schema untouched."""
+
+    def fail(method: str, url: str, token: str, payload: dict | None = None):
+        raise AssertionError("nothing to write, so the table must not be read")
+
+    monkeypatch.setattr(enrich, "request", fail)
+
+    apply_documentation_to_schema(
+        "dataset_a",
+        "orders",
+        overview="",
+        descriptions={},
+        token="token",
+        dry_run=False,
+    )
+
+
+def _enrich_args(**overrides) -> argparse.Namespace:
+    """Build a parsed-argument stand-in for enrich_table.
+
+    Args:
+        **overrides: Fields to override on the default argument set.
+
+    Returns:
+        An argparse.Namespace with every field enrich_table reads.
+    """
+    defaults = {
+        "skip_profile": True,
+        "skip_table_docs": False,
+        "skip_schema_write_back": False,
+        "profile_mode": "STANDARD",
+        "generation_scope": "ALL",
+        "wait": True,
+        "poll_interval": 0,
+        "dry_run": False,
+    }
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def test_enrich_table_publishes_labels_then_writes_the_schema(monkeypatch):
+    """Tests a documented table gets both the Insights labels and a schema patch.
+
+    Publishing labels alone leaves the descriptions invisible to anything
+    reading the table directly, so both steps must run.
+    """
+    job = {
+        "dataDocumentationResult": {
+            "tableResult": {
+                "overview": "Customer orders.",
+                "schema": {
+                    "fields": [{"name": "order_id", "description": "Unique order id."}]
+                },
+            }
+        }
+    }
+    published: list[tuple[str, str, str]] = []
+    written: list[tuple[str, str, str, dict[str, str]]] = []
+
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "DATASET_ID", "dataset_a")
+    monkeypatch.setattr(
+        enrich,
+        "create_and_run_scan",
+        lambda name, payload, token, wait, poll_interval, dry_run: job,
+    )
+    monkeypatch.setattr(
+        enrich,
+        "publish_documentation_to_table",
+        lambda dataset_id, table_id, scan_name, token, dry_run: published.append(
+            (dataset_id, table_id, scan_name)
+        ),
+    )
+    monkeypatch.setattr(
+        enrich,
+        "apply_documentation_to_schema",
+        lambda dataset_id, table_id, overview, descriptions, token, dry_run: (
+            written.append((dataset_id, table_id, overview, descriptions))
+        ),
+    )
+
+    enrich_table(
+        "orders",
+        _enrich_args(),
+        token="token",
+        sampling_percent=None,
+        export_results_table=None,
+        publish=True,
+    )
+
+    assert published == [
+        ("dataset_a", "orders", "bq-caapi-table-docs-dataset-a-orders")
+    ]
+    assert written == [
+        ("dataset_a", "orders", "Customer orders.", {"order_id": "Unique order id."})
+    ]
+
+
+def test_enrich_table_honours_skip_schema_write_back(monkeypatch):
+    """Tests --skip-schema-write-back keeps the catalog entry but not the patch."""
+    published: list[str] = []
+
+    monkeypatch.setattr(enrich, "PROJECT_ID", "project-a")
+    monkeypatch.setattr(enrich, "DATASET_ID", "dataset_a")
+    monkeypatch.setattr(
+        enrich,
+        "create_and_run_scan",
+        lambda name, payload, token, wait, poll_interval, dry_run: {},
+    )
+    monkeypatch.setattr(
+        enrich,
+        "publish_documentation_to_table",
+        lambda dataset_id, table_id, scan_name, token, dry_run: published.append(
+            table_id
+        ),
+    )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("--skip-schema-write-back must not patch the schema")
+
+    monkeypatch.setattr(enrich, "apply_documentation_to_schema", fail)
+
+    enrich_table(
+        "orders",
+        _enrich_args(skip_schema_write_back=True),
+        token="token",
+        sampling_percent=None,
+        export_results_table=None,
+        publish=True,
+    )
+
+    assert published == ["orders"]
