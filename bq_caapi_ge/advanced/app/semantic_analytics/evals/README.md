@@ -14,8 +14,9 @@ public dataset.
 
 ## Metrics
 
-- `semantic_selection_match` requires the selected context, metric, dimension,
-  and relationship IDs to match `gold_cases.yaml` exactly.
+- `semantic_selection_match` requires the raw selected context, metric,
+  dimension, and relationship IDs to match `gold_cases.yaml` exactly. This is a
+  selector-consistency diagnostic, not resolver-level semantic correctness.
 - `bigquery_result_match` dry-runs generated SQL, enforces the expected table
   sources and byte limit, executes generated and gold SQL, and compares their
   result rows.
