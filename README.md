@@ -9,7 +9,8 @@ random-stuff/
 ├── agent_stuff/
 │   ├── AGENTS.md                           # Agent behavioral directives
 │   └── CODE_STANDARDS.md                   # Code style standards (multi-language)
-├── bq_caapi_ge/                            # Conversational Analytics API + Gemini Enterprise ADK demo
+├── bq_caapi_ge/                            # Conversational Analytics API agents published to Gemini Enterprise
+├── bq_cross_cloud_lakehouse/               # Moved to its own repo (pointer only; history still here)
 ├── bq_data_product/                        # Dataplex Data Products orchestration demo on public data
 ├── bq_dbx_gcp_viz/                         # Databricks on Google Cloud open data platform visualization
 ├── bq_dbx_scaling_viz/                     # BigQuery vs Databricks scaling visualization
@@ -38,7 +39,8 @@ random-stuff/
 
 ### BigQuery Tools
 
-- **bq_caapi_ge**: Conversational Analytics API + Gemini Enterprise demo using Google ADK. Deploys two ADK agents (`orders` and `inventory`) that bridge the Conversational Analytics API with Gemini Enterprise via OAuth identity passthrough. Includes operational scripts for deployment and registration, a Flask OAuth test harness, and reference implementations for chart visualization.
+- **bq_caapi_ge**: Creates BigQuery data agents with the Conversational Analytics API and publishes them to Gemini Enterprise over the built-in A2A protocol, with no custom agent runtime or deployment infrastructure. Ships two data agents (`orders` and `inventory`), scripts for registration and admin, and Dataplex metadata enrichment that publishes the generated table documentation back to BigQuery. Selects global, regional, or multi-region CA endpoints. A `semantic/` layer adds contract-driven context on top of the agents. The optional `advanced/` tier holds Google ADK implementations (`orders`, `inventory`, and `semantic_analytics`) with OAuth identity passthrough, a Flask OAuth test harness, and chart visualization examples.
+- **bq_cross_cloud_lakehouse**: Moved to its own repository at <https://github.com/johanesalxd/bq-cross-cloud-lakehouse>; only a pointer README remains here. A self-contained version of the Google Cloud Next '26 keynote demo ("Raw data to forecasting in seconds with AI agents") that restores the AWS cross-cloud arm the public codelab omits. Uses BigLake Iceberg REST catalog federation with keyless OIDC (`AssumeRoleWithWebIdentity`) and credential vending to read AWS S3/Glue Iceberg tables directly from BigQuery, joins them with native BQ allergen knowledge, and forecasts next-quarter revenue with BQML `ARIMA_PLUS`. The full 31-commit history stays browsable here at `23389ac`.
 - **bq_data_product**: Orchestration framework that automates the deployment of three Dataplex Data Products (Sales, Catalog, and Customers) on the public `thelook_ecommerce` dataset. Solves metadata cataloging limitations by implementing secure authorized views, attaching documentation contracts/SLAs, and running asynchronous BigQuery Data Profile scans.
 - **bq_dbx_gcp_viz**: Interactive HTML visualization of how Databricks and open engines run on Google Cloud, stepping from a Databricks-only stack to a GCP-native one without lock-in. Renders a layered capability matrix (UX → Engines → Catalog → Storage → Process) with four scenarios (DBX full → DBX led → GCP led → GCP full) showing how an open catalog (Knowledge Catalog / Iceberg REST) keeps data portable across engines and clouds.
 - **bq_dbx_scaling_viz**: Interactive visualization comparing serverless vs self-managed scaling across two workloads: query compute (Databricks SQL warehouses vs BigQuery slots, including the "stuffing effect" and the "1 to 11" query problem) and agentic catalog metadata serving (self-managed Unity Catalog vs serverless Knowledge Catalog). Documents IWM behavior, Fluid Scaling billing, and cluster startup caveats.
