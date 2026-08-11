@@ -177,6 +177,7 @@ dependencies = [
     { name = "google-cloud-geminidataanalytics" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -216,6 +217,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "python-dotenv", marker = "extra == 'web'", specifier = ">=1.2.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.32.0" },
     { name = "requests", marker = "extra == 'web'", specifier = ">=2.32.0" },
 ]
 provides-extras = ["advanced", "web", "evaluation"]

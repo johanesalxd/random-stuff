@@ -9,6 +9,11 @@ dependencies = [
     "google-cloud-geminidataanalytics>=0.9.0",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
+    # Imported directly by the shared validation harness. It has always
+    # resolved as a transitive dependency of google-api-core, but relying on
+    # that means a future google-cloud-* release could drop it and break
+    # every consumer.
+    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
