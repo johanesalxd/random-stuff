@@ -3,6 +3,10 @@
 __pycache__/
 *.pyc
 .env
+# Any .env variant (.env.backup, .env.local, .env.scoot) carries real secrets.
+# Only the placeholder template is tracked.
+.env.*
+!.env.example
 .adk/
 requirements.txt
 *.db
