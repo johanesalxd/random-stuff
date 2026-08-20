@@ -30,6 +30,7 @@ random-stuff/
 ├── composer_concurrency_stress_test/       # Cloud Composer 3 concurrency stress test & deferrable operators
 ├── dbt_migration_agents/                   # dbt migration toolkit with AI agents
 ├── dbt_spark_bq/                           # dbt Spark on Dataproc with BigQuery
+├── hybrid_data_patterns_viz/               # Cross-cloud data & AI architecture patterns visualization
 ├── others/                                 # Agent rule sync scripts (Claude, Cline, Gemini, OpenClaw)
 ├── remote_docker/                          # Docker SSH tunnel management
 └── samba_management/                       # Samba service management
@@ -62,6 +63,10 @@ random-stuff/
 
 - **dbt_migration_agents**: AI-assisted dbt migration toolkit with lineage analysis, PRD generation, code refactoring, and validation. Includes sample Bronze/Silver/Gold project with intentional errors for testing migration workflows.
 - **dbt_spark_bq**: Jupyter notebook demonstrating dbt Spark on Dataproc with BigQuery integration.
+
+### Architecture References
+
+- **hybrid_data_patterns_viz**: Vendor-neutral interactive reference for cross-cloud data and AI architecture, built around the premise that **app hybrid is not data hybrid** — stateless compute replicates behind a load balancer, stateful data does not. Presents seven patterns ordered by how much data crosses the boundary (read in place · bring your own engine · compute to data · plane separation · domain separation · edge and on-prem · serving seam), plus a framing view and a decision matrix. Each pattern states what actually crosses the boundary, where it breaks, its GA/Preview status, and links to a public proof point — talabat, Traveloka and Deutsche Telekom for published customer references, and the `bq-cross-cloud-lakehouse` and `spark-hybrid-compute` repositories for runnable implementations.
 
 ### Orchestration Tools
 

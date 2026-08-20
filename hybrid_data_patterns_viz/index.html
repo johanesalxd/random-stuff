@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hybrid Data &amp; AI Patterns — how enterprises run data across clouds</title>
+<style>
+  :root {
+    --b-line: #1a73e8;
+    --b-fill: #aecbfa;
+    --b-alt:  #e8f0fe;
+    --a-line: #e8710a;
+    --a-fill: #fdd9a5;
+    --a-alt:  #fef3e4;
+    --e-line: #6d4c41;
+    --e-fill: #d7ccc8;
+    --e-alt:  #efebe9;
+    --meta:   #34a853;
+    --border: #202124;
+    --grey:   #f1f3f4;
+    --muted:  #5f6368;
+    --line:   #e8eaed;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: "Google Sans", Roboto, -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #202124; background: #fff;
+  }
+  header { padding: 24px 34px 4px; }
+  header h1 { font-size: 22px; font-weight: 600; margin: 0 0 5px; }
+  header .sub { color: var(--muted); font-size: 13.5px; }
+  header .sub b { color: #202124; font-weight: 600; }
+
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding: 16px 34px 8px; }
+  .grp { font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+         color:#9aa0a6; margin:0 4px 0 8px; }
+  .grp:first-child { margin-left:0; }
+  .scn-btn {
+    border: 1px solid #dadce0; background:#fff; color:#202124;
+    padding: 8px 13px; border-radius: 999px; cursor: pointer;
+    font-size: 12.5px; font-weight: 500; transition: all .15s;
+    display:inline-flex; align-items:center; gap:7px; font-family: inherit;
+  }
+  .scn-btn:hover { background:#f8f9fa; }
+  .scn-btn .num { font-weight:700; color:#9aa0a6; font-size:11px; }
+  .scn-btn.active { border-color: var(--border); box-shadow: 0 1px 5px rgba(0,0,0,.18); font-weight:600; }
+  .scn-btn.active .num { color: var(--b-line); }
+
+  .legend { display:flex; flex-wrap:wrap; gap:12px 18px; padding: 6px 34px 14px; font-size:11.5px; color:var(--muted); align-items:center; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .sw { width:14px; height:14px; border-radius:4px; border:1.5px solid var(--border); flex:none; }
+  .sw.a { background: var(--a-fill); } .sw.b { background: var(--b-fill); } .sw.e { background: var(--e-fill); }
+  .sw.dim { background: var(--b-alt); }
+  .ln { width:24px; height:0; border-top-width:2.5px; border-top-style:solid; flex:none; }
+  .ln.pb { border-color: var(--b-line); } .ln.pa { border-color: var(--a-line); }
+  .ln.dd { border-top-style:dashed; border-color:#8ab4f8; }
+  .ln.mm { border-top-style:dashed; border-color: var(--meta); }
+
+  .layout { display:grid; grid-template-columns: 1fr 400px; }
+  @media (max-width: 1250px){ .layout { grid-template-columns: 1fr; } }
+
+  .stage { position:relative; padding: 4px 30px 36px; }
+  svg#wires { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
+
+  /* ---------- topology grid ---------- */
+  /* Explicit placement everywhere: column 1 = row label, 2 = left zone (edge OR other
+     cloud, never both), 3 = seam, 4 = Google Cloud. Row 1 = zone headers, 2-7 = content.
+     Auto-placement must not be relied on — a hidden zone would otherwise let a cells
+     group collide with the seam's reserved column. */
+  .topo { display:grid; gap:12px 14px; position:relative; z-index:2;
+          grid-template-columns: 96px 1fr 128px 1fr; align-items:stretch; }
+  .topo > .rlabel            { grid-column: 1; }
+  .topo > .cells[data-zone="e"],
+  .topo > .cells[data-zone="a"] { grid-column: 2; }
+  .topo > .seam              { grid-column: 3; grid-row: 2 / 8; }
+  .topo > .cells[data-zone="b"] { grid-column: 4; }
+  .topo > .zhdr.e, .topo > .zhdr.a { grid-column: 2; grid-row: 1; }
+  .topo > .zhdr.b            { grid-column: 4; grid-row: 1; }
+
+  .zhdr { font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+          padding:5px 10px; border-radius:7px; text-align:center; }
+  .zhdr.a { color:#8a4a00; background: var(--a-alt); border:1px solid #f6cd94; }
+  .zhdr.b { color:#174ea6; background: var(--b-alt); border:1px solid #b9d0f8; }
+  .zhdr.e { color:#4e342e; background: var(--e-alt); border:1px solid #cfc2bd; }
+  .rlabel { display:flex; align-items:center; font-size:11px; font-weight:600; color:var(--muted);
+            text-transform:uppercase; letter-spacing:.045em; line-height:1.3; padding-right:2px; }
+  .cells { display:flex; gap:10px; align-items:stretch; }
+  .cells > .cell { flex:1 1 0; min-width:0; }
+  .cells.empty { min-height:4px; }
+
+  .seam {
+    border:1.5px dashed var(--b-line); border-radius:11px;
+    background: var(--b-alt); display:flex; align-items:center; justify-content:center;
+    padding: 0 8px; text-align:center;
+  }
+  .seam .stitle { font-size:11.5px; font-weight:700; color:var(--b-line); line-height:1.35; }
+  .seam .snote  { font-size:10px; color:#5f6368; margin-top:5px; line-height:1.4; font-weight:500; }
+  .seam.warn { border-color:#e37400; background:#fef7e0; }
+  .seam.warn .stitle { color:#a35200; }
+
+  .cell {
+    background:#fff; border:1.5px solid var(--border); border-radius:10px;
+    min-height:54px; padding:8px 9px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    font-size:12.5px; line-height:1.28; font-weight:500; transition:all .2s ease;
+  }
+  .cell small { display:block; font-size:10px; font-weight:500; color:var(--muted); margin-top:3px; line-height:1.3; }
+  .topo .cell { opacity:.2; background:var(--grey); color:#9aa0a6 !important; border-color:#dadce0; }
+  .topo .cell small { color:#9aa0a6 !important; }
+  .topo .cell.on { opacity:1; }
+  .cell.on.own-a { background:var(--a-fill); border-color:var(--border); color:#202124 !important; box-shadow:0 2px 8px rgba(232,113,10,.22); }
+  .cell.on.own-b { background:var(--b-fill); border-color:var(--border); color:#202124 !important; box-shadow:0 2px 8px rgba(26,115,232,.22); }
+  .cell.on.own-e { background:var(--e-fill); border-color:var(--border); color:#202124 !important; box-shadow:0 2px 8px rgba(109,76,65,.22); }
+  .cell.on.own-a small, .cell.on.own-b small, .cell.on.own-e small { color:#3c4043 !important; }
+  .cell.on.alt { opacity:.82; box-shadow:none; }
+  .cell.on.own-a.alt { background:var(--a-alt); } .cell.on.own-b.alt { background:var(--b-alt); }
+  .cell.on.own-e.alt { background:var(--e-alt); }
+  .cell .star { color:#a35200; font-weight:700; }
+
+  /* ---------- compare mode ---------- */
+  .compare { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding-top:6px; }
+  @media (max-width: 800px){ .compare { grid-template-columns:1fr; } }
+  .cmp { border:1.5px solid var(--border); border-radius:12px; overflow:hidden; }
+  .cmp h3 { margin:0; padding:13px 16px; font-size:14.5px; font-weight:600; }
+  .cmp.easy h3 { background:#e6f4ea; color:#0d652d; border-bottom:1.5px solid var(--border); }
+  .cmp.hard h3 { background:#fce8e6; color:#a50e0e; border-bottom:1.5px solid var(--border); }
+  .cmp h3 em { font-style:normal; font-weight:500; opacity:.75; font-size:12.5px; display:block; margin-top:2px; }
+  .cmp ul { margin:0; padding:14px 16px 16px 32px; }
+  .cmp li { font-size:13px; line-height:1.62; margin-bottom:7px; color:#3c4043; }
+  .cmp li b { color:#202124; }
+  .verdict { grid-column:1/-1; border:1.5px solid var(--b-line); background:var(--b-alt);
+             border-radius:12px; padding:15px 18px; font-size:14px; line-height:1.6; color:#174ea6; }
+  .verdict b { font-weight:700; }
+
+  /* ---------- matrix mode ---------- */
+  .matrix { padding-top:6px; }
+  .mwrap { display:grid; grid-template-columns:132px 1fr 1fr; grid-template-rows:38px 1fr 1fr; gap:10px; }
+  .mx-corner { }
+  .mx-top { display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+            text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+            background:var(--grey); border-radius:8px; padding:0 10px; text-align:center; }
+  .mx-side { display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+             text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+             background:var(--grey); border-radius:8px; padding:10px 8px; text-align:center; line-height:1.35; }
+  .quad { border:1.5px solid var(--border); border-radius:12px; padding:14px 16px; background:#fff; }
+  .quad .qv { font-size:15px; font-weight:700; color:var(--b-line); margin-bottom:2px; }
+  .quad .qp { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+  .quad p { margin:0; font-size:12.5px; line-height:1.6; color:#3c4043; }
+  .mx-foot { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width: 800px){ .mx-foot { grid-template-columns:1fr; } }
+  .mx-note { border:1px solid var(--line); background:#fbfcfd; border-radius:10px; padding:12px 14px;
+             font-size:12.5px; line-height:1.6; color:#3c4043; }
+  .mx-note b { color:#202124; }
+
+  /* ---------- panel ---------- */
+  .panel { border-left:1px solid var(--line); padding:18px 22px 32px; background:#fbfcfd; }
+  .panel .chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
+  .chip { display:inline-block; font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:999px;
+          border:1px solid var(--border); letter-spacing:.02em; }
+  .chip.ga   { background:#e6f4ea; color:#0d652d; border-color:#a8dab5; }
+  .chip.prev { background:#fef7e0; color:#a35200; border-color:#f6d488; }
+  .chip.lim  { background:#fce8e6; color:#a50e0e; border-color:#f5b5b0; }
+  .panel h2 { font-size:17px; margin:2px 0 8px; line-height:1.3; }
+  .panel .flow { font-size:12px; color:#174ea6; background:#fff; border:1px solid #d2e3fc;
+                 border-radius:8px; padding:9px 11px; margin:0 0 12px; line-height:1.5; font-weight:500; }
+  .panel .one { font-size:13.5px; line-height:1.6; color:#3c4043; margin:0 0 14px; }
+  .box { border-radius:9px; padding:11px 13px; font-size:12.5px; line-height:1.58; margin-bottom:10px; }
+  .box b.hd { display:block; font-size:10.5px; font-weight:700; text-transform:uppercase;
+              letter-spacing:.06em; margin-bottom:5px; }
+  .box.cross  { background:#fff; border:1px solid #d2e3fc; color:#3c4043; }
+  .box.cross  b.hd { color:#1967d2; }
+  .box.breaks { background:#fef7e0; border:1px solid #f6d488; color:#5f4b00; }
+  .box.breaks b.hd { color:#a35200; }
+  .box.breaks b { color:#3c4043; }
+  .box.proof  { background:#fff; border:1px solid var(--line); color:#3c4043; }
+  .box.proof  b.hd { color:#0d652d; }
+  .box.proof ul { margin:0; padding-left:17px; }
+  .box.proof li { margin-bottom:7px; line-height:1.55; }
+  .box.proof li:last-child { margin-bottom:0; }
+  .box.proof a { color:var(--b-line); text-decoration:none; font-weight:600; }
+  .box.proof a:hover { text-decoration:underline; }
+  .box.mat { background:var(--grey); border:1px solid #e0e2e5; color:#3c4043; }
+  .box.mat b.hd { color:#5f6368; }
+
+  .footer { padding:6px 34px 34px; color:#9aa0a6; font-size:11.5px; line-height:1.65; }
+  .footer a { color:#80868b; }
+  .footer b { color:#5f6368; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hybrid Data &amp; AI Patterns — how enterprises actually run data across clouds</h1>
+  <div class="sub"><b>App hybrid is not data hybrid.</b> Seven patterns, ordered by how much data crosses the boundary — with what it costs you, where it breaks, and who has published doing it.</div>
+</header>
+
+<div class="toolbar" id="scnbar">
+  <span class="grp">Framing</span>
+  <button class="scn-btn active" data-scn="0"><span class="num">0</span>App vs data hybrid</button>
+  <span class="grp">Patterns</span>
+  <button class="scn-btn" data-scn="1"><span class="num">1</span>Read in place</button>
+  <button class="scn-btn" data-scn="2"><span class="num">2</span>Bring your own engine</button>
+  <button class="scn-btn" data-scn="3"><span class="num">3</span>Compute to data</button>
+  <button class="scn-btn" data-scn="4"><span class="num">4</span>Plane separation</button>
+  <button class="scn-btn" data-scn="5"><span class="num">5</span>Domain separation</button>
+  <button class="scn-btn" data-scn="6"><span class="num">6</span>Edge &amp; on-prem</button>
+  <button class="scn-btn" data-scn="7"><span class="num">7</span>Serving seam</button>
+  <span class="grp">Decide</span>
+  <button class="scn-btn" data-scn="8"><span class="num">8</span>Which pattern am I?</button>
+</div>
+
+<div class="legend">
+  <span><b>Zones:</b></span>
+  <span><span class="sw e"></span> Edge / on-prem</span>
+  <span><span class="sw a"></span> Other cloud (AWS shown)</span>
+  <span><span class="sw b"></span> Google Cloud</span>
+  <span><span class="sw dim"></span> available, not primary</span>
+  <span style="margin-left:8px;"><b>Flows:</b></span>
+  <span><span class="ln pb"></span> primary</span>
+  <span><span class="ln pa"></span> local to that cloud</span>
+  <span><span class="ln dd"></span> optional / return path</span>
+  <span><span class="ln mm"></span> metadata &amp; identity</span>
+  <span style="margin-left:8px;"><b class="star" style="color:#a35200;">*</b> = Preview or limited availability</span>
+</div>
+
+<div class="layout">
+  <div>
+    <div class="stage" id="stage">
+      <svg id="wires"></svg>
+
+      <!-- ============ TOPOLOGY ============ -->
+      <div class="topo" id="topo">
+        <div class="rlabel" style="grid-column:1;grid-row:1"></div>
+        <div class="zhdr e" id="zh-e" style="display:none">Edge / on-prem</div>
+        <div class="zhdr a" id="zh-a">Other cloud</div>
+        <div class="seam" id="seam"><div><div class="stitle" id="seam-t"></div><div class="snote" id="seam-n"></div></div></div>
+        <div class="zhdr b" id="zh-b">Google Cloud</div>
+
+        <div class="rlabel" style="grid-row:2">Sources<br>&amp; apps</div>
+        <div class="cells" style="grid-row:2" data-zone="e" id="r1e">
+          <div class="cell" data-id="e-sites" data-zone="e">Sites &amp; devices<small>cameras · sensors · terminals</small></div>
+          <div class="cell" data-id="e-legacy" data-zone="e">Legacy systems<small>Oracle · SQL Server · HDFS</small></div>
+        </div>
+        <div class="cells" style="grid-row:2" data-zone="a" id="r1a">
+          <div class="cell" data-id="a-apps" data-zone="a">Apps &amp; microservices</div>
+          <div class="cell" data-id="a-oltp" data-zone="a">Operational DB<small>RDS · DynamoDB</small></div>
+        </div>
+        <div class="cells" style="grid-row:2" data-zone="b" id="r1b">
+          <div class="cell" data-id="b-apps" data-zone="b">Apps on Google Cloud<small>GKE · Cloud Run</small></div>
+        </div>
+
+        <div class="rlabel" style="grid-row:3">Ingest<br>&amp; process</div>
+        <div class="cells" style="grid-row:3" data-zone="e" id="r2e">
+          <div class="cell" data-id="e-local" data-zone="e">Local processing<small>filter · aggregate · local inference</small></div>
+          <div class="cell" data-id="e-gdc" data-zone="e">Google Distributed Cloud<small>connected <i>or</i> air-gapped</small></div>
+        </div>
+        <div class="cells" style="grid-row:3" data-zone="a" id="r2a">
+          <div class="cell" data-id="a-kafka" data-zone="a">Event backbone<small>Kafka · MSK</small></div>
+          <div class="cell" data-id="a-spark" data-zone="a">Stream processing<small>Spark · EMR Serverless</small></div>
+        </div>
+        <div class="cells" style="grid-row:3" data-zone="b" id="r2b">
+          <div class="cell" data-id="b-ingest" data-zone="b">Ingest<small>Pub/Sub · Datastream · Dataflow</small></div>
+          <div class="cell" data-id="b-sts" data-zone="b">Storage Transfer Service<small>bulk history</small></div>
+        </div>
+
+        <div class="rlabel" style="grid-row:4">Storage<br>&amp; format</div>
+        <div class="cells empty" style="grid-row:4" data-zone="e" id="r3e"></div>
+        <div class="cells" style="grid-row:4" data-zone="a" id="r3a">
+          <div class="cell" data-id="a-obj" data-zone="a">Object storage<small>Amazon S3</small></div>
+          <div class="cell" data-id="a-ice" data-zone="a">Iceberg tables<small>S3 Tables · open format</small></div>
+        </div>
+        <div class="cells" style="grid-row:4" data-zone="b" id="r3b">
+          <div class="cell" data-id="b-gcs" data-zone="b">Cloud Storage<small>Iceberg · Parquet</small></div>
+          <div class="cell" data-id="b-bqs" data-zone="b">BigQuery storage<small>managed</small></div>
+          <div class="cell" data-id="b-bt" data-zone="b">Online store<small>Bigtable · low latency</small></div>
+        </div>
+
+        <div class="rlabel" style="grid-row:5">Catalog &amp;<br>governance</div>
+        <div class="cells empty" style="grid-row:5" data-zone="e" id="r4e"></div>
+        <div class="cells" style="grid-row:5" data-zone="a" id="r4a">
+          <div class="cell" data-id="a-cat" data-zone="a">Remote catalog<small>Glue · Unity Catalog</small></div>
+          <div class="cell" data-id="a-iam" data-zone="a">IAM / STS<small>OIDC trust · credential vending</small></div>
+        </div>
+        <div class="cells" style="grid-row:5" data-zone="b" id="r4b">
+          <div class="cell" data-id="b-fed" data-zone="b">Federated catalog<span class="star">*</span><small>reads the remote catalog</small></div>
+          <div class="cell" data-id="b-meta" data-zone="b">BigLake Metastore<small>Iceberg REST · open API</small></div>
+          <div class="cell" data-id="b-dplx" data-zone="b">Universal Catalog<small>discovery · lineage · glossary</small></div>
+          <div class="cell" data-id="b-pol" data-zone="b">Access policy<small>IAM · CLS/RLS · masking</small></div>
+        </div>
+
+        <div class="rlabel" style="grid-row:6">Compute<br>&amp; query</div>
+        <div class="cells empty" style="grid-row:6" data-zone="e" id="r5e"></div>
+        <div class="cells" style="grid-row:6" data-zone="a" id="r5a">
+          <div class="cell" data-id="a-eng" data-zone="a">Your engines<small>Spark · Trino · Athena · Flink</small></div>
+          <div class="cell" data-id="a-omni" data-zone="a">Managed engine, remote region<span class="star">*</span><small>BigQuery Omni data plane</small></div>
+        </div>
+        <div class="cells" style="grid-row:6" data-zone="b" id="r5b">
+          <div class="cell" data-id="b-bq" data-zone="b">BigQuery</div>
+          <div class="cell" data-id="b-spark" data-zone="b">Serverless for Apache Spark</div>
+          <div class="cell" data-id="b-gke" data-zone="b">Serving API<small>GKE · Cloud Run</small></div>
+        </div>
+
+        <div class="rlabel" style="grid-row:7">AI &amp;<br>consumption</div>
+        <div class="cells empty" style="grid-row:7" data-zone="e" id="r6e"></div>
+        <div class="cells" style="grid-row:7" data-zone="a" id="r6a">
+          <div class="cell" data-id="a-cons" data-zone="a">Apps consuming AI / features</div>
+        </div>
+        <div class="cells" style="grid-row:7" data-zone="b" id="r6b">
+          <div class="cell" data-id="b-ai" data-zone="b">Vertex AI · Gemini<small>models · agents · grounding</small></div>
+          <div class="cell" data-id="b-bi" data-zone="b">Looker / BI</div>
+          <div class="cell" data-id="b-hub" data-zone="b">Analytics Hub<small>governed data products</small></div>
+        </div>
+      </div>
+
+      <!-- ============ COMPARE ============ -->
+      <div class="compare" id="compare" style="display:none">
+        <div class="cmp easy">
+          <h3>Stateless app tier<em>Hybrid here is a deployment choice</em></h3>
+          <ul>
+            <li>A <b>global load balancer</b> splits traffic across clouds</li>
+            <li>The same container image runs in both — <b>active-active</b></li>
+            <li>Scale out = <b>add a replica</b>. Any replica serves any request</li>
+            <li>Failure = <b>drain a region</b>, traffic reroutes in seconds</li>
+            <li>Cost of the second cloud is <b>roughly linear</b></li>
+            <li>It works because <b>the state lives somewhere else</b></li>
+          </ul>
+        </div>
+        <div class="cmp hard">
+          <h3>Stateful data &amp; AI tier<em>Hybrid here is an architecture decision</em></h3>
+          <ul>
+            <li>Data has <b>gravity</b> — terabytes do not move per request</li>
+            <li><b>Egress is charged per GB</b>, on every read that crosses</li>
+            <li>Replication introduces <b>consistency lag</b> you must design around</li>
+            <li>Transactions, table locks and commits <b>do not span clouds</b></li>
+            <li>The <b>catalog is itself state</b> — grants, policies, lineage</li>
+            <li>Scale out = <b>pay twice and reconcile</b>, not add a replica</li>
+          </ul>
+        </div>
+        <div class="verdict">
+          <b>You cannot put a load balancer in front of a lakehouse.</b> Hybrid data architecture is not about running
+          the same thing in two places — it is about choosing <b>where the boundary cuts</b>, and then being honest about
+          what crosses it. The seven patterns that follow are the choices that are actually in use, ordered from
+          least data crossing the boundary to most.
+        </div>
+      </div>
+
+      <!-- ============ MATRIX ============ -->
+      <div class="matrix" id="matrix" style="display:none">
+        <div class="mwrap">
+          <div class="mx-corner"></div>
+          <div class="mx-top">Ad-hoc · exploratory · infrequent</div>
+          <div class="mx-top">Scheduled · production · repeated</div>
+
+          <div class="mx-side">Data must stay<br>where it is</div>
+          <div class="quad">
+            <div class="qv">Federate</div>
+            <div class="qp">→ Pattern 1 · Read in place</div>
+            <p>The working set is stable and the reads are occasional, so caching pays and the transfer stays small.
+               Lowest effort, and you keep one copy. This is what read-in-place is <i>for</i>.</p>
+          </div>
+          <div class="quad">
+            <div class="qv">Push compute to the data</div>
+            <div class="qp">→ Pattern 3, if a region pairing exists</div>
+            <p>The read recurs but the bytes cannot move. Run the engine next to the data and return only results.
+               If there is no region pairing, fall back to federating plus a <b>materialised</b> curated slice —
+               you then pay the transfer once per refresh instead of once per query.</p>
+          </div>
+
+          <div class="mx-side">Data is free<br>to move</div>
+          <div class="quad">
+            <div class="qv">Bring your own engine</div>
+            <div class="qp">→ Pattern 2 · Open catalog</div>
+            <p>Centralise storage and catalog in open format, keep engine choice open. Exploratory work runs on
+               whatever engine the team already knows, against one governed copy.</p>
+          </div>
+          <div class="quad">
+            <div class="qv">Co-locate</div>
+            <div class="qp">→ Pattern 4 · Plane separation</div>
+            <p>The read recurs every run and the working set keeps shifting, so caching stops paying.
+               Move the data once, continuously, and stop paying per query. A split execution plane here
+               <b>defers</b> the migration rather than avoiding it.</p>
+          </div>
+        </div>
+        <div class="mx-foot">
+          <div class="mx-note"><b>Two patterns sit outside the grid.</b> <b>Domain separation (5)</b> applies at any
+            position — it is an organisational boundary, not a workload one, so it composes with all four quadrants.
+            <b>Edge and on-prem (6)</b> is decided by physics and regulation, not preference.</div>
+          <div class="mx-note"><b>Then answer the serving question separately.</b> <b>Pattern 7</b> is the only one
+            where latency, not volume, is the binding constraint. A workload can federate its analytics and still
+            need its serving tier colocated with the caller.</div>
+        </div>
+        <div class="mx-foot" style="grid-template-columns:1fr;">
+          <div class="mx-note" style="border-color:#aecbfa;background:var(--b-alt);color:#174ea6;">
+            <b>Federating data access and splitting the execution plane are two different decisions.</b>
+            Answer them separately, and answer them per workload rather than per platform. Most estates end up
+            with two or three of these patterns running side by side, which is fine — what causes trouble is
+            picking one globally and forcing every workload through it.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="footer" id="footer"></div>
+
+<script>
+/* =========================================================================
+   Scenario model
+   nodes: { cellId: "owner" | "owner|alt" }   owner: a | b | e
+   edges: [ fromId, toId, kind ]              kind: pb | pa | dd | mm
+   ========================================================================= */
+const S = {
+
+0: {
+  mode:"compare", name:"App hybrid is not data hybrid", chips:[["Framing",""]],
+  flow:"Stateless compute replicates. Stateful data does not.",
+  one:"Most hybrid conversations start from the application tier, where running in two clouds is a deployment choice and the answer is a load balancer. The data and AI tier behaves nothing like that, and importing the app-tier mental model is the single most common source of unworkable hybrid designs.",
+  cross:"Nothing, in the app tier — that is the point. Requests are small, stateless and independent, so the boundary is cheap to cross. In the data tier every crossing carries bytes, and the bytes are the cost.",
+  breaks:"The failure mode is assuming symmetry. Teams that succeeded with active-active applications propose active-active pipelines, duplicating raw data across clouds on the streaming write path. That design pays twice for storage, introduces a remote dependency on the ingestion hot path, and makes a remote outage look like a local data-loss incident. <b>Put the cross-cloud concern on the read path, not the write path.</b>",
+  proof:[["The seven patterns that follow","","Each one is a different answer to the same question: where should the boundary cut, and what is allowed to cross it?"]],
+  mat:"Framing view — no product dependency."
+},
+
+1: {
+  mode:"topo", name:"Read in place", chips:[["Federated catalog",""],["Preview","prev"]],
+  zA:"Other cloud — data stays here", zB:"Google Cloud — compute and AI",
+  seam:["Iceberg REST + OIDC trust","metadata sync ≥ 5 min · query reads · optional private interconnect"],
+  flow:"One physical copy on the remote cloud · catalog federated in · queries read the objects directly",
+  one:"The data never moves. A federated catalog on Google Cloud synchronises table metadata from the remote catalog, an identity handshake vends short-lived read credentials, and the query engine then reads the object storage directly. Other engines on the remote side keep reading the same copy.",
+  cross:"Table <b>metadata</b> on a refresh cycle (300 seconds or slower), plus <b>the bytes each query actually reads</b>. This is one storage copy, not zero transfer — the two are often conflated. Without a private interconnect the reads traverse the public internet and attract the remote provider's standard egress.",
+  breaks:"Scheduled, repeated reads of the same large tables. Local caching helps a <b>stable</b> working set; it does nothing for first reads, cache misses, or partitions that keep landing. When the same job reads the same growing table every morning, the economics invert and you should be co-locating instead. <br><br>The other trap is direction: talabat's first attempt was the mirror of this — cross-cloud <b>writes</b> on the always-on streaming path — and remote write-API failures surfaced as ingestion incidents. They inverted it so the write path is short and local and only the read crosses.",
+  proof:[
+    ["talabat — near-real-time analytics across AWS and Google Cloud","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Published by AWS. Kafka on MSK → EMR Serverless → S3 Tables in Iceberg, read from BigQuery through a federated Iceberg REST catalog. Under 5 minutes freshness for 95% of events, down from 60–90 minutes; about 40% lower data-movement cost; one copy read by BigQuery, Athena and Spark."],
+    ["bq-cross-cloud-lakehouse — runnable reference","https://github.com/johanesalxd/bq-cross-cloud-lakehouse","Working implementation of the same handshake: keyless OIDC <code>AssumeRoleWithWebIdentity</code> with credential vending, reading AWS S3 and Glue Iceberg tables directly from BigQuery and joining them with native tables."],
+    ["Set up borderless Lakehouse for AWS Glue","https://docs.cloud.google.com/lakehouse/docs/set-up-borderless-lakehouse-aws-glue","Trust policy pins both <code>sub</code> and <code>aud</code> to the catalog service account; read-only least-privilege policy; 12-hour maximum session; no static cloud keys stored on the Google Cloud side."]
+  ],
+  mat:"Borderless Lakehouse for AWS Glue is <b>Preview</b>. Metadata refresh interval is 300 seconds or longer. Private routing requires Dedicated or Partner Cross-Cloud Interconnect plus a Service Directory endpoint; without it, queries route over the public internet.",
+  nodes:{ "a-apps":"a","a-kafka":"a","a-spark":"a","a-ice":"a","a-obj":"a|alt","a-cat":"a","a-iam":"a","a-eng":"a|alt",
+          "b-fed":"b","b-bq":"b","b-spark":"b|alt","b-dplx":"b|alt","b-ai":"b","b-bi":"b" },
+  edges:[ ["a-apps","a-kafka","pa"],["a-kafka","a-spark","pa"],["a-spark","a-ice","pa"],
+          ["a-ice","a-cat","pa"],["a-eng","a-ice","dd"],
+          ["b-fed","a-cat","mm"],["b-fed","a-iam","mm"],
+          ["b-bq","a-ice","pb"],["b-bq","b-ai","pb"],["b-bq","b-bi","pb"],["b-dplx","b-fed","mm"] ]
+},
+
+2: {
+  mode:"topo", name:"Bring your own engine", chips:[["Open catalog",""],["GA","ga"]],
+  zA:"Your compute — other cloud · on-prem · laptop", zB:"Google Cloud — storage, catalog, governance",
+  seam:["Iceberg REST catalog","open API · read and write · optional pushdown to BigQuery"],
+  flow:"Data and catalog central and open · your engine connects from anywhere · heavy work pushes down",
+  one:"The inverse of pattern 1. Storage and catalog stay central in open format on Google Cloud, and your own engine — running wherever you want it, including a laptop — reads and writes through the Iceberg REST API. Computation that is cheaper in the warehouse can be pushed down rather than pulled out.",
+  cross:"Iceberg REST catalog calls, and the data your engine reads. Compute stays yours and stays where you put it; storage, table maintenance and governance stay central and managed.",
+  breaks:"<b>Write coordination.</b> Decide per table which engine owns writes — concurrent writers across engines need the catalog to arbitrate, and the read/write matrix differs by table type, so check which engine is allowed to write before you design around it.<br><br>The second trap is treating self-hosting as free. Running your own engine is an operating model: patch cadence, version upgrades, capacity planning and on-call all move to your team. That cost is real and appears on no cloud invoice.",
+  proof:[
+    ["spark-hybrid-compute — runnable reference","https://github.com/johanesalxd/spark-hybrid-compute","Two working paths: a full Dataproc setup and a plain Docker setup you can run locally. Covers Iceberg tables on BigLake Metastore, the REST API integration, and pushing computation down to BigQuery from a Spark session."],
+    ["Deutsche Telekom — One Data Ecosystem","https://cloud.google.com/blog/topics/customers/engineering-deutsche-telekoms-sovereign-data-platform","Chose Apache Iceberg after POCs as a single source of truth that serves Python notebooks, Spark and SQL without maintaining multiple copies. BigQuery, Spanner, Bigtable and Cloud SQL each serve their own workload over the same Iceberg foundation. 200+ source systems ingested in six months; one live use case measured a 22x improvement over its legacy predecessor."]
+  ],
+  mat:"GA. Read/write support varies by Iceberg table type and by engine — confirm the matrix for the specific table type you plan to use.",
+  extra:["This is the portability answer, made concrete","Table data is Iceberg and Parquet in your own bucket. Transformations are SQL and Airflow DAGs in Git. ML pipelines are Kubeflow Pipelines DSL. Agents are Apache-2.0 containers speaking MCP and A2A. Streams are Kafka wire protocol. In this pattern the <b>engine is the replaceable part</b> — which is exactly what a portability clause should be asking about."],
+  nodes:{ "a-eng":"a","a-cons":"a|alt",
+          "b-meta":"b","b-gcs":"b","b-bq":"b","b-spark":"b|alt","b-dplx":"b","b-pol":"b|alt","b-bqs":"b|alt","b-ai":"b|alt" },
+  edges:[ ["a-eng","b-meta","pb"],["a-eng","b-bq","dd"],
+          ["b-meta","b-gcs","pb"],["b-bq","b-gcs","pb"],["b-spark","b-meta","dd"],
+          ["b-dplx","b-meta","mm"],["b-pol","b-meta","mm"],["b-bq","b-ai","dd"] ]
+},
+
+3: {
+  mode:"topo", name:"Compute to data", chips:[["Managed remote engine",""],["Region-limited","lim"]],
+  zA:"Other cloud — data and compute both here", zB:"Google Cloud — control plane",
+  seam:["Managed connection","query jobs out · results back · scanned bytes never leave"],
+  flow:"The engine runs inside the remote region · only the result set returns",
+  one:"Rather than moving data to the engine or the engine's reads across the boundary, Google runs the query engine inside the remote cloud's own region. The scan happens next to the data and only the result set travels back — or is written straight back to remote object storage, in which case nothing crosses at all.",
+  cross:"Query jobs outbound, results inbound. The <b>scanned bytes never leave the remote region</b>, which is the strongest containment property of any pattern here.",
+  breaks:"<b>Regional availability is the first thing to check, not the last.</b> This runs only in a fixed set of paired regions — N. Virginia, Oregon, Seoul, Sydney, Ireland, Frankfurt, and Azure East US 2. If your data sits in a region without a pairing, the pattern is simply unavailable, and for residency-bound workloads that usually ends the conversation.<br><br>Beyond regions the edges are sharp: cross-cloud joins cap at 60 GB per transfer, DML and BigQuery ML statements are unsupported, customer-managed encryption keys are not supported on these datasets, several INFORMATION_SCHEMA views are missing, and Standard and Enterprise Plus editions cannot use it.",
+  proof:[
+    ["Introduction to BigQuery Omni","https://docs.cloud.google.com/bigquery/docs/omni-introduction","Architecture, the supported region pairings, and the comparison table for joins, materialised views and the two transfer modes."],
+    ["talabat evaluated this and chose pattern 1 instead","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Their reasoning is worth reading: for a read-only bronze layer it added more managed surface and more constraints than they needed, and they wanted to own the catalog and trust model directly. A good pattern is not automatically the right pattern."]
+  ],
+  mat:"GA, but availability is limited to the published region pairings. Confirm your data's region has one before designing around this.",
+  nodes:{ "a-obj":"a","a-omni":"a","a-iam":"a|alt","a-ice":"a|alt",
+          "b-bq":"b","b-bi":"b|alt","b-ai":"b|alt" },
+  edges:[ ["b-bq","a-omni","pb"],["a-omni","a-obj","pa"],["a-omni","a-ice","pa"],
+          ["a-omni","b-bq","dd"],["b-bq","b-bi","dd"],["b-bq","b-ai","dd"],["b-bq","a-iam","mm"] ]
+},
+
+4: {
+  mode:"topo", name:"Plane separation", chips:[["Operational vs intelligence",""],["GA","ga"]],
+  zA:"Other cloud — operational plane", zB:"Google Cloud — intelligence plane",
+  seam:["Continuous CDC + event stream","every change crosses, once, forever"],
+  flow:"Transactional backbone stays put · analytics and AI standardise on one side · data moves continuously",
+  one:"The operational and transactional systems stay on the cloud where they were built and where the engineers who run them work. Analytics, BI and AI standardise on the other. Data moves once per change, continuously, so the analytics side owns a complete local copy it fully controls.",
+  cross:"<b>Every change, forever.</b> This carries the highest sustained cross-boundary volume of any pattern here — and is also the simplest to operate, because after landing, everything downstream is local. That trade is usually the right one for a warehouse that thousands of people query all day.",
+  breaks:"The pipeline becomes production infrastructure with its own on-call. Schema drift, backfills, replay after an outage, ordering guarantees and duplicate handling all become your problem rather than the platform's.<br><br>Watch end-to-end freshness rather than per-stage: it is bounded by the slowest hop, and a five-minute ingest feeding an hourly downstream job is an hourly pipeline. Egress here is a permanent, funded line item — size it deliberately rather than discovering it.",
+  proof:[
+    ["Traveloka — journey to stream analytics on Google Cloud","https://cloud.google.com/blog/products/gcp/travelokas-journey-to-stream-analytics-on-google-cloud-platform","A deliberate cross-cloud AWS–GCP design, in their words: DynamoDB as the operational data store, Pub/Sub for event ingestion, Dataflow for stream processing, BigQuery as the warehouse."],
+    ["Traveloka case study","https://cloud.google.com/customers/traveloka","The Google Cloud customer page for the same architecture."]
+  ],
+  mat:"GA end to end. Datastream for relational CDC, Pub/Sub for events, Dataflow or the Storage Write API for landing.",
+  nodes:{ "a-apps":"a","a-oltp":"a","a-kafka":"a","a-eng":"a|alt",
+          "b-ingest":"b","b-bqs":"b","b-bq":"b","b-ai":"b","b-bi":"b","b-gke":"b|alt","b-dplx":"b|alt","b-pol":"b|alt" },
+  edges:[ ["a-apps","a-oltp","pa"],["a-apps","a-kafka","pa"],
+          ["a-oltp","b-ingest","pb"],["a-kafka","b-ingest","pb"],
+          ["b-ingest","b-bqs","pb"],["b-bqs","b-bq","pb"],
+          ["b-bq","b-ai","pb"],["b-bq","b-bi","pb"],["b-pol","b-bq","mm"] ]
+},
+
+5: {
+  mode:"topo", name:"Domain separation", chips:[["Data mesh",""],["Mixed maturity","prev"]],
+  zA:"Domains resident on the other cloud", zB:"Domains resident on Google Cloud",
+  seam:["Published data products","curated products + metadata for discovery · raw tables stay home"],
+  flow:"The boundary follows the org chart · each domain publishes products · nobody runs the same workload twice",
+  one:"Multi-cloud here does not mean running one workload in two places. It means different business units run on the platform that suits their workload, and each publishes governed data products for the others to consume. This is the pattern people usually mean when they say multi-cloud works for them.",
+  cross:"Curated <b>data products</b> on a published schedule, plus metadata for discovery. Raw tables do not cross. This is normally the lowest-volume and lowest-coupling option available, because the contract is a product with a schema and an owner rather than a table.",
+  breaks:"<b>Governance is the trap, and it is worth being precise.</b> Catalog federation synchronises metadata <b>inbound</b> and is read-oriented. It does <b>not</b> propagate policy. Classifications, column- and row-level rules, masking and grants defined in one catalog are not enforced by the other — they are redefined at the destination and thereafter kept in step by process, not by the platform. Lineage graphs are built per metastore and stop at the platform boundary.<br><br>Plan for <b>one enforcement point per platform</b>, every policy change as a coordinated change, and every audit answer evidenced twice. Anyone who tells you a single control plane governs both sides has not tested it.",
+  proof:[
+    ["Dataplex Universal Catalog","https://docs.cloud.google.com/dataplex/docs/introduction","Discovery, lineage, glossary and profiling across the estate, with metadata federation to external catalogs."],
+    ["Analytics Hub","https://docs.cloud.google.com/bigquery/docs/analytics-hub-introduction","Exchanges and listings — the mechanism for publishing a governed data product to another domain without copying it."]
+  ],
+  mat:"Analytics Hub is GA. Cross-catalog metadata federation varies by source catalog — check the specific one, and confirm direction and whether it is Preview.",
+  nodes:{ "a-apps":"a","a-oltp":"a","a-obj":"a","a-cat":"a","a-eng":"a|alt",
+          "b-bq":"b","b-hub":"b","b-dplx":"b","b-pol":"b","b-ai":"b","b-bi":"b|alt","b-bqs":"b|alt" },
+  edges:[ ["a-apps","a-oltp","pa"],["a-oltp","a-obj","pa"],["a-obj","a-cat","pa"],
+          ["b-dplx","a-cat","mm"],["b-dplx","b-hub","mm"],
+          ["b-hub","b-bq","pb"],["b-pol","b-bq","mm"],["b-bq","b-ai","pb"],["b-bq","b-bi","dd"] ]
+},
+
+6: {
+  mode:"topo", name:"Edge and on-premises", chips:[["Physical boundary",""],["GA","ga"]],
+  zE:"Sites, devices and data centre", zB:"Google Cloud region",
+  seam:["Dedicated / Partner Interconnect","filtered events + bulk history · decide at the edge what is worth sending"],
+  flow:"Sites stay put · some processing stays local · filtered events and bulk history move over private links",
+  one:"Not every hybrid boundary is between two public clouds. Sites, devices and legacy systems stay where they physically are; private connectivity carries filtered events and bulk history to the cloud; and where regulation or connectivity demands it, some processing stays local.",
+  cross:"Filtered or aggregated events on the streaming path, and bulk history once through a transfer service. The design goal of this pattern is explicitly to <b>decide at the edge what is worth sending</b> — full-fidelity video or raw high-rate telemetry usually is not.",
+  breaks:"<b>&ldquo;Air-gapped&rdquo; and &ldquo;connected&rdquo; are different products, and drawing an uplink from an air-gapped deployment is a contradiction.</b> Google Distributed Cloud connected keeps a link to Google Cloud; GDC air-gapped is designed to run with none. Pick one deliberately and draw it honestly.<br><br>Then check the local AI service list before promising edge inference. The air-gapped appliance offers Vertex AI OCR, Speech-to-Text and Translate, plus a Google-provided deep-learning container for your own models — <b>not</b> the full cloud model catalogue. If the requirement is edge video analytics with a frontier model, that gap needs designing around, not glossing. The appliance also has limited high availability and storage redundancy.",
+  proof:[
+    ["Google Distributed Cloud overview","https://docs.cloud.google.com/distributed-cloud/hosted/docs/latest/gdcag/overview","The distinction between GDC connected and GDC air-gapped, and what each is for."],
+    ["GDC air-gapped appliance","https://docs.cloud.google.com/distributed-cloud/hosted/docs/latest/appliance/overview","The full service list, plus the accreditations — MIL-STD-810H and DoD Impact Level 5."],
+    ["Storage Transfer Service","https://docs.cloud.google.com/storage-transfer/docs/overview","The common migration shape for legacy estates: Hadoop or HDFS → Storage Transfer Service → Cloud Storage as Parquet → external table → BigQuery, over Partner Interconnect."]
+  ],
+  mat:"GA. Interconnect capacity and site survey lead times are usually the long pole in the plan, not the software.",
+  nodes:{ "e-sites":"e","e-legacy":"e","e-local":"e","e-gdc":"e",
+          "b-ingest":"b","b-sts":"b","b-gcs":"b","b-bq":"b","b-bqs":"b|alt","b-ai":"b","b-bi":"b|alt" },
+  edges:[ ["e-sites","e-local","pa"],["e-sites","e-gdc","pa"],
+          ["e-local","b-ingest","pb"],["e-legacy","b-ingest","pb"],["e-legacy","b-sts","pb"],
+          ["b-sts","b-gcs","pb"],["b-ingest","b-bq","pb"],["b-gcs","b-bq","pb"],["b-bq","b-ai","pb"] ]
+},
+
+7: {
+  mode:"topo", name:"Serving seam", chips:[["Dual-speed",""],["GA","ga"]],
+  zA:"Other cloud — the caller", zB:"Google Cloud — offline and online stores",
+  seam:["Feature / inference API","small request-response calls · latency-bound, not volume-bound"],
+  flow:"One definition, two paths · deep path for training, fast path for serving · the caller may be anywhere",
+  one:"Two paths over one set of definitions. A deep path lands everything in the warehouse for training, history and analysis. A fast path keeps current values in a low-latency store behind a serving API. Applications call that API for features or inference — including applications running on the other cloud.",
+  cross:"Small request-response calls on the serving path, and telemetry inbound. Volume is low. <b>Latency sensitivity is high</b> — which is the opposite profile from every other pattern here, and why it needs its own decision.",
+  breaks:"<b>Round-trip time, and who owns it.</b> An in-region lookup can be single-digit milliseconds, but a cross-cloud call adds network RTT on top and places a second provider's network inside your request path, with no single SLA covering end to end. Measure the real path under load before committing; if the caller is genuinely latency-critical, colocate the serving tier with the caller rather than the data.<br><br>The quieter risk is <b>training/serving skew</b>: one logical feature, two code paths, two chances to compute it differently. Generate both from one definition or expect silent model degradation.",
+  proof:[
+    ["Bigtable for low-latency serving","https://docs.cloud.google.com/bigtable/docs/overview","The online-store half — single-digit millisecond key lookups at high throughput."],
+    ["Vertex AI Feature Store","https://docs.cloud.google.com/vertex-ai/docs/featurestore/latest/overview","The managed option if you would rather not hand-build the online/offline split."]
+  ],
+  mat:"GA. The architecture is unremarkable; the constraint is physics, so budget the round trip early.",
+  nodes:{ "a-apps":"a","a-cons":"a",
+          "b-apps":"b|alt","b-ingest":"b","b-bqs":"b","b-bt":"b","b-gke":"b","b-bq":"b","b-ai":"b","b-gcs":"b|alt" },
+  edges:[ ["a-apps","b-ingest","pb"],
+          ["b-ingest","b-bt","pb"],["b-ingest","b-bqs","pb"],["b-bqs","b-bt","dd"],
+          ["b-bqs","b-bq","pb"],["b-bq","b-ai","pb"],
+          ["b-bt","b-gke","pb"],["b-gke","a-cons","pb"],["b-gke","b-apps","dd"] ]
+},
+
+8: {
+  mode:"matrix", name:"Which pattern am I?", chips:[["Decision aid",""]],
+  flow:"Access pattern × data gravity → federate · materialise · move once · co-locate",
+  one:"Two questions decide most of it. How is the data accessed — occasionally and unpredictably, or on a schedule by a production job? And can the data move at all, or is it pinned by regulation, contract or sheer volume? Answer those per workload and the pattern usually picks itself.",
+  cross:"Use this before arguing about platforms. Most disagreements about hybrid architecture turn out to be two people describing different workloads and assuming one answer has to cover both.",
+  breaks:"Applying one answer estate-wide. A platform-level decision forces every workload through the same boundary, which guarantees some of them are on the wrong side of it. The unit of decision is the workload, not the platform — and a mature estate normally runs two or three of these patterns at once.",
+  proof:[["Patterns for connecting other cloud service providers with Google Cloud","https://docs.cloud.google.com/architecture/patterns-for-connecting-other-csps-with-gcp","Google Cloud's own guidance on the connectivity options underneath these patterns, including when the public internet is genuinely the right answer."]],
+  mat:"—"
+}
+};
+
+/* ===================== rendering ===================== */
+const stage   = document.getElementById('stage');
+const topo    = document.getElementById('topo');
+const compare = document.getElementById('compare');
+const matrix  = document.getElementById('matrix');
+const panel   = document.getElementById('panel');
+const wires   = document.getElementById('wires');
+const seamEl  = document.getElementById('seam');
+let current = 0;
+
+const cell = id => topo.querySelector('[data-id="'+id+'"]');
+const OWN  = { a:'own-a', b:'own-b', e:'own-e' };
+
+function render(){
+  const s = S[current];
+
+  topo.style.display    = s.mode === 'topo'    ? 'grid' : 'none';
+  compare.style.display = s.mode === 'compare' ? 'grid' : 'none';
+  matrix.style.display  = s.mode === 'matrix'  ? 'block': 'none';
+  wires.style.display   = s.mode === 'topo'    ? 'block': 'none';
+  wires.innerHTML = '';
+
+  if (s.mode === 'topo') renderTopo(s);
+  renderPanel(s);
+  document.querySelectorAll('.scn-btn').forEach(b => b.classList.toggle('active', +b.dataset.scn === current));
+}
+
+function renderTopo(s){
+  topo.querySelectorAll('.cell').forEach(c => c.classList.remove('on','own-a','own-b','own-e','alt'));
+
+  // Edge and "other cloud" share grid column 2 — exactly one of them is ever shown.
+  const showE = !!s.zE, showA = !!s.zA;
+  document.getElementById('zh-e').style.display = showE ? '' : 'none';
+  document.getElementById('zh-a').style.display = showA ? '' : 'none';
+  topo.querySelectorAll('.cells[data-zone="e"]').forEach(g => g.style.display = showE ? 'flex' : 'none');
+  topo.querySelectorAll('.cells[data-zone="a"]').forEach(g => g.style.display = showA ? 'flex' : 'none');
+
+  if (showE) document.getElementById('zh-e').textContent = s.zE;
+  if (showA) document.getElementById('zh-a').textContent = s.zA;
+  document.getElementById('zh-b').textContent = s.zB;
+
+  document.getElementById('seam-t').textContent = s.seam[0];
+  document.getElementById('seam-n').textContent = s.seam[1];
+  seamEl.classList.toggle('warn', !!s.seamWarn);
+
+  Object.keys(s.nodes || {}).forEach(id => {
+    const c = cell(id); if(!c) return;
+    const [own, style] = s.nodes[id].split('|');
+    c.classList.add('on', OWN[own]);
+    if (style === 'alt') c.classList.add('alt');
+  });
+
+  requestAnimationFrame(() => drawWires(s));
+}
+
+function anchor(el){
+  const r = el.getBoundingClientRect(), b = stage.getBoundingClientRect();
+  return { l:r.left-b.left, r:r.right-b.left, t:r.top-b.top, bo:r.top-b.top+r.height,
+           cx:r.left-b.left+r.width/2, cy:r.top-b.top+r.height/2 };
+}
+
+const STROKE = { pb:'#1a73e8', pa:'#e8710a', dd:'#8ab4f8', mm:'#34a853' };
+
+/* Obstacle-aware connector routing.
+   The naive route — straight across the row for cross-zone edges, straight down the
+   column for same-zone ones — has no knowledge of what sits between the endpoints, so
+   a connector can be drawn through an intervening box and strike out its label. For
+   each edge we therefore offer the router a few candidate paths and keep the first one
+   that touches nothing it should not.
+
+   Only *lit* cells count as obstacles. Dimmed cells sit at opacity .2 and read as
+   background, so treating them as solid would contort routes for no visual gain. The
+   seam's text block is included: connectors are expected to cross the seam band, but
+   must not run through its caption. */
+const LANES = [8, 22];   // clearance, in px, into the gutter between rows / columns
+
+function obstacles(){
+  const sb = stage.getBoundingClientRect(), out = [];
+  const push = (el, id) => {
+    if (!el || el.offsetParent === null) return;
+    const r = el.getBoundingClientRect();
+    out.push({ id, l:r.left-sb.left, r:r.right-sb.left, t:r.top-sb.top, b:r.bottom-sb.top });
+  };
+  topo.querySelectorAll('.cell.on').forEach(c => push(c, c.dataset.id));
+  if (seamEl && getComputedStyle(seamEl).display !== 'none') push(seamEl.firstElementChild, '__seam');
+  return out;
+}
+
+// Sample the middle of a candidate and report whether it stays clear of every
+// obstacle that is not one of its own endpoints.
+function clears(d, fromId, toId, obs, probe){
+  probe.setAttribute('d', d);
+  const L = probe.getTotalLength();
+  if (!L || !isFinite(L)) return false;
+  const step = Math.max(1.5, L / 90);
+  for (let s = L * 0.06; s <= L * 0.94; s += step){
+    const p = probe.getPointAtLength(s);
+    for (const o of obs){
+      if (o.id === fromId || o.id === toId) continue;
+      if (p.x > o.l + 3 && p.x < o.r - 3 && p.y > o.t + 3 && p.y < o.b - 3) return false;
+    }
+  }
+  return true;
+}
+
+function routeCandidates(a, b, sameZone){
+  if (!sameZone){
+    const fwd = a.cx <= b.cx;
+    const x1 = fwd ? a.r : a.l, x2 = fwd ? b.l : b.r;
+    const mx = (x1 + x2) / 2;
+    const out = [`M ${x1} ${a.cy} C ${mx} ${a.cy}, ${mx} ${b.cy}, ${x2} ${b.cy}`];
+    for (const g of LANES){
+      const below = Math.max(a.bo, b.bo) + g, above = Math.min(a.t, b.t) - g;
+      out.push(`M ${a.cx} ${a.bo} C ${a.cx} ${below}, ${b.cx} ${below}, ${b.cx} ${b.bo}`);
+      out.push(`M ${a.cx} ${a.t} C ${a.cx} ${above}, ${b.cx} ${above}, ${b.cx} ${b.t}`);
+    }
+    return out;
+  }
+  const down = a.cy <= b.cy;
+  const y1 = down ? a.bo : a.t, y2 = down ? b.t : b.bo;
+  const my = (y1 + y2) / 2;
+  const out = [`M ${a.cx} ${y1} C ${a.cx} ${my}, ${b.cx} ${my}, ${b.cx} ${y2}`];
+  for (const g of LANES){
+    const right = Math.max(a.r, b.r) + g, left = Math.min(a.l, b.l) - g;
+    out.push(`M ${a.r} ${a.cy} C ${right} ${a.cy}, ${right} ${b.cy}, ${b.r} ${b.cy}`);
+    out.push(`M ${a.l} ${a.cy} C ${left} ${a.cy}, ${left} ${b.cy}, ${b.l} ${b.cy}`);
+  }
+  return out;
+}
+
+function drawWires(s){
+  const NS = 'http://www.w3.org/2000/svg';
+  wires.innerHTML = '<defs>' + Object.entries(STROKE).map(([k,v]) =>
+    `<marker id="mk-${k}" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+       <path d="M0,0 L6,3 L0,6 Z" fill="${v}"/></marker>`).join('') + '</defs>';
+
+  const obs = obstacles();
+  const probe = document.createElementNS(NS, 'path');   // measured, never painted
+  probe.setAttribute('fill', 'none');
+  probe.setAttribute('stroke', 'none');
+  wires.appendChild(probe);
+
+  (s.edges || []).forEach(([from, to, kind]) => {
+    const A = cell(from), B = cell(to);
+    if (!A || !B) return;
+    if (!A.classList.contains('on') || !B.classList.contains('on')) return;
+    if (A.offsetParent === null || B.offsetParent === null) return;
+
+    const a = anchor(A), b = anchor(B);
+    const cands = routeCandidates(a, b, A.dataset.zone === B.dataset.zone);
+    const d = cands.find(c => clears(c, from, to, obs, probe)) || cands[0];
+
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', STROKE[kind] || STROKE.pb);
+    p.setAttribute('stroke-width', kind === 'mm' ? '2' : '2.4');
+    if (kind === 'dd') p.setAttribute('stroke-dasharray', '5 5');
+    if (kind === 'mm') p.setAttribute('stroke-dasharray', '2 4');
+    if (kind === 'dd' || kind === 'mm') p.setAttribute('opacity', '.9');
+    p.setAttribute('marker-end', `url(#mk-${kind || 'pb'})`);
+    wires.appendChild(p);
+  });
+
+  probe.remove();
+}
+
+function renderPanel(s){
+  let h = '<div class="chips">';
+  (s.chips || []).forEach(([t, cls]) => { h += `<span class="chip ${cls}">${t}</span>`; });
+  h += '</div>';
+  h += `<h2>${current === 0 || current === 8 ? '' : current + ' · '}${s.name}</h2>`;
+  if (s.flow) h += `<div class="flow">${s.flow}</div>`;
+  h += `<p class="one">${s.one}</p>`;
+  h += `<div class="box cross"><b class="hd">What crosses the boundary</b>${s.cross}</div>`;
+  h += `<div class="box breaks"><b class="hd">Where it breaks</b>${s.breaks}</div>`;
+  if (s.extra) h += `<div class="box cross"><b class="hd">${s.extra[0]}</b>${s.extra[1]}</div>`;
+  if (s.proof && s.proof.length){
+    h += '<div class="box proof"><b class="hd">Proof you can check</b><ul>';
+    s.proof.forEach(([label, url, note]) => {
+      h += '<li>' + (url ? `<a href="${url}" target="_blank" rel="noopener">${label}</a>` : `<b>${label}</b>`)
+         + (note ? ` — ${note}` : '') + '</li>';
+    });
+    h += '</ul></div>';
+  }
+  if (s.mat && s.mat !== '—') h += `<div class="box mat"><b class="hd">Maturity</b>${s.mat}</div>`;
+  panel.innerHTML = h;
+}
+
+document.getElementById('scnbar').addEventListener('click', e => {
+  const b = e.target.closest('.scn-btn'); if (!b) return;
+  current = +b.dataset.scn; render();
+});
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
+
+document.getElementById('footer').innerHTML =
+  'Vendor-neutral architecture reference. Grounded to Google Cloud documentation and publicly published customer ' +
+  'references as of <b>20 August 2026</b>. AWS is drawn as the second cloud because the public references use it; ' +
+  'every pattern applies equally to another provider. ' +
+  '<b>Sources:</b> Google Cloud docs for borderless Lakehouse and catalog federation, BigQuery Omni, Cross-Cloud ' +
+  'Interconnect, Dataplex Universal Catalog, Analytics Hub, Google Distributed Cloud, Storage Transfer Service and ' +
+  'Bigtable; the AWS Big Data Blog on talabat; Google Cloud customer references for Traveloka and Deutsche Telekom; ' +
+  'and the two runnable repositories linked in patterns 1 and 2. ' +
+  'Preview status and regional limits are stated on the patterns where they apply — re-check them before designing, ' +
+  'since both move.';
+
+render();
+</script>
+</body>
+</html>
