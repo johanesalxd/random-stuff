@@ -55,8 +55,11 @@ Every pattern answers the same five questions:
 | **Seam** | the vertical band between zones — its label changes per pattern and states what actually crosses |
 | **Lines** | blue = primary flow · orange = local to that cloud · dashed blue = optional / return path · dashed green = metadata and identity |
 | **Text** | `*` = Preview or limited availability |
+| **Evidence chip** | `Customer-proven` = named public reference · `Runnable code` = working repo · `Docs only` = documented capability, not proof that anyone runs it |
 
 AWS is drawn as the second cloud because the public references use it. Every pattern applies equally to another provider.
+
+The evidence chip is deliberately a separate axis from the GA/Preview chip. A pattern can be GA and unproven, or Preview and already running in production somewhere — those are different questions and conflating them is how architecture decks mislead. There is intentionally **no "recommended pattern" badge**: the whole argument of view 8 is that the unit of decision is the workload, so recommendations live there, conditioned on the workload, rather than as a global endorsement.
 
 ## Grounded sources
 
@@ -65,22 +68,24 @@ All claims are traceable to public documentation or published customer reference
 ### Customer references (all publicly published)
 
 - **talabat** — [Fresher insights, faster decisions: talabat's near-real-time analytics across AWS and Google Cloud](https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/) (AWS Big Data Blog). Under 5 minutes freshness for 95% of events, down from 60–90 minutes; approximately 40% lower data-movement cost; one Iceberg copy read by BigQuery, Athena and Spark. Also documents the pattern they **abandoned** — cross-cloud writes on the streaming hot path — which is the most useful part.
-- **Traveloka** — [Journey to stream analytics on Google Cloud](https://cloud.google.com/blog/products/gcp/travelokas-journey-to-stream-analytics-on-google-cloud-platform) and [case study](https://cloud.google.com/customers/traveloka). An explicit cross-cloud AWS–GCP design: DynamoDB operational store, Pub/Sub ingestion, Dataflow stream processing, BigQuery warehouse.
+- **Traveloka** — [Journey to stream analytics on Google Cloud](https://cloud.google.com/blog/products/gcp/travelokas-journey-to-stream-analytics-on-google-cloud-platform) and [case study](https://cloud.google.com/customers/traveloka). An explicit cross-cloud AWS–GCP design: DynamoDB operational store, Pub/Sub ingestion, Dataflow stream processing, BigQuery warehouse. **Published August 2017.** The shape has aged well and every service in it is still current, but this is the most widely adopted pattern in the deck resting on the oldest citation — the strongest single improvement anyone could make here is a newer named plane-separation reference.
 - **Deutsche Telekom** — [Engineering Deutsche Telekom's sovereign data platform](https://cloud.google.com/blog/topics/customers/engineering-deutsche-telekoms-sovereign-data-platform). Iceberg chosen after POCs as one source of truth serving Python, Spark and SQL; 200+ source systems in six months; one live use case measured **22x** over its legacy predecessor. Note this is a **sovereignty** story, not a multi-cloud one — it is cited here for the open-format and polyglot-engine argument.
+
+Patterns **3, 5, 6 and 7 have no citable public customer reference.** That is stated on each of those panels rather than left for the reader to infer from a list of product docs. The published BigQuery Omni customer stories are anonymised, and edge and sovereign deployments are rarely written up at all.
 
 ### Runnable references
 
 - **[bq-cross-cloud-lakehouse](https://github.com/johanesalxd/bq-cross-cloud-lakehouse)** — working implementation of pattern 1: keyless OIDC `AssumeRoleWithWebIdentity` with credential vending, reading AWS S3 and Glue Iceberg tables directly from BigQuery.
-- **[spark-hybrid-compute](https://github.com/johanesalxd/spark-hybrid-compute)** — working implementation of pattern 2: Iceberg on BigLake Metastore from both a Dataproc cluster and plain Docker locally, including pushing computation down to BigQuery.
+- **[spark-hybrid-compute](https://github.com/johanesalxd/spark-hybrid-compute)** — working implementation of pattern 2: Iceberg on the Lakehouse runtime catalog (BigLake Metastore when the repo was written) from both a Dataproc cluster and plain Docker locally, including pushing computation down to BigQuery.
 
 ### Google Cloud documentation
 
 - [Set up borderless Lakehouse for AWS Glue](https://docs.cloud.google.com/lakehouse/docs/set-up-borderless-lakehouse-aws-glue) — trust policy, credential vending, refresh interval, Cross-Cloud Interconnect routing
 - [Introduction to BigQuery Omni](https://docs.cloud.google.com/bigquery/docs/omni-introduction) — architecture, region pairings, limitations
 - [Patterns for connecting other CSPs with Google Cloud](https://docs.cloud.google.com/architecture/patterns-for-connecting-other-csps-with-gcp)
-- [Dataplex Universal Catalog](https://docs.cloud.google.com/dataplex/docs/introduction) · [Analytics Hub](https://docs.cloud.google.com/bigquery/docs/analytics-hub-introduction)
+- [Knowledge Catalog](https://docs.cloud.google.com/dataplex/docs/introduction) *(was Dataplex Universal Catalog)* · [BigQuery sharing](https://docs.cloud.google.com/bigquery/docs/analytics-hub-introduction) *(was Analytics Hub)*
 - [Google Distributed Cloud overview](https://docs.cloud.google.com/distributed-cloud/hosted/docs/latest/gdcag/overview) · [GDC air-gapped appliance](https://docs.cloud.google.com/distributed-cloud/hosted/docs/latest/appliance/overview)
-- [Storage Transfer Service](https://docs.cloud.google.com/storage-transfer/docs/overview) · [Bigtable](https://docs.cloud.google.com/bigtable/docs/overview) · [Vertex AI Feature Store](https://docs.cloud.google.com/vertex-ai/docs/featurestore/latest/overview)
+- [Storage Transfer Service](https://docs.cloud.google.com/storage-transfer/docs/overview) · [Bigtable](https://docs.cloud.google.com/bigtable/docs/overview) · [Feature Store on Gemini Enterprise Agent Platform](https://docs.cloud.google.com/gemini-enterprise-agent-platform/machine-learning/featurestore/latest/overview) *(Vertex AI Feature Store (Legacy) sunsets 17 Feb 2027 — do not build on it)*
 
 ## Caveats worth reading before you present this
 

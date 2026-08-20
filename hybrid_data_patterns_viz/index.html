@@ -161,6 +161,12 @@
   .chip.ga   { background:#e6f4ea; color:#0d652d; border-color:#a8dab5; }
   .chip.prev { background:#fef7e0; color:#a35200; border-color:#f6d488; }
   .chip.lim  { background:#fce8e6; color:#a50e0e; border-color:#f5b5b0; }
+  /* Evidence tier — how well attested the pattern is, deliberately styled apart from
+     the GA/Preview status chips so the two are not read as the same axis. */
+  .chip.ev   { background:#202124; color:#fff; border-color:#202124; }
+  .chip.ev2  { background:#fff; color:#202124; border-color:#202124; }
+  .chip.ev0  { background:#fff; color:#80868b; border-color:#dadce0; font-weight:600; }
+  .refdate { color:#80868b; font-weight:600; font-size:10.5px; white-space:nowrap; }
   .panel h2 { font-size:17px; margin:2px 0 8px; line-height:1.3; }
   .panel .flow { font-size:12px; color:#174ea6; background:#fff; border:1px solid #d2e3fc;
                  border-radius:8px; padding:9px 11px; margin:0 0 12px; line-height:1.5; font-weight:500; }
@@ -222,6 +228,10 @@
   <span><span class="ln dd"></span> optional / return path</span>
   <span><span class="ln mm"></span> metadata &amp; identity</span>
   <span style="margin-left:8px;"><b class="star" style="color:#a35200;">*</b> = Preview or limited availability</span>
+  <span style="margin-left:8px;"><b>Evidence:</b></span>
+  <span><span class="chip ev" style="padding:2px 8px;">Customer-proven</span> named public reference</span>
+  <span><span class="chip ev2" style="padding:2px 8px;">Runnable code</span> working repo</span>
+  <span><span class="chip ev0" style="padding:2px 8px;">Docs only</span> capability, not proof</span>
 </div>
 
 <div class="layout">
@@ -284,8 +294,8 @@
         </div>
         <div class="cells" style="grid-row:5" data-zone="b" id="r4b">
           <div class="cell" data-id="b-fed" data-zone="b">Federated catalog<span class="star">*</span><small>reads the remote catalog</small></div>
-          <div class="cell" data-id="b-meta" data-zone="b">BigLake Metastore<small>Iceberg REST · open API</small></div>
-          <div class="cell" data-id="b-dplx" data-zone="b">Universal Catalog<small>discovery · lineage · glossary</small></div>
+          <div class="cell" data-id="b-meta" data-zone="b">Lakehouse runtime catalog<small>Iceberg REST · was BigLake Metastore</small></div>
+          <div class="cell" data-id="b-dplx" data-zone="b">Knowledge Catalog<small>discovery · lineage · glossary</small></div>
           <div class="cell" data-id="b-pol" data-zone="b">Access policy<small>IAM · CLS/RLS · masking</small></div>
         </div>
 
@@ -309,7 +319,7 @@
         <div class="cells" style="grid-row:7" data-zone="b" id="r6b">
           <div class="cell" data-id="b-ai" data-zone="b">Vertex AI · Gemini<small>models · agents · grounding</small></div>
           <div class="cell" data-id="b-bi" data-zone="b">Looker / BI</div>
-          <div class="cell" data-id="b-hub" data-zone="b">Analytics Hub<small>governed data products</small></div>
+          <div class="cell" data-id="b-hub" data-zone="b">BigQuery sharing<small>was Analytics Hub · data products</small></div>
         </div>
       </div>
 
@@ -425,7 +435,7 @@ const S = {
 },
 
 1: {
-  mode:"topo", name:"Read in place", chips:[["Federated catalog",""],["Preview","prev"]],
+  mode:"topo", name:"Read in place", chips:[["Federated catalog",""],["Preview","prev"],["Customer-proven","ev"],["Runnable code","ev2"]],
   zA:"Other cloud — data stays here", zB:"Google Cloud — compute and AI",
   seam:["Iceberg REST + OIDC trust","metadata sync ≥ 5 min · query reads · optional private interconnect"],
   flow:"One physical copy on the remote cloud · catalog federated in · queries read the objects directly",
@@ -433,11 +443,11 @@ const S = {
   cross:"Table <b>metadata</b> on a refresh cycle (300 seconds or slower), plus <b>the bytes each query actually reads</b>. This is one storage copy, not zero transfer — the two are often conflated. Without a private interconnect the reads traverse the public internet and attract the remote provider's standard egress.",
   breaks:"Scheduled, repeated reads of the same large tables. Local caching helps a <b>stable</b> working set; it does nothing for first reads, cache misses, or partitions that keep landing. When the same job reads the same growing table every morning, the economics invert and you should be co-locating instead. <br><br>The other trap is direction: talabat's first attempt was the mirror of this — cross-cloud <b>writes</b> on the always-on streaming path — and remote write-API failures surfaced as ingestion incidents. They inverted it so the write path is short and local and only the read crosses.",
   proof:[
-    ["talabat — near-real-time analytics across AWS and Google Cloud","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Published by AWS. Kafka on MSK → EMR Serverless → S3 Tables in Iceberg, read from BigQuery through a federated Iceberg REST catalog. Under 5 minutes freshness for 95% of events, down from 60–90 minutes; about 40% lower data-movement cost; one copy read by BigQuery, Athena and Spark."],
-    ["bq-cross-cloud-lakehouse — runnable reference","https://github.com/johanesalxd/bq-cross-cloud-lakehouse","Working implementation of the same handshake: keyless OIDC <code>AssumeRoleWithWebIdentity</code> with credential vending, reading AWS S3 and Glue Iceberg tables directly from BigQuery and joining them with native tables."],
-    ["Set up borderless Lakehouse for AWS Glue","https://docs.cloud.google.com/lakehouse/docs/set-up-borderless-lakehouse-aws-glue","Trust policy pins both <code>sub</code> and <code>aud</code> to the catalog service account; read-only least-privilege policy; 12-hour maximum session; no static cloud keys stored on the Google Cloud side."]
+    ["talabat — near-real-time analytics across AWS and Google Cloud","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Published by AWS. Kafka on MSK → EMR Serverless → S3 Tables in Iceberg, read from BigQuery through a federated Iceberg REST catalog. Under 5 minutes freshness for 95% of events, down from 60–90 minutes; about 40% lower data-movement cost; one copy read by BigQuery, Athena and Spark.","Aug 2026"],
+    ["bq-cross-cloud-lakehouse — runnable reference","https://github.com/johanesalxd/bq-cross-cloud-lakehouse","Working implementation of the same handshake: keyless OIDC <code>AssumeRoleWithWebIdentity</code> with credential vending, reading AWS S3 and Glue Iceberg tables directly from BigQuery and joining them with native tables.","repo"],
+    ["Set up borderless Lakehouse for AWS Glue","https://docs.cloud.google.com/lakehouse/docs/set-up-borderless-lakehouse-aws-glue","Trust policy pins both <code>sub</code> and <code>aud</code> to the catalog service account; read-only least-privilege policy; 12-hour maximum session; no static cloud keys stored on the Google Cloud side.","docs"]
   ],
-  mat:"Borderless Lakehouse for AWS Glue is <b>Preview</b>. Metadata refresh interval is 300 seconds or longer. Private routing requires Dedicated or Partner Cross-Cloud Interconnect plus a Service Directory endpoint; without it, queries route over the public internet.",
+  mat:"Status depends on which catalog you federate. <b>AWS Glue and Databricks Unity Catalog are Preview</b>; <b>SAP Business Data Cloud is GA</b> — so this pattern is not uniformly pre-GA, and it is worth naming the specific source catalog before anyone calls it immature. Metadata refresh interval is 300 seconds or longer. Private routing requires Dedicated or Partner Cross-Cloud Interconnect plus a Service Directory endpoint; without it, queries route over the public internet.",
   nodes:{ "a-apps":"a","a-kafka":"a","a-spark":"a","a-ice":"a","a-obj":"a|alt","a-cat":"a","a-iam":"a","a-eng":"a|alt",
           "b-fed":"b","b-bq":"b","b-spark":"b|alt","b-dplx":"b|alt","b-ai":"b","b-bi":"b" },
   edges:[ ["a-apps","a-kafka","pa"],["a-kafka","a-spark","pa"],["a-spark","a-ice","pa"],
@@ -447,7 +457,7 @@ const S = {
 },
 
 2: {
-  mode:"topo", name:"Bring your own engine", chips:[["Open catalog",""],["GA","ga"]],
+  mode:"topo", name:"Bring your own engine", chips:[["Open catalog",""],["GA","ga"],["Customer-proven","ev"],["Runnable code","ev2"]],
   zA:"Your compute — other cloud · on-prem · laptop", zB:"Google Cloud — storage, catalog, governance",
   seam:["Iceberg REST catalog","open API · read and write · optional pushdown to BigQuery"],
   flow:"Data and catalog central and open · your engine connects from anywhere · heavy work pushes down",
@@ -455,8 +465,8 @@ const S = {
   cross:"Iceberg REST catalog calls, and the data your engine reads. Compute stays yours and stays where you put it; storage, table maintenance and governance stay central and managed.",
   breaks:"<b>Write coordination.</b> Decide per table which engine owns writes — concurrent writers across engines need the catalog to arbitrate, and the read/write matrix differs by table type, so check which engine is allowed to write before you design around it.<br><br>The second trap is treating self-hosting as free. Running your own engine is an operating model: patch cadence, version upgrades, capacity planning and on-call all move to your team. That cost is real and appears on no cloud invoice.",
   proof:[
-    ["spark-hybrid-compute — runnable reference","https://github.com/johanesalxd/spark-hybrid-compute","Two working paths: a full Dataproc setup and a plain Docker setup you can run locally. Covers Iceberg tables on BigLake Metastore, the REST API integration, and pushing computation down to BigQuery from a Spark session."],
-    ["Deutsche Telekom — One Data Ecosystem","https://cloud.google.com/blog/topics/customers/engineering-deutsche-telekoms-sovereign-data-platform","Chose Apache Iceberg after POCs as a single source of truth that serves Python notebooks, Spark and SQL without maintaining multiple copies. BigQuery, Spanner, Bigtable and Cloud SQL each serve their own workload over the same Iceberg foundation. 200+ source systems ingested in six months; one live use case measured a 22x improvement over its legacy predecessor."]
+    ["spark-hybrid-compute — runnable reference","https://github.com/johanesalxd/spark-hybrid-compute","Two working paths: a full Dataproc setup and a plain Docker setup you can run locally. Covers Iceberg tables on the Lakehouse runtime catalog (BigLake Metastore at the time of writing), the REST API integration, and pushing computation down to BigQuery from a Spark session.","repo"],
+    ["Deutsche Telekom — One Data Ecosystem","https://cloud.google.com/blog/topics/customers/engineering-deutsche-telekoms-sovereign-data-platform","Chose Apache Iceberg after POCs as a single source of truth that serves Python notebooks, Spark and SQL without maintaining multiple copies. BigQuery, Spanner, Bigtable and Cloud SQL each serve their own workload over the same Iceberg foundation. 200+ source systems ingested in six months; one live use case measured a 22x improvement over its legacy predecessor.","Jul 2025"]
   ],
   mat:"GA. Read/write support varies by Iceberg table type and by engine — confirm the matrix for the specific table type you plan to use.",
   extra:["This is the portability answer, made concrete","Table data is Iceberg and Parquet in your own bucket. Transformations are SQL and Airflow DAGs in Git. ML pipelines are Kubeflow Pipelines DSL. Agents are Apache-2.0 containers speaking MCP and A2A. Streams are Kafka wire protocol. In this pattern the <b>engine is the replaceable part</b> — which is exactly what a portability clause should be asking about."],
@@ -468,18 +478,18 @@ const S = {
 },
 
 3: {
-  mode:"topo", name:"Compute to data", chips:[["Managed remote engine",""],["Region-limited","lim"]],
+  mode:"topo", name:"Compute to data", chips:[["Managed remote engine",""],["Region-limited","lim"],["Docs only","ev0"]],
   zA:"Other cloud — data and compute both here", zB:"Google Cloud — control plane",
   seam:["Managed connection","query jobs out · results back · scanned bytes never leave"],
   flow:"The engine runs inside the remote region · only the result set returns",
   one:"Rather than moving data to the engine or the engine's reads across the boundary, Google runs the query engine inside the remote cloud's own region. The scan happens next to the data and only the result set travels back — or is written straight back to remote object storage, in which case nothing crosses at all.",
   cross:"Query jobs outbound, results inbound. The <b>scanned bytes never leave the remote region</b>, which is the strongest containment property of any pattern here.",
-  breaks:"<b>Regional availability is the first thing to check, not the last.</b> This runs only in a fixed set of paired regions — N. Virginia, Oregon, Seoul, Sydney, Ireland, Frankfurt, and Azure East US 2. If your data sits in a region without a pairing, the pattern is simply unavailable, and for residency-bound workloads that usually ends the conversation.<br><br>Beyond regions the edges are sharp: cross-cloud joins cap at 60 GB per transfer, DML and BigQuery ML statements are unsupported, customer-managed encryption keys are not supported on these datasets, several INFORMATION_SCHEMA views are missing, and Standard and Enterprise Plus editions cannot use it.",
+  breaks:"<b>Regional availability is the first thing to check, not the last.</b> This runs only in a fixed set of paired regions — N. Virginia, Oregon, Seoul, Sydney, Ireland, Frankfurt, and Azure East US 2. If your data sits in a region without a pairing, the pattern is simply unavailable, and for residency-bound workloads that usually ends the conversation.<br><br>Beyond regions the edges are sharp: cross-cloud joins cap at 60 GB per transfer and 1 TB per project per day, DML and BigQuery ML statements are unsupported, customer-managed encryption keys are not supported on these datasets, several INFORMATION_SCHEMA views are missing, and Standard and Enterprise Plus editions cannot use it.",
   proof:[
     ["Introduction to BigQuery Omni","https://docs.cloud.google.com/bigquery/docs/omni-introduction","Architecture, the supported region pairings, and the comparison table for joins, materialised views and the two transfer modes."],
-    ["talabat evaluated this and chose pattern 1 instead","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Their reasoning is worth reading: for a read-only bronze layer it added more managed surface and more constraints than they needed, and they wanted to own the catalog and trust model directly. A good pattern is not automatically the right pattern."]
+    ["talabat evaluated this and chose pattern 1 instead","https://aws.amazon.com/blogs/big-data/fresher-insights-faster-decisions-talabats-near-real-time-analytics-across-aws-and-google-cloud/","Their reasoning is worth reading: for a read-only bronze layer it added more managed surface and more constraints than they needed, and they wanted to own the catalog and trust model directly. A good pattern is not automatically the right pattern.","Aug 2026"]
   ],
-  mat:"GA, but availability is limited to the published region pairings. Confirm your data's region has one before designing around this.",
+  mat:"GA, but availability is limited to the published region pairings — confirm your data's region has one before designing around this. Transfer quotas are 60 GB per job and 1 TB per project per day. <b>No named customer reference is cited for this pattern</b>; the published Omni customer stories are anonymised, and the one named reference here chose a different pattern.",
   nodes:{ "a-obj":"a","a-omni":"a","a-iam":"a|alt","a-ice":"a|alt",
           "b-bq":"b","b-bi":"b|alt","b-ai":"b|alt" },
   edges:[ ["b-bq","a-omni","pb"],["a-omni","a-obj","pa"],["a-omni","a-ice","pa"],
@@ -487,7 +497,7 @@ const S = {
 },
 
 4: {
-  mode:"topo", name:"Plane separation", chips:[["Operational vs intelligence",""],["GA","ga"]],
+  mode:"topo", name:"Plane separation", chips:[["Operational vs intelligence",""],["GA","ga"],["Customer-proven","ev"]],
   zA:"Other cloud — operational plane", zB:"Google Cloud — intelligence plane",
   seam:["Continuous CDC + event stream","every change crosses, once, forever"],
   flow:"Transactional backbone stays put · analytics and AI standardise on one side · data moves continuously",
@@ -495,10 +505,10 @@ const S = {
   cross:"<b>Every change, forever.</b> This carries the highest sustained cross-boundary volume of any pattern here — and is also the simplest to operate, because after landing, everything downstream is local. That trade is usually the right one for a warehouse that thousands of people query all day.",
   breaks:"The pipeline becomes production infrastructure with its own on-call. Schema drift, backfills, replay after an outage, ordering guarantees and duplicate handling all become your problem rather than the platform's.<br><br>Watch end-to-end freshness rather than per-stage: it is bounded by the slowest hop, and a five-minute ingest feeding an hourly downstream job is an hourly pipeline. Egress here is a permanent, funded line item — size it deliberately rather than discovering it.",
   proof:[
-    ["Traveloka — journey to stream analytics on Google Cloud","https://cloud.google.com/blog/products/gcp/travelokas-journey-to-stream-analytics-on-google-cloud-platform","A deliberate cross-cloud AWS–GCP design, in their words: DynamoDB as the operational data store, Pub/Sub for event ingestion, Dataflow for stream processing, BigQuery as the warehouse."],
-    ["Traveloka case study","https://cloud.google.com/customers/traveloka","The Google Cloud customer page for the same architecture."]
+    ["Traveloka — journey to stream analytics on Google Cloud","https://cloud.google.com/blog/products/gcp/travelokas-journey-to-stream-analytics-on-google-cloud-platform","A deliberate cross-cloud AWS–GCP design, in their words: DynamoDB as the operational data store, Pub/Sub for event ingestion, Dataflow for stream processing, BigQuery as the warehouse.","Aug 2017"],
+    ["Traveloka case study","https://cloud.google.com/customers/traveloka","The Google Cloud customer page for the same architecture.","same era"]
   ],
-  mat:"GA end to end. Datastream for relational CDC, Pub/Sub for events, Dataflow or the Storage Write API for landing.",
+  mat:"GA end to end. Datastream for relational CDC, Pub/Sub for events, Dataflow or the Storage Write API for landing.<br><br><b>Be honest about the evidence here.</b> Traveloka is a genuine, named, still-published cross-cloud reference, but it dates from 2017 — the pattern has aged well and the services are all still current, yet this is the most widely adopted pattern in the deck resting on the oldest citation. Treat the shape as proven and the numbers as historical.",
   nodes:{ "a-apps":"a","a-oltp":"a","a-kafka":"a","a-eng":"a|alt",
           "b-ingest":"b","b-bqs":"b","b-bq":"b","b-ai":"b","b-bi":"b","b-gke":"b|alt","b-dplx":"b|alt","b-pol":"b|alt" },
   edges:[ ["a-apps","a-oltp","pa"],["a-apps","a-kafka","pa"],
@@ -508,7 +518,7 @@ const S = {
 },
 
 5: {
-  mode:"topo", name:"Domain separation", chips:[["Data mesh",""],["Mixed maturity","prev"]],
+  mode:"topo", name:"Domain separation", chips:[["Data mesh",""],["Mixed maturity","prev"],["Docs only","ev0"]],
   zA:"Domains resident on the other cloud", zB:"Domains resident on Google Cloud",
   seam:["Published data products","curated products + metadata for discovery · raw tables stay home"],
   flow:"The boundary follows the org chart · each domain publishes products · nobody runs the same workload twice",
@@ -516,10 +526,10 @@ const S = {
   cross:"Curated <b>data products</b> on a published schedule, plus metadata for discovery. Raw tables do not cross. This is normally the lowest-volume and lowest-coupling option available, because the contract is a product with a schema and an owner rather than a table.",
   breaks:"<b>Governance is the trap, and it is worth being precise.</b> Catalog federation synchronises metadata <b>inbound</b> and is read-oriented. It does <b>not</b> propagate policy. Classifications, column- and row-level rules, masking and grants defined in one catalog are not enforced by the other — they are redefined at the destination and thereafter kept in step by process, not by the platform. Lineage graphs are built per metastore and stop at the platform boundary.<br><br>Plan for <b>one enforcement point per platform</b>, every policy change as a coordinated change, and every audit answer evidenced twice. Anyone who tells you a single control plane governs both sides has not tested it.",
   proof:[
-    ["Dataplex Universal Catalog","https://docs.cloud.google.com/dataplex/docs/introduction","Discovery, lineage, glossary and profiling across the estate, with metadata federation to external catalogs."],
-    ["Analytics Hub","https://docs.cloud.google.com/bigquery/docs/analytics-hub-introduction","Exchanges and listings — the mechanism for publishing a governed data product to another domain without copying it."]
+    ["Knowledge Catalog · Apr 2026 rename","https://docs.cloud.google.com/dataplex/docs/introduction","Discovery, lineage, glossary and profiling across the estate, with metadata federation to external catalogs. Renamed from Dataplex Universal Catalog in April 2026 — the older name is still what most people say."],
+    ["BigQuery sharing (was Analytics Hub)","https://docs.cloud.google.com/bigquery/docs/analytics-hub-introduction","Exchanges and listings — the mechanism for publishing a governed data product to another domain without copying it. The docs now lead with the name BigQuery sharing."]
   ],
-  mat:"Analytics Hub is GA. Cross-catalog metadata federation varies by source catalog — check the specific one, and confirm direction and whether it is Preview.",
+  mat:"BigQuery sharing (formerly Analytics Hub) is GA. Cross-catalog metadata federation varies by source catalog — check the specific one, and confirm direction and whether it is Preview. BigQuery data products, which package curated views with business context, are <b>Preview</b>. <b>No public customer reference is cited here</b>: the links show the mechanism exists, not that a named enterprise runs domain separation across two clouds.",
   nodes:{ "a-apps":"a","a-oltp":"a","a-obj":"a","a-cat":"a","a-eng":"a|alt",
           "b-bq":"b","b-hub":"b","b-dplx":"b","b-pol":"b","b-ai":"b","b-bi":"b|alt","b-bqs":"b|alt" },
   edges:[ ["a-apps","a-oltp","pa"],["a-oltp","a-obj","pa"],["a-obj","a-cat","pa"],
@@ -528,7 +538,7 @@ const S = {
 },
 
 6: {
-  mode:"topo", name:"Edge and on-premises", chips:[["Physical boundary",""],["GA","ga"]],
+  mode:"topo", name:"Edge and on-premises", chips:[["Physical boundary",""],["GA","ga"],["Docs only","ev0"]],
   zE:"Sites, devices and data centre", zB:"Google Cloud region",
   seam:["Dedicated / Partner Interconnect","filtered events + bulk history · decide at the edge what is worth sending"],
   flow:"Sites stay put · some processing stays local · filtered events and bulk history move over private links",
@@ -540,7 +550,7 @@ const S = {
     ["GDC air-gapped appliance","https://docs.cloud.google.com/distributed-cloud/hosted/docs/latest/appliance/overview","The full service list, plus the accreditations — MIL-STD-810H and DoD Impact Level 5."],
     ["Storage Transfer Service","https://docs.cloud.google.com/storage-transfer/docs/overview","The common migration shape for legacy estates: Hadoop or HDFS → Storage Transfer Service → Cloud Storage as Parquet → external table → BigQuery, over Partner Interconnect."]
   ],
-  mat:"GA. Interconnect capacity and site survey lead times are usually the long pole in the plan, not the software.",
+  mat:"GA. Interconnect capacity and site survey lead times are usually the long pole in the plan, not the software. <b>No public customer reference is cited here</b> — edge and sovereign deployments are rarely published, so treat the links as product capability rather than proof.",
   nodes:{ "e-sites":"e","e-legacy":"e","e-local":"e","e-gdc":"e",
           "b-ingest":"b","b-sts":"b","b-gcs":"b","b-bq":"b","b-bqs":"b|alt","b-ai":"b","b-bi":"b|alt" },
   edges:[ ["e-sites","e-local","pa"],["e-sites","e-gdc","pa"],
@@ -549,18 +559,18 @@ const S = {
 },
 
 7: {
-  mode:"topo", name:"Serving seam", chips:[["Dual-speed",""],["GA","ga"]],
+  mode:"topo", name:"Serving seam", chips:[["Dual-speed",""],["GA","ga"],["Docs only","ev0"]],
   zA:"Other cloud — the caller", zB:"Google Cloud — offline and online stores",
   seam:["Feature / inference API","small request-response calls · latency-bound, not volume-bound"],
   flow:"One definition, two paths · deep path for training, fast path for serving · the caller may be anywhere",
   one:"Two paths over one set of definitions. A deep path lands everything in the warehouse for training, history and analysis. A fast path keeps current values in a low-latency store behind a serving API. Applications call that API for features or inference — including applications running on the other cloud.",
   cross:"Small request-response calls on the serving path, and telemetry inbound. Volume is low. <b>Latency sensitivity is high</b> — which is the opposite profile from every other pattern here, and why it needs its own decision.",
-  breaks:"<b>Round-trip time, and who owns it.</b> An in-region lookup can be single-digit milliseconds, but a cross-cloud call adds network RTT on top and places a second provider's network inside your request path, with no single SLA covering end to end. Measure the real path under load before committing; if the caller is genuinely latency-critical, colocate the serving tier with the caller rather than the data.<br><br>The quieter risk is <b>training/serving skew</b>: one logical feature, two code paths, two chances to compute it differently. Generate both from one definition or expect silent model degradation.",
+  breaks:"<b>Round-trip time, and who owns it.</b> An in-region lookup can be single-digit milliseconds, but a cross-cloud call adds network RTT on top and places a second provider's network inside your request path, with no single SLA covering end to end. Measure the real path under load before committing; if the caller is genuinely latency-critical, colocate the serving tier with the caller rather than the data.<br><br>The quieter risk is <b>training/serving skew</b>: one logical feature, two code paths, two chances to compute it differently. Generate both from one definition or expect silent model degradation.<br><br><b>Check which feature store you are being shown.</b> Vertex AI Feature Store (Legacy) stopped taking new features on 17 May 2026 and its APIs shut off on <b>17 February 2027</b>. Anything built on it now needs a migration before then, so start on the current Agent Platform Feature Store instead.",
   proof:[
-    ["Bigtable for low-latency serving","https://docs.cloud.google.com/bigtable/docs/overview","The online-store half — single-digit millisecond key lookups at high throughput."],
-    ["Vertex AI Feature Store","https://docs.cloud.google.com/vertex-ai/docs/featurestore/latest/overview","The managed option if you would rather not hand-build the online/offline split."]
+    ["Bigtable for low-latency serving","https://docs.cloud.google.com/bigtable/docs/overview","The online-store half — single-digit millisecond key lookups at high throughput. Also the recommended online-serving target for the managed feature store."],
+    ["Feature Store on Gemini Enterprise Agent Platform","https://docs.cloud.google.com/gemini-enterprise-agent-platform/machine-learning/featurestore/latest/overview","The current managed option, and it validates the shape drawn here: it is a metadata layer over BigQuery sources rather than a copy, with automated synchronisation from BigQuery into Bigtable for online serving. Not to be confused with Vertex AI Feature Store (Legacy), which is being retired."]
   ],
-  mat:"GA. The architecture is unremarkable; the constraint is physics, so budget the round trip early.",
+  mat:"GA, but check the product generation. The architecture is unremarkable; the constraint is physics, so budget the round trip early. <b>No public customer reference is cited here</b> — the two links are capability evidence, not proof that someone runs this across clouds.",
   nodes:{ "a-apps":"a","a-cons":"a",
           "b-apps":"b|alt","b-ingest":"b","b-bqs":"b","b-bt":"b","b-gke":"b","b-bq":"b","b-ai":"b","b-gcs":"b|alt" },
   edges:[ ["a-apps","b-ingest","pb"],
@@ -759,8 +769,12 @@ function renderPanel(s){
   if (s.extra) h += `<div class="box cross"><b class="hd">${s.extra[0]}</b>${s.extra[1]}</div>`;
   if (s.proof && s.proof.length){
     h += '<div class="box proof"><b class="hd">Proof you can check</b><ul>';
-    s.proof.forEach(([label, url, note]) => {
+    // Optional 4th element is the publication date. Shown because the age of a
+    // reference is part of how much weight it deserves — a 2017 architecture and a
+    // reference published this month are not equivalent evidence.
+    s.proof.forEach(([label, url, note, date]) => {
       h += '<li>' + (url ? `<a href="${url}" target="_blank" rel="noopener">${label}</a>` : `<b>${label}</b>`)
+         + (date ? ` <span class="refdate">· ${date}</span>` : '')
          + (note ? ` — ${note}` : '') + '</li>';
     });
     h += '</ul></div>';
@@ -780,7 +794,7 @@ document.getElementById('footer').innerHTML =
   'references as of <b>20 August 2026</b>. AWS is drawn as the second cloud because the public references use it; ' +
   'every pattern applies equally to another provider. ' +
   '<b>Sources:</b> Google Cloud docs for borderless Lakehouse and catalog federation, BigQuery Omni, Cross-Cloud ' +
-  'Interconnect, Dataplex Universal Catalog, Analytics Hub, Google Distributed Cloud, Storage Transfer Service and ' +
+  'Interconnect, Knowledge Catalog, BigQuery sharing, Google Distributed Cloud, Storage Transfer Service and ' +
   'Bigtable; the AWS Big Data Blog on talabat; Google Cloud customer references for Traveloka and Deutsche Telekom; ' +
   'and the two runnable repositories linked in patterns 1 and 2. ' +
   'Preview status and regional limits are stated on the patterns where they apply — re-check them before designing, ' +
