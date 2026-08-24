@@ -36,6 +36,19 @@ Portable operating contract for coding agents. For code creation, modification, 
 - Use independent review for substantial, security-sensitive, or high-blast-radius changes. Re-run affected and final checks after review-driven fixes.
 - Keep implementation verification separate from live cutover when production, external users, or persistent services are involved.
 
+## Multi-Agent & Subagent Review Protocol
+
+When executing multi-agent workflows or delegating independent peer reviews:
+
+- **Role Specialization (PBR Triad):**
+  - **Planner (High Reasoning):** Explores constraints, formulates architectural design, defines atomic steps, and explicitly enumerates assumptions and boundary conditions.
+  - **Builder (Medium Reasoning):** Executes the smallest coherent code change, resolves mechanical failures (lint, type, build, test), and packages the review context.
+  - **Reviewer (Independent High Reasoning):** Audits code in a decoupled, clean-room context with zero mutation tools; challenges assumptions and conducts adversarial verification.
+- **Uncurated Context Floor:** When dispatching to any review subagent or external reviewer, the builder must provide the unmodified user task, the full raw diff or complete changed files, `CODE_STANDARDS.md`, and explicitly stated assumptions. Curation may add guidance, but never subtract the actual diff.
+- **Adversarial & Evidence-Bound Stance:** Reviewers must actively search for flaws and edge cases rather than seeking confirmation. Findings must cite exact `file:line` locations, provide concrete triggering failure scenarios, and tag severity (`BLOCKER | HIGH | MEDIUM | LOW | NIT`).
+- **Gate Separation:** Independent semantic review is a logic, edge-case, and security audit layered on top of mechanical validation (tests, linters, types), never a substitute for it.
+- **Portable Execution Hierarchy:** Use native subagents (`invoke_subagent`), local peer-reviewer skills (for cross-model diversity), or clean-room self-audits interchangeably following this identical protocol.
+
 ## Communication
 
 - Be concise, technical, and evidence-based. Separate observed facts, inference, assumptions, and unresolved risk.
