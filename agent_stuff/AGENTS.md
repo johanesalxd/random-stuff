@@ -36,6 +36,22 @@ Portable operating contract for coding agents. For code creation, modification, 
 - Use independent review for substantial, security-sensitive, or high-blast-radius changes. Re-run affected and final checks after review-driven fixes.
 - Keep implementation verification separate from live cutover when production, external users, or persistent services are involved.
 
+## Multi-Agent & Subagent Review Protocol
+
+When the Verification and Review threshold calls for independent review, apply this protocol across single- or multi-agent workflows:
+
+- **Role Specialization (PBR Triad):**
+  - **Planner:** Explores constraints, formulates architectural design, defines atomic steps, and explicitly enumerates assumptions and boundary conditions (prefer higher-reasoning models where selectable).
+  - **Builder:** Executes the smallest coherent code change, resolves mechanical failures (lint, type, build, test), and packages the review context.
+  - **Reviewer:** Audits code in a decoupled context with an adversarial stance; challenges assumptions and conducts verification. The reviewer SHOULD run in a read-only context; where the harness cannot restrict tool permissions, the reviewer MUST NOT mutate code and must declare the review was not tool-isolated.
+- **Uncurated Context Floor:** When dispatching to any review subagent, external peer reviewer, or clean-room audit, the builder must provide the unmodified user task, the full raw diff or complete changed files, `CODE_STANDARDS.md`, and explicitly stated assumptions. Redaction of credentials per the Safety section is mandatory and does not count as curation; otherwise, never subtract from the diff.
+- **Adversarial & Evidence-Bound Stance:** Reviewers must actively search for flaws, edge cases, and regressions rather than seeking confirmation. Findings must cite exact `file:line` locations, provide concrete triggering failure scenarios, and tag severity (`BLOCKER | HIGH | MEDIUM | LOW | NIT`).
+- **Gate Separation:** Independent semantic review is a logic, edge-case, and security audit layered on top of mechanical validation (tests, linters, types), never a substitute for it.
+- **Portable Execution Hierarchy:** Degrade gracefully based on harness and environment capabilities:
+  1. *Native Subagents:* Dispatch to an isolated subagent/task via the harness's native mechanism (e.g., subagent tools, background tasks).
+  2. *Cross-Model Peer Review:* Dispatch to a local peer-reviewer skill or external CLI for cross-model diversity.
+  3. *Clean-Room Self-Audit:* If no external/subagent dispatch is supported, spawn an isolated turn to audit the diff with fresh eyes, explicitly disclosing the self-review status in the findings.
+
 ## Communication
 
 - Be concise, technical, and evidence-based. Separate observed facts, inference, assumptions, and unresolved risk.
