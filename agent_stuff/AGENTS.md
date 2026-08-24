@@ -38,16 +38,19 @@ Portable operating contract for coding agents. For code creation, modification, 
 
 ## Multi-Agent & Subagent Review Protocol
 
-When executing multi-agent workflows or delegating independent peer reviews:
+When the Verification and Review threshold calls for independent review, apply this protocol across single- or multi-agent workflows:
 
 - **Role Specialization (PBR Triad):**
-  - **Planner (High Reasoning):** Explores constraints, formulates architectural design, defines atomic steps, and explicitly enumerates assumptions and boundary conditions.
-  - **Builder (Medium Reasoning):** Executes the smallest coherent code change, resolves mechanical failures (lint, type, build, test), and packages the review context.
-  - **Reviewer (Independent High Reasoning):** Audits code in a decoupled, clean-room context with zero mutation tools; challenges assumptions and conducts adversarial verification.
-- **Uncurated Context Floor:** When dispatching to any review subagent or external reviewer, the builder must provide the unmodified user task, the full raw diff or complete changed files, `CODE_STANDARDS.md`, and explicitly stated assumptions. Curation may add guidance, but never subtract the actual diff.
-- **Adversarial & Evidence-Bound Stance:** Reviewers must actively search for flaws and edge cases rather than seeking confirmation. Findings must cite exact `file:line` locations, provide concrete triggering failure scenarios, and tag severity (`BLOCKER | HIGH | MEDIUM | LOW | NIT`).
+  - **Planner:** Explores constraints, formulates architectural design, defines atomic steps, and explicitly enumerates assumptions and boundary conditions (prefer higher-reasoning models where selectable).
+  - **Builder:** Executes the smallest coherent code change, resolves mechanical failures (lint, type, build, test), and packages the review context.
+  - **Reviewer:** Audits code in a decoupled context with an adversarial stance; challenges assumptions and conducts verification. The reviewer SHOULD run in a read-only context; where the harness cannot restrict tool permissions, the reviewer MUST NOT mutate code and must declare the review was not tool-isolated.
+- **Uncurated Context Floor:** When dispatching to any review subagent, external peer reviewer, or clean-room audit, the builder must provide the unmodified user task, the full raw diff or complete changed files, `CODE_STANDARDS.md`, and explicitly stated assumptions. Redaction of credentials per the Safety section is mandatory and does not count as curation; otherwise, never subtract from the diff.
+- **Adversarial & Evidence-Bound Stance:** Reviewers must actively search for flaws, edge cases, and regressions rather than seeking confirmation. Findings must cite exact `file:line` locations, provide concrete triggering failure scenarios, and tag severity (`BLOCKER | HIGH | MEDIUM | LOW | NIT`).
 - **Gate Separation:** Independent semantic review is a logic, edge-case, and security audit layered on top of mechanical validation (tests, linters, types), never a substitute for it.
-- **Portable Execution Hierarchy:** Use native subagents (`invoke_subagent`), local peer-reviewer skills (for cross-model diversity), or clean-room self-audits interchangeably following this identical protocol.
+- **Portable Execution Hierarchy:** Degrade gracefully based on harness and environment capabilities:
+  1. *Native Subagents:* Dispatch to an isolated subagent/task via the harness's native mechanism (e.g., subagent tools, background tasks).
+  2. *Cross-Model Peer Review:* Dispatch to a local peer-reviewer skill or external CLI for cross-model diversity.
+  3. *Clean-Room Self-Audit:* If no external/subagent dispatch is supported, spawn an isolated turn to audit the diff with fresh eyes, explicitly disclosing the self-review status in the findings.
 
 ## Communication
 
