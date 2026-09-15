@@ -49,6 +49,8 @@ WORKSPACE_REFERENCE.md
 **/.ruff_cache/
 **/.pytest_cache/
 temp/*
+scratch/
+**/scratch/
 _config.yml
 .antigravitycli
 **/.antigravitycli
