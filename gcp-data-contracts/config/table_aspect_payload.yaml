@@ -1,0 +1,18 @@
+# ==============================================================================
+# Google Cloud Dataplex Knowledge Catalog - Table Aspect Payload
+# Target Entry: projects/${PROJECT_ID}/locations/${REGION}/entryGroups/@bigquery/entries/bigquery.googleapis.com/projects/${PROJECT_ID}/datasets/sgx_market_data/tables/equity_trades
+# Aspect Key: ${PROJECT_ID}.${REGION}.data-contract-spec
+# ==============================================================================
+
+${PROJECT_ID}.${REGION}.data-contract-spec:
+  data:
+    contract_id: "urn:datacontract:sgx:equity_trades"
+    contract_version: "1.0.0"
+    domain: "equities_market"
+    data_owner: "marketdata-ops@example.com"
+    criticality_tier: "TIER_1_CRITICAL"
+    freshness_sla_hours: 2
+    regulatory_standard: "MAS TRM Section 8"
+    last_audit_timestamp: "2026-09-14T00:00:00Z"
+    # Certified baseline status upon post-remediation deployment (dynamically updated by Dataplex DQ runs)
+    dq_scorecard_status: "GREEN"

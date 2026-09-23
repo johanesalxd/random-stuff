@@ -1,0 +1,62 @@
+samplingPercent: 100
+rules:
+  - description: 'Completeness: trade_id primary key must not be null'
+    dimension: COMPLETENESS
+    column: trade_id
+    threshold: 1.0
+    nonNullExpectation: {}
+  - description: 'Completeness: instrument_code ticker must not be null'
+    dimension: COMPLETENESS
+    column: instrument_code
+    threshold: 1.0
+    nonNullExpectation: {}
+  - description: 'Completeness: execution price must not be null'
+    dimension: COMPLETENESS
+    column: price
+    threshold: 1.0
+    nonNullExpectation: {}
+  - description: 'Completeness: traded share volume must not be null'
+    dimension: COMPLETENESS
+    column: volume
+    threshold: 1.0
+    nonNullExpectation: {}
+  - description: 'Validity: Trade price must be strictly positive (> 0)'
+    dimension: VALIDITY
+    column: price
+    threshold: 1.0
+    ignoreNull: false
+    rangeExpectation:
+      minValue: '0'
+      strictMinEnabled: true
+  - description: 'Validity: Trade volume must be strictly positive (> 0)'
+    dimension: VALIDITY
+    column: volume
+    threshold: 1.0
+    ignoreNull: false
+    rangeExpectation:
+      minValue: '0'
+      strictMinEnabled: true
+  - description: 'Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED'
+    dimension: VALIDITY
+    column: trade_status
+    threshold: 1.0
+    setExpectation:
+      values:
+        - EXECUTED
+        - CANCELLED
+        - AMENDED
+  - description: 'Freshness SLA: Trade execution timestamp must be within 2 hours of current time'
+    dimension: FRESHNESS
+    column: trade_timestamp
+    threshold: 1.0
+    rowConditionExpectation:
+      sqlExpression: trade_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+  - description: 'Integrity: Anti-wash trading rule - buyer_id must not equal seller_id'
+    dimension: INTEGRITY
+    threshold: 1.0
+    rowConditionExpectation:
+      sqlExpression: buyer_id != seller_id
+postScanActions:
+  bigqueryExport:
+    resultsTable: projects/${PROJECT_ID}/datasets/sgx_market_data/tables/dq_export_results
+catalogPublishingEnabled: true

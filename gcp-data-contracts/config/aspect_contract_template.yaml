@@ -1,0 +1,101 @@
+# ==============================================================================
+# Dataplex Knowledge Catalog Aspect Type Definition
+# Contract: SGX Market Data Governance & MAS TRM Section 8 Contract Metadata
+# ==============================================================================
+name: DataContractSpec
+type: record
+recordFields:
+  - name: contract_id
+    type: string
+    index: 1
+    annotations:
+      displayName: "Contract ID"
+      description: "Unique identifier for the Open Data Contract specification"
+    constraints:
+      required: true
+
+  - name: contract_version
+    type: string
+    index: 2
+    annotations:
+      displayName: "Contract Version"
+      description: "Semantic version string of the data contract specification"
+    constraints:
+      required: true
+
+  - name: domain
+    type: string
+    index: 3
+    annotations:
+      displayName: "Business Domain"
+      description: "Data mesh business domain owning this data product (e.g. Equities Trading)"
+    constraints:
+      required: true
+
+  - name: data_owner
+    type: string
+    index: 4
+    annotations:
+      displayName: "Data Owner"
+      description: "Accountable owner team or individual contact email"
+    constraints:
+      required: true
+
+  - name: criticality_tier
+    type: enum
+    index: 5
+    annotations:
+      displayName: "Criticality Tier"
+      description: "MAS TRM Section 8 system and data criticality tier"
+    constraints:
+      required: true
+    enumValues:
+      - name: TIER_1_CRITICAL
+        index: 1
+      - name: TIER_2
+        index: 2
+      - name: TIER_3
+        index: 3
+
+  - name: freshness_sla_hours
+    type: int
+    index: 6
+    annotations:
+      displayName: "Freshness SLA Hours"
+      description: "Maximum allowable latency between trade execution and BigQuery availability in hours"
+    constraints:
+      required: true
+
+  - name: regulatory_standard
+    type: string
+    index: 7
+    annotations:
+      displayName: "Regulatory Standard"
+      description: "Compliance and regulatory governance standard (e.g. MAS TRM Section 8)"
+    constraints:
+      required: true
+
+  - name: last_audit_timestamp
+    type: datetime
+    index: 8
+    annotations:
+      displayName: "Last Audit Timestamp"
+      description: "RFC3339 UTC timestamp when contract governance and DQ scan were last audited"
+    constraints:
+      required: true
+
+  - name: dq_scorecard_status
+    type: enum
+    index: 9
+    annotations:
+      displayName: "DQ Scorecard Status"
+      description: "Current data quality RAG status (GREEN, AMBER, RED) from Dataplex Auto DQ"
+    constraints:
+      required: true
+    enumValues:
+      - name: GREEN
+        index: 1
+      - name: AMBER
+        index: 2
+      - name: RED
+        index: 3

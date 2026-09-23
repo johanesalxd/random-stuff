@@ -1,0 +1,56 @@
+{
+  "type": "record",
+  "name": "TradeEvent",
+  "namespace": "com.sgx.equity",
+  "doc": "SGX Real-Time Equity Trade Event Schema v1",
+  "fields": [
+    {
+      "name": "trade_id",
+      "type": "string",
+      "doc": "Unique trade execution identifier"
+    },
+    {
+      "name": "instrument_code",
+      "type": "string",
+      "doc": "SGX security ticker symbol (e.g. D05.SI, Z74.SI)"
+    },
+    {
+      "name": "price",
+      "type": "double",
+      "doc": "Execution trade price in SGD"
+    },
+    {
+      "name": "volume",
+      "type": "long",
+      "doc": "Number of shares executed"
+    },
+    {
+      "name": "buyer_id",
+      "type": "string",
+      "doc": "Clearing participant ID of purchasing broker"
+    },
+    {
+      "name": "seller_id",
+      "type": "string",
+      "doc": "Clearing participant ID of selling broker"
+    },
+    {
+      "name": "trade_timestamp",
+      "type": "string",
+      "doc": "UTC execution timestamp (ISO-8601 format)"
+    },
+    {
+      "name": "trade_status",
+      "type": {
+        "type": "enum",
+        "name": "TradeStatus",
+        "symbols": [
+          "EXECUTED",
+          "CANCELLED",
+          "AMENDED"
+        ]
+      },
+      "doc": "Trade lifecycle state: EXECUTED, CANCELLED, AMENDED"
+    }
+  ]
+}

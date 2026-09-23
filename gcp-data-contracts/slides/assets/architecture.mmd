@@ -1,0 +1,54 @@
+flowchart LR
+    subgraph Producers ["1. Market Ingress"]
+        P1["Trading Desks / Algorithmic Engines"]
+        P2["Clearing Participants / Market Makers"]
+    end
+
+    subgraph Gate1 ["Gate 1: Wire Perimeter Defense"]
+        SR["Pub/Sub Schema Registry\n(trade_event_v1.avsc)"]
+        REJ["Synchronous Rejection\n(HTTP 400 INVALID_ARGUMENT)"]
+    end
+
+    subgraph EventStream ["Gate 2: Conforming Ingress"]
+        TOPIC["Pub/Sub Trading Topic\n(equity-trades)"]
+    end
+
+    subgraph StorageGate ["Gate 3: Direct Ingestion & Isolation"]
+        BQSUB["BigQuery Direct Subscription\n(Storage Write API)"]
+        DLQ["Dead-Letter Queue (DLQ)\n(equity-trades-dlq)"]
+    end
+
+    subgraph AnalyticalCore ["Governed Analytical Lakehouse"]
+        BQT["BigQuery Partitioned Table\n(dataset.equity_trades)"]
+    end
+
+    subgraph Gate4 ["Gate 4: In-Database Semantic Quality"]
+        DPX["Dataplex Auto Data Quality\n(Serverless Rule Engine)"]
+        RULES["Financial SLAs & Assertions\n- Anti-Wash Trading (buyer != seller)\n- Freshness SLA (< 2 hours)\n- Positive Price & Board Lot Volume"]
+    end
+
+    subgraph Output ["Executive Governance & Forensics"]
+        SC["Executive KPI Scorecard\n(RAG Banner & Metrics)"]
+        SQLF["SQL Forensics Drilldown\n(Instant Root Cause Analysis)"]
+    end
+
+    P1 & P2 -->|Publish Event| SR
+    SR -->|Malformed Payload| REJ
+    SR -->|Schema Valid| TOPIC
+    TOPIC -->|Zero-ETL Stream| BQSUB
+    BQSUB -->|Valid Row| BQT
+    BQSUB -->|Storage Error / 5 Retries| DLQ
+    BQT -->|Continuous Scan| DPX
+    DPX --- RULES
+    DPX -->|Generate Scorecard| SC
+    DPX -->|Inspect Violations| SQLF
+
+    classDef valid fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,color:#174ea6;
+    classDef reject fill:#fce8e6,stroke:#d93025,stroke-width:2px,color:#c5221f;
+    classDef storage fill:#e6f4ea,stroke:#1e8e3e,stroke-width:2px,color:#137333;
+    classDef govern fill:#fef7e0,stroke:#f9ab00,stroke-width:2px,color:#b06000;
+
+    class P1,P2,SR,TOPIC,BQSUB valid;
+    class REJ,DLQ reject;
+    class BQT storage;
+    class DPX,RULES,SC,SQLF govern;

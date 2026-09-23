@@ -1,0 +1,228 @@
+# ==============================================================================
+# Open Data Contract Standard (ODCS) v3.0.0
+# Domain: Singapore Exchange (SGX) Equities Market Data
+# Purpose: Real-time trade execution event streaming & analytical storage SLA
+# ==============================================================================
+
+apiVersion: 3.0.0
+kind: DataContract
+id: urn:datacontract:sgx:equity_trades
+name: sgx_equity_trades
+version: 1.0.0
+status: active
+
+domain: equities_market
+dataProduct: sgx_equity_trades
+
+description:
+  purpose: "Real-time SGX equity trade execution events and historical analytical storage"
+  domain: "equities_market"
+  limitations: "Covers lit equity market trade executions; excludes off-book and derivatives"
+  usage: "Market surveillance, algorithmic compliance, post-trade settlement analytics"
+
+team:
+  name: "Market Data Platform Engineering"
+  contact: "marketdata-ops@example.com"
+
+servers:
+  production_pubsub:
+    type: pubsub
+    project: "${PROJECT_ID}"
+    topic: "projects/${PROJECT_ID}/topics/sgx-equity-trades"
+    schema: "projects/${PROJECT_ID}/schemas/sgx-trades-schema"
+    messageEncoding: json
+  production_bigquery:
+    type: bigquery
+    project: "${PROJECT_ID}"
+    dataset: "sgx_market_data"
+    table: "equity_trades"
+    location: "asia-southeast1"
+
+schema:
+  - id: sgx_equity_trades_dataset
+    name: equity_trades
+    physicalName: equity_trades
+    physicalType: table
+    businessName: "SGX Equity Trades"
+    description: "Real-time and historical equity trade executions on the Singapore Exchange (governed by ODCS contract)"
+
+    # Business Event Properties (Streamed via Pub/Sub Ingress & Stored in BigQuery)
+    properties:
+      - name: trade_id
+        businessName: "Trade Identifier"
+        logicalType: string
+        physicalType: STRING
+        required: true
+        primaryKey: true
+        description: "Unique trade execution identifier"
+        examples:
+          - "TR-SGX-20260914-001"
+
+      - name: instrument_code
+        businessName: "Instrument Ticker"
+        logicalType: string
+        physicalType: STRING
+        required: true
+        description: "SGX security ticker symbol (e.g. D05.SI, Z74.SI)"
+        examples:
+          - "D05.SI"
+          - "Z74.SI"
+
+      - name: price
+        businessName: "Trade Price"
+        logicalType: number
+        physicalType: NUMERIC
+        required: true
+        description: "Execution trade price in SGD"
+        minimum: 0.0001
+        exclusiveMinimum: 0.0
+        examples:
+          - 35.80
+          - 12.45
+
+      - name: volume
+        businessName: "Trade Volume"
+        logicalType: integer
+        physicalType: INT64
+        required: true
+        description: "Number of shares executed"
+        minimum: 1
+        exclusiveMinimum: 0
+        examples:
+          - 1000
+          - 5000
+
+      - name: buyer_id
+        businessName: "Buyer Participant ID"
+        logicalType: string
+        physicalType: STRING
+        required: true
+        description: "Clearing participant ID of purchasing broker"
+        examples:
+          - "BROKER_DBS_01"
+
+      - name: seller_id
+        businessName: "Seller Participant ID"
+        logicalType: string
+        physicalType: STRING
+        required: true
+        description: "Clearing participant ID of selling broker"
+        examples:
+          - "BROKER_OCBC_02"
+
+      - name: trade_timestamp
+        businessName: "Execution Timestamp"
+        logicalType: timestamp
+        physicalType: TIMESTAMP
+        required: true
+        description: "UTC execution timestamp (ISO-8601 format)"
+        examples:
+          - "2026-09-14T02:08:00Z"
+
+      - name: trade_status
+        businessName: "Trade Lifecycle Status"
+        logicalType: string
+        physicalType: STRING
+        required: true
+        description: "Trade lifecycle state: EXECUTED, CANCELLED, AMENDED"
+        enum:
+          - EXECUTED
+          - CANCELLED
+          - AMENDED
+        examples:
+          - "EXECUTED"
+
+    # Infrastructure Storage Metadata Columns
+    # Populated automatically by Pub/Sub Storage Write API (--write-metadata)
+    # Included in BigQuery DDL, but excluded from Pub/Sub ingress event Avro schema
+    metadataProperties:
+      - name: subscription_name
+        logicalType: string
+        physicalType: STRING
+        required: false
+        description: "Pub/Sub subscription that delivered the message"
+      - name: message_id
+        logicalType: string
+        physicalType: STRING
+        required: false
+        description: "Pub/Sub message identifier"
+      - name: publish_time
+        logicalType: timestamp
+        physicalType: TIMESTAMP
+        required: false
+        description: "Pub/Sub message publish timestamp"
+      - name: attributes
+        logicalType: string
+        physicalType: STRING
+        required: false
+        description: "Pub/Sub message attributes formatted as JSON"
+
+sla:
+  freshness:
+    maxAge: "2h"
+    timestampColumn: "trade_timestamp"
+    description: "Trade execution records must arrive within 2 hours of transaction timestamp"
+
+quality:
+  # Completeness rules (Non-null checks on critical execution fields)
+  - type: completeness
+    column: trade_id
+    dimension: COMPLETENESS
+    description: "Completeness: trade_id primary key must not be null"
+
+  - type: completeness
+    column: instrument_code
+    dimension: COMPLETENESS
+    description: "Completeness: instrument_code ticker must not be null"
+
+  - type: completeness
+    column: price
+    dimension: COMPLETENESS
+    description: "Completeness: execution price must not be null"
+
+  - type: completeness
+    column: volume
+    dimension: COMPLETENESS
+    description: "Completeness: traded share volume must not be null"
+
+  # Range & Validity rules (Positive execution metrics & permitted status)
+  - type: range
+    column: price
+    dimension: VALIDITY
+    description: "Validity: Trade price must be strictly positive (> 0)"
+    minValue: "0"
+    strictMinEnabled: true
+
+  - type: range
+    column: volume
+    dimension: VALIDITY
+    description: "Validity: Trade volume must be strictly positive (> 0)"
+    minValue: "0"
+    strictMinEnabled: true
+
+  - type: set
+    column: trade_status
+    dimension: VALIDITY
+    description: "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED"
+    values:
+      - EXECUTED
+      - CANCELLED
+      - AMENDED
+
+  # Freshness SLA rule (Record latency verification)
+  - type: freshness
+    column: trade_timestamp
+    dimension: FRESHNESS
+    description: "Freshness SLA: Trade execution timestamp must be within 2 hours of current time"
+    maxAge: "2h"
+    sqlExpression: "trade_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)"
+
+  # Financial Business Integrity Rule (Anti-Wash Trading Assertion)
+  - type: sql_assertion
+    dimension: INTEGRITY
+    description: "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id"
+    # Row condition expression (for Dataplex rowConditionExpectation: passes when TRUE)
+    rowCondition: "buyer_id != seller_id"
+    sqlExpression: "buyer_id != seller_id"
+    # SQL assertion query (for Dataplex sqlAssertion: fails when violating rows are returned)
+    sqlStatement: "SELECT * FROM ${data()} WHERE buyer_id = seller_id"

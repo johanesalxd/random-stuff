@@ -58,3 +58,7 @@ _config.yml
 
 # BigQuery FinOps Cookbook results
 bq_finops_cookbook/analysis_results/
+
+# Agentic / teamwork preview artifacts
+.agents/
+**/.agents/

@@ -1,0 +1,20 @@
+# ==============================================================================
+# Git Ignore - Google Cloud Data Contracts
+# ==============================================================================
+
+# Agentic / teamwork workflow artifacts
+.agents/
+*.log
+
+# Python compiled bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Operating system & IDE files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
