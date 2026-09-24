@@ -21,6 +21,7 @@ DATASCAN_ID="sgx-equity-trades-dq"
 ASPECT_TYPE_ID="data-contract-spec"
 FORCE=false
 DRY_RUN=false
+WITH_CATALOG=false
 
 show_help() {
   cat <<EOF
@@ -41,6 +42,7 @@ Options:
   --sub=SUB               BigQuery direct subscription ID (default: sgx-equity-trades-bq-sub)
   --datascan=SCAN         Dataplex Data Quality Scan ID (default: sgx-equity-trades-dq)
   --aspect-type=ASPECT    Dataplex Aspect Type ID (default: data-contract-spec)
+  --with-catalog          Also provision Dataplex Business Glossary, EntryLinks, and Data Product
   --force                 Non-interactive mode; skip manual confirmation
   --dry-run               Print provisioning steps and commands without mutating GCP
   -h, --help              Show this help message and exit
@@ -72,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --datascan) DATASCAN_ID="$2"; shift ;;
     --aspect-type=*) ASPECT_TYPE_ID="${1#*=}" ;;
     --aspect-type) ASPECT_TYPE_ID="$2"; shift ;;
+    --with-catalog) WITH_CATALOG=true ;;
     --force) FORCE=true ;;
     --dry-run) DRY_RUN=true ;;
     -h|--help) show_help; exit 0 ;;
@@ -145,6 +148,9 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo ">> [Step 11/11] Creating Dataplex Aspect Type & Attaching Aspect Payload..."
   echo "   [DRY RUN] Would create Aspect Type ${ASPECT_TYPE_ID} from config/aspect_contract_template.yaml"
   echo "   [DRY RUN] Would attach aspect payload from config/table_aspect_payload.yaml to @bigquery entry"
+  if [[ "${WITH_CATALOG}" == "true" ]]; then
+    python3 scripts/provision_catalog.py apply --dry-run --project-id="${PROJECT_ID}" --location="${REGION}"
+  fi
 
   echo -e "\n[DRY RUN COMPLETE] All 11 steps validated successfully."
   exit 0
@@ -342,6 +348,11 @@ gcloud dataplex entries update-aspects "${ENTRY_ID}" \
     --aspects="${PAYLOAD_RESOLVED}" || echo "   [WARN] Aspect attachment skipped or non-fatal."
 
 rm -f "${PAYLOAD_RESOLVED}"
+
+if [[ "${WITH_CATALOG}" == "true" ]]; then
+  echo "   Provisioning OOTB Dataplex Business Glossary, EntryLinks & Data Product..."
+  python3 scripts/provision_catalog.py apply --project-id="${PROJECT_ID}" --location="${REGION}"
+fi
 
 echo -e "\n========================================================================"
 echo "   [SUCCESS] SGX Data Contract environment setup completed successfully."

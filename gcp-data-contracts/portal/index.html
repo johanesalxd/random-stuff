@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Equities Market Execution Trades (Contract Product) — Business Data Contract &amp; Quality Grade Portal</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #111827;
+      --muted: #4b5563;
+      --border: #e5e7eb;
+      --navy: #0f2942;
+      --blue: #1a73e8;
+      --teal: #0d9488;
+      --purple: #6d28d9;
+      --grade-a: #007a33;
+      --grade-b: #58a618;
+      --grade-c: #f2a900;
+      --grade-d: #e86c00;
+      --grade-e: #d92b2b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .mode-banner {
+      background: #fef3c7;
+      color: #92400e;
+      border-bottom: 1px solid #fde68a;
+      padding: 8px 32px;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .mode-banner.live {
+      background: #dcfce7;
+      color: #166534;
+      border-bottom-color: #bbf7d0;
+    }
+    header.topbar {
+      background: linear-gradient(135deg, #0b2239 0%, #153e63 100%);
+      color: #ffffff;
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-bottom: 3px solid #1a73e8;
+    }
+    .topbar-left h1 {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .topbar-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: #dbeafe;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.14);
+      color: #ffffff;
+    }
+    .btn-primary {
+      background: #1a73e8;
+      color: #ffffff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: #1557b0; }
+    main.container {
+      max-width: 1360px;
+      margin: 24px auto;
+      padding: 0 24px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .section-title {
+      margin: 0 0 14px 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--navy);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .handshake-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 960px) {
+      .handshake-grid { grid-template-columns: 1fr; }
+    }
+    .layer-box {
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--blue);
+      border-radius: 8px;
+      padding: 14px 16px;
+      background: #f9fafb;
+    }
+    .layer-box.steward { border-top-color: var(--teal); }
+    .layer-box.consumer { border-top-color: var(--purple); }
+    .layer-role {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .layer-team {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .layer-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .layer-list li { margin-bottom: 4px; }
+    .nutri-row {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 24px;
+      align-items: center;
+    }
+    @media (max-width: 960px) {
+      .nutri-row { grid-template-columns: 1fr; }
+    }
+    .nutri-badge-panel {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      text-align: center;
+      background: #ffffff;
+    }
+    .nutri-strip {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin: 12px 0;
+    }
+    .nutri-letter {
+      width: 46px;
+      height: 46px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+      opacity: 0.28;
+      transform: scale(0.92);
+      transition: all 0.2s;
+    }
+    .nutri-letter.active {
+      opacity: 1;
+      transform: scale(1.14);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+      border: 2px solid #111827;
+    }
+    .nutri-A { background: var(--grade-a); }
+    .nutri-B { background: var(--grade-b); }
+    .nutri-C { background: var(--grade-c); }
+    .nutri-D { background: var(--grade-d); }
+    .nutri-E { background: var(--grade-e); }
+    .toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f3f4f6;
+    }
+    .toggle-btn {
+      border: none;
+      background: transparent;
+      padding: 8px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .toggle-btn.active {
+      background: var(--navy);
+      color: #ffffff;
+    }
+    .dim-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .dim-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #f9fafb;
+    }
+    .dim-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .progress-track {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.25s;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-pill {
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .filter-pill.active {
+      background: var(--blue);
+      color: #ffffff;
+      border-color: var(--blue);
+    }
+    table.contract-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    table.contract-table th, table.contract-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    table.contract-table th {
+      background: #f9fafb;
+      font-weight: 700;
+      color: var(--navy);
+      font-size: 11.5px;
+      text-transform: uppercase;
+    }
+    .badge-inherited {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #ccfbf1;
+      color: #115e59;
+      border: 1px solid #99f6e4;
+    }
+    .badge-ai {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #ede9fe;
+      color: #5b21b6;
+      border: 1px solid #ddd6fe;
+    }
+    .quarantine-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    @media (max-width: 960px) {
+      .quarantine-grid { grid-template-columns: 1fr; }
+    }
+    .q-box {
+      border: 1px solid #fecaca;
+      background: #fff5f5;
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .q-box pre {
+      margin: 8px 0 0;
+      padding: 8px;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 6px;
+      font-size: 11px;
+      overflow-x: auto;
+    }
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(17,24,39,0.6);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: #ffffff;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 92%;
+      padding: 22px 24px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal-card pre {
+      background: #111827;
+      color: #e5e7eb;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="mode-status-banner" class="mode-banner"></div>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Equities Market Execution Trades (Contract Product)</h1>
+      <div class="topbar-meta">
+        <span class="pill">Contract ID: urn:datacontract:sgx:equity_trades</span>
+        <span class="pill">ODCS v3.0.0</span>
+        <span class="pill">Dataplex Business Glossary + 16 Column EntryLinks</span>
+        <span class="pill">Dataplex Cadence Aspect: Daily (09:00 SGT) • ODCS Freshness SLA: &lt;= 2h</span>
+      </div>
+    </div>
+    <div>
+      <button id="open-access-modal-btn" class="btn-primary" type="button">
+        Consumer Access Handshake (DataAsset IAM Spec)
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 1. 3-Layer Internal Warehouse Handshake -->
+    <section class="card">
+      <div class="section-title">
+        <span>1. Three-Layer Internal Warehouse Data Contract Handshake</span>
+        <span style="font-size:12px;color:var(--muted);">Producer &harr; Platform Steward &harr; Approved Business Consumers</span>
+      </div>
+      <div id="handshake-container" class="handshake-grid"></div>
+    </section>
+
+    <!-- 2. 5-Tier A-E Quality & SLA Scorecard -->
+    <section class="card">
+      <div class="section-title">
+        <span>2. Contract Quality Grade (A&ndash;E Nutri-Score / 5-Tier SLA Scale)</span>
+        <div class="toggle-group" role="tablist" aria-label="Asset Layer Switcher">
+          <button id="btn-layer-curated" class="toggle-btn active" type="button"></button>
+          <button id="btn-layer-raw" class="toggle-btn" type="button"></button>
+        </div>
+      </div>
+      <div class="nutri-row">
+        <div class="nutri-badge-panel">
+          <div id="active-asset-title" style="font-weight:700;font-size:14px;color:var(--navy);"></div>
+          <div id="active-asset-fqn" style="font-family:monospace;font-size:12px;color:var(--muted);margin-top:2px;"></div>
+          <div class="nutri-strip">
+            <div id="grade-pill-A" class="nutri-letter nutri-A">A</div>
+            <div id="grade-pill-B" class="nutri-letter nutri-B">B</div>
+            <div id="grade-pill-C" class="nutri-letter nutri-C">C</div>
+            <div id="grade-pill-D" class="nutri-letter nutri-D">D</div>
+            <div id="grade-pill-E" class="nutri-letter nutri-E">E</div>
+          </div>
+          <div id="active-grade-score" style="font-size:22px;font-weight:800;"></div>
+          <div id="active-grade-label" style="font-size:12.5px;font-weight:600;color:var(--muted);"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">
+            Note: 5-tier A&ndash;E scale extends Singapore HPB 4-grade (A&ndash;D) Nutri-Grade to distinguish 6/9 (D) vs &le;5/9 (E) rule breaches.
+          </div>
+        </div>
+        <div>
+          <div id="dimensions-container" class="dim-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Column Dictionary & Provenance Filter -->
+    <section class="card">
+      <div class="section-title">
+        <span>3. Column Dictionary &amp; Provenance Explorer (Dataplex Business Glossary EntryLinks)</span>
+        <div class="filter-bar">
+          <button id="filter-all" class="filter-pill active" type="button"></button>
+          <button id="filter-inherited" class="filter-pill" type="button"></button>
+          <button id="filter-ai" class="filter-pill" type="button"></button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="contract-table">
+          <thead>
+            <tr>
+              <th>Column &amp; Type</th>
+              <th>Provenance &amp; Governance Layer</th>
+              <th>Dataplex Business Glossary Term / Expression</th>
+              <th>Business Definition</th>
+              <th>Evaluated Layer DQ Status</th>
+            </tr>
+          </thead>
+          <tbody id="column-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. 3-Gate Defense-in-Depth & Quarantine (DLQ) Forensics -->
+    <section class="card">
+      <div class="section-title">
+        <span>4. Three-Gate Defense-in-Depth &amp; Quarantine (DLQ) Payload Inspector</span>
+        <span style="font-size:12px;color:var(--muted);">Zero Data Loss &bull; Deterministic Quarantine &bull; MAS TRM Section 8 Audit Trail</span>
+      </div>
+      <div id="quarantine-container" class="quarantine-grid"></div>
+    </section>
+  </main>
+
+  <!-- Consumer Access Handshake Modal -->
+  <div id="access-modal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3 style="margin-top:0;color:var(--navy);">Consumer Access Handshake — Dataplex DataProduct &amp; DataAsset IAM</h3>
+      <p style="font-size:13px;color:var(--muted);">
+        Inspect the Dataplex <code>DataProduct.accessGroups</code> and <code>DataAsset.accessGroupConfigs</code> binding granting read access (<code>roles/bigquery.dataViewer</code>) on the Grade-A Curated Contract View:
+      </p>
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Consumer Access Group</label>
+      <select id="access-group-select" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);margin-bottom:12px;">
+        <option value="market-surveillance">market-surveillance — Market Surveillance &amp; Regulatory Compliance</option>
+        <option value="clearing-risk">clearing-risk — Clearing House &amp; Settlement Risk</option>
+      </select>
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Dataplex DataAsset IAM Binding &amp; Access Request Specification</label>
+      <pre id="access-payload-preview"></pre>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+        <button id="close-access-modal-btn" class="filter-pill" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script id="contract-snapshot-data" type="application/json">
+{
+  "access_groups": {
+    "clearing-risk": {
+      "default_principal_group": "clearing-risk-consumers@example.com",
+      "description": "Read access (roles/bigquery.dataViewer) to curated Grade-A trade execution contract view.",
+      "display_name": "Clearing \u0026 Settlement Risk Analysts",
+      "iam_roles": [
+        "roles/bigquery.dataViewer"
+      ],
+      "id": "clearing-risk"
+    },
+    "market-surveillance": {
+      "default_principal_group": "market-surveillance-consumers@example.com",
+      "description": "Read access (roles/bigquery.dataViewer) to curated contract view and raw forensic landing table.",
+      "display_name": "Market Surveillance \u0026 Regulatory Compliance",
+      "iam_roles": [
+        "roles/bigquery.dataViewer"
+      ],
+      "id": "market-surveillance"
+    }
+  },
+  "as_of": "2026-09-24T09:00:00Z",
+  "column_counts": {
+    "ai_enriched": 2,
+    "all": 10,
+    "inherited": 8
+  },
+  "columns": [
+    {
+      "business_name": "Trade Identifier",
+      "column_name": "trade_id",
+      "curated_score_pct": 100.0,
+      "description": "Unique trade execution identifier (e.g. TR-SGX-20260914-001) assigned deterministically by the Exchange Order Matching Engine upon order match. Required primary key; must not be null.",
+      "dq_rules": [
+        "Completeness: trade_id primary key must not be null"
+      ],
+      "entry_link_curated": "def-curated-trade-id",
+      "entry_link_raw": "def-raw-trade-id",
+      "glossary_term_id": "trade-id",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/trade-id",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "STRING",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 100.0,
+      "raw_status_detail": "PASS (All column rules satisfied)",
+      "required": true,
+      "source_spec_ref": "FIX 4.2 Tag 17 (ExecID) / contract.odcs.yaml#trade_id",
+      "sql_expression": "trade_id"
+    },
+    {
+      "business_name": "Instrument Ticker",
+      "column_name": "instrument_code",
+      "curated_score_pct": 100.0,
+      "description": "Exchange-listed security ticker symbol (e.g. D05.SI, Z74.SI, O39.SI) identifying the traded equity instrument. Required field; must not be null.",
+      "dq_rules": [
+        "Completeness: instrument_code ticker must not be null"
+      ],
+      "entry_link_curated": "def-curated-instrument-code",
+      "entry_link_raw": "def-raw-instrument-code",
+      "glossary_term_id": "instrument-code",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/instrument-code",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "STRING",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 100.0,
+      "raw_status_detail": "PASS (All column rules satisfied)",
+      "required": true,
+      "source_spec_ref": "FIX 4.2 Tag 48 (SecurityID) / contract.odcs.yaml#instrument_code",
+      "sql_expression": "instrument_code"
+    },
+    {
+      "business_name": "Trade Price",
+      "column_name": "price",
+      "curated_score_pct": 100.0,
+      "description": "Executed trade price per share in settlement currency (NUMERIC). Must not be null and must be strictly positive (price \u003e 0).",
+      "dq_rules": [
+        "Completeness: execution price must not be null",
+        "Validity: Trade price must be strictly positive (\u003e 0)"
+      ],
+      "entry_link_curated": "def-curated-price",
+      "entry_link_raw": "def-raw-price",
+      "glossary_term_id": "price",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/price",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "NUMERIC",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 50.0,
+      "raw_status_detail": "FAIL (Negative price -12.5 in TR-VIOL-PRICE-002)",
+      "required": true,
+      "source_spec_ref": "FIX 4.2 Tag 31 (LastPx) / contract.odcs.yaml#price",
+      "sql_expression": "price"
+    },
+    {
+      "business_name": "Trade Volume",
+      "column_name": "volume",
+      "curated_score_pct": 100.0,
+      "description": "Number of shares matched in the execution event (INT64). Must not be null and must be strictly positive (volume \u003e 0).",
+      "dq_rules": [
+        "Completeness: traded share volume must not be null",
+        "Validity: Trade volume must be strictly positive (\u003e 0)"
+      ],
+      "entry_link_curated": "def-curated-volume",
+      "entry_link_raw": "def-raw-volume",
+      "glossary_term_id": "volume",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/volume",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "INT64",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 50.0,
+      "raw_status_detail": "FAIL (Zero volume 0 in TR-VIOL-VOL-003)",
+      "required": true,
+      "source_spec_ref": "FIX 4.2 Tag 32 (LastQty) / contract.odcs.yaml#volume",
+      "sql_expression": "volume"
+    },
+    {
+      "business_name": "Buyer Participant ID",
+      "column_name": "buyer_id",
+      "curated_score_pct": 100.0,
+      "description": "Clearing member participant identifier on the buy side of the matched trade. Subject to the anti-wash-trading integrity assertion (buyer_id != seller_id).",
+      "dq_rules": [
+        "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id"
+      ],
+      "entry_link_curated": "def-curated-buyer-id",
+      "entry_link_raw": "def-raw-buyer-id",
+      "glossary_term_id": "buyer-id",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/buyer-id",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "STRING",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 0.0,
+      "raw_status_detail": "FAIL (Wash trade self-match WASH_BROKER_999 in TR-VIOL-WASH-004)",
+      "required": true,
+      "source_spec_ref": "Clearing Member Buy Account / contract.odcs.yaml#buyer_id",
+      "sql_expression": "buyer_id"
+    },
+    {
+      "business_name": "Seller Participant ID",
+      "column_name": "seller_id",
+      "curated_score_pct": 100.0,
+      "description": "Clearing member participant identifier on the sell side of the matched trade. Subject to the anti-wash-trading integrity assertion (buyer_id != seller_id).",
+      "dq_rules": [
+        "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id"
+      ],
+      "entry_link_curated": "def-curated-seller-id",
+      "entry_link_raw": "def-raw-seller-id",
+      "glossary_term_id": "seller-id",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/seller-id",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "STRING",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 0.0,
+      "raw_status_detail": "FAIL (Wash trade self-match WASH_BROKER_999 in TR-VIOL-WASH-004)",
+      "required": true,
+      "source_spec_ref": "Clearing Member Sell Account / contract.odcs.yaml#seller_id",
+      "sql_expression": "seller_id"
+    },
+    {
+      "business_name": "Execution Timestamp",
+      "column_name": "trade_timestamp",
+      "curated_score_pct": 100.0,
+      "description": "UTC timestamp recorded by the Exchange Matching Engine at order execution. Governed by the 2-hour freshness SLA (trade_timestamp \u003e= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)).",
+      "dq_rules": [
+        "Freshness SLA: Trade execution timestamp must be within 2 hours of current time"
+      ],
+      "entry_link_curated": "def-curated-trade-timestamp",
+      "entry_link_raw": "def-raw-trade-timestamp",
+      "glossary_term_id": "trade-timestamp",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/trade-timestamp",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "TIMESTAMP",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 0.0,
+      "raw_status_detail": "FAIL (Stale \u003e2h SLA timestamp in TR-VIOL-FRESHNESS-001)",
+      "required": true,
+      "source_spec_ref": "FIX 4.2 Tag 60 (TransactTime UTC) / contract.odcs.yaml#trade_timestamp",
+      "sql_expression": "trade_timestamp"
+    },
+    {
+      "business_name": "Trade Lifecycle Status",
+      "column_name": "trade_status",
+      "curated_score_pct": 100.0,
+      "description": "Lifecycle state of the execution event. Must belong to the permitted contract enumeration: EXECUTED, CANCELLED, or AMENDED.",
+      "dq_rules": [
+        "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED"
+      ],
+      "entry_link_curated": "def-curated-trade-status",
+      "entry_link_raw": "def-raw-trade-status",
+      "glossary_term_id": "trade-status",
+      "glossary_term_path": "locations/asia-southeast1/glossaries/exchange-source-dictionary/terms/trade-status",
+      "governance_owner": "Upstream Source Producer (Matching Engine)",
+      "physical_type": "STRING",
+      "provenance_badge": "[Inherited: Upstream Source Dictionary]",
+      "provenance_category": "inherited",
+      "raw_score_pct": 100.0,
+      "raw_status_detail": "PASS (All column rules satisfied)",
+      "required": true,
+      "source_spec_ref": "Lifecycle Status Enum / contract.odcs.yaml#trade_status",
+      "sql_expression": "trade_status"
+    },
+    {
+      "business_name": "Notional Value",
+      "column_name": "notional_value",
+      "curated_score_pct": 100.0,
+      "description": "Gross settlement notional value (NUMERIC) computed in the curated warehouse view as ROUND(price * volume, 2). Illustrates the governance separation where platform-derived analytical columns use steward-approved AI-assisted documentation while upstream wire fields remain 100% locked to the Source Dictionary.",
+      "dq_rules": [
+        "Validity: Trade price must be strictly positive (\u003e 0)",
+        "Validity: Trade volume must be strictly positive (\u003e 0)"
+      ],
+      "entry_link_curated": null,
+      "entry_link_raw": null,
+      "glossary_term_id": null,
+      "glossary_term_path": "Curated View Expression (Steward Approved)",
+      "governance_owner": "Platform Data Steward (Curated Warehouse Layer)",
+      "physical_type": "NUMERIC",
+      "provenance_badge": "[Platform-Derived: Steward Authored (AI-Assisted Pattern)]",
+      "provenance_category": "ai_enriched",
+      "raw_score_pct": null,
+      "raw_status_detail": "Curated View Only",
+      "required": false,
+      "source_spec_ref": "Curated View Expression: ROUND(price * volume, 2)",
+      "sql_expression": "ROUND(price * volume, 2)"
+    },
+    {
+      "business_name": "Wash Trade Flag",
+      "column_name": "wash_trade_flag",
+      "curated_score_pct": 100.0,
+      "description": "Boolean surveillance indicator computed as (buyer_id = seller_id). Always evaluates to FALSE on certified rows inside equity_trades_curated (since self-matches are excluded by the view's WHERE buyer_id != seller_id predicate) and TRUE when evaluated on uncurated wash-trade rows in equity_trades.",
+      "dq_rules": [
+        "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id"
+      ],
+      "entry_link_curated": null,
+      "entry_link_raw": null,
+      "glossary_term_id": null,
+      "glossary_term_path": "Curated View Expression (Steward Approved)",
+      "governance_owner": "Platform Data Steward (Curated Warehouse Layer)",
+      "physical_type": "BOOL",
+      "provenance_badge": "[Platform-Derived: Steward Authored (AI-Assisted Pattern)]",
+      "provenance_category": "ai_enriched",
+      "raw_score_pct": null,
+      "raw_status_detail": "Curated View Only",
+      "required": false,
+      "source_spec_ref": "Curated View Expression: (buyer_id = seller_id)",
+      "sql_expression": "(buyer_id = seller_id)"
+    }
+  ],
+  "contract_metadata": {
+    "api_version": "3.0.0",
+    "criticality_tier": "TIER_1_CRITICAL",
+    "curated_view": "equity_trades_curated",
+    "dataset": "sgx_market_data",
+    "domain": "equities_market",
+    "freshness_sla_hours": 2,
+    "id": "urn:datacontract:sgx:equity_trades",
+    "location": "asia-southeast1",
+    "raw_table": "equity_trades",
+    "refresh_cadence": {
+      "frequency": "Daily",
+      "refreshTime": "09:00 SGT"
+    },
+    "regulatory_standard": "MAS TRM Section 8",
+    "status": "active",
+    "version": "1.0.0"
+  },
+  "data_product": {
+    "description": "Governed internal warehouse Data Product packaging real-time Exchange Matching Engine trade executions. Enforces the 3-layer data contract handshake between the Upstream Source Producer, the Enterprise Data Platform Steward, and Approved Business Consumers.",
+    "display_name": "Equities Market Execution Trades (Contract Product)",
+    "id": "equity-market-trades",
+    "labels": {
+      "contract_version": "v1-0-0",
+      "criticality_tier": "tier-1-critical",
+      "domain": "equities-market",
+      "quality_grade_target": "grade-a"
+    }
+  },
+  "handshake": {
+    "layer_1_producer": {
+      "responsibilities": [
+        "Publishes Avro-encoded execution events adhering to schemas/trade_event_v1.avsc",
+        "Owns the canonical 8-column Upstream Source Dictionary in Dataplex Business Glossary",
+        "Zero unannounced breaking schema changes (enforced by Pub/Sub Topic Schema Gate 1)"
+      ],
+      "role": "Upstream Source Producer",
+      "system_id": "matching-engine-fix-ouch",
+      "team": "Exchange Order Matching Engine Platform"
+    },
+    "layer_2_steward": {
+      "responsibilities": [
+        "Operates zero-ETL Pub/Sub-to-BigQuery ingestion and DLQ quarantine routing (Gate 2)",
+        "Maintains curated contract view (equity_trades_curated) and platform-derived columns",
+        "Executes automated 9-rule Dataplex Data Quality scans and publishes A-E quality grades (Gate 3)"
+      ],
+      "role": "Platform Data Steward",
+      "system_id": "enterprise-warehouse-platform",
+      "team": "Enterprise Data Platform \u0026 Warehouse Engineering"
+    },
+    "layer_3_consumers": {
+      "role": "Approved Business Consumers",
+      "teams": [
+        {
+          "display_name": "Market Surveillance \u0026 Anti-Wash-Trade Analytics",
+          "id": "market-surveillance",
+          "purpose": "Wash-trade surveillance (buyer_id != seller_id) and anomaly forensics",
+          "sla_tier": "2-Hour Contract Freshness SLA (MAS TRM Section 8)"
+        },
+        {
+          "display_name": "Clearing House \u0026 Settlement Risk",
+          "id": "clearing-risk",
+          "purpose": "Clearing member exposure and gross notional settlement valuation",
+          "sla_tier": "2-Hour Contract Freshness SLA (99.95% availability)"
+        }
+      ]
+    }
+  },
+  "live_status": {
+    "banner_text": "OFFLINE SIMULATION MODE \u2014 Scores computed deterministically from 14-row synthetic batch (10 conforming + 4 injected SLA violations)",
+    "bigquery_dq_summary": null,
+    "data_product_verified": false,
+    "entry_links_count": 16,
+    "glossary_verified": false,
+    "mode": "offline"
+  },
+  "nutri_grade_thresholds": {
+    "A": {
+      "color_hex": "#007A33",
+      "label": "Contract Certified (9/9 Rules \u2022 100% SLA Compliant)",
+      "max_critical_failures": 0,
+      "min_score": 99.0
+    },
+    "B": {
+      "color_hex": "#58A618",
+      "label": "Minor Advisory (8/9 Rules \u2022 Zero Critical Breaches)",
+      "max_critical_failures": 0,
+      "min_score": 88.0
+    },
+    "C": {
+      "color_hex": "#F2A900",
+      "label": "Degraded Quality (7/9 Rules \u2022 Steward Review Active)",
+      "max_critical_failures": 1,
+      "min_score": 77.0
+    },
+    "D": {
+      "color_hex": "#E86C00",
+      "label": "SLA Breach (6/9 Rules \u2022 Quarantine Routing Active)",
+      "max_critical_failures": 2,
+      "min_score": 65.0
+    },
+    "E": {
+      "color_hex": "#D92B2B",
+      "label": "Non-Compliant / Unfiltered Stream (\u003c= 5/9 Rules Passed)",
+      "max_critical_failures": 99,
+      "min_score": 0.0
+    }
+  },
+  "profiles": {
+    "curated": {
+      "asset_id": "equity-trades-curated",
+      "dimensions": [
+        {
+          "dimension": "COMPLETENESS",
+          "passed": 4,
+          "score_pct": 100.0,
+          "status": "PASS",
+          "total": 4
+        },
+        {
+          "dimension": "VALIDITY",
+          "passed": 3,
+          "score_pct": 100.0,
+          "status": "PASS",
+          "total": 3
+        },
+        {
+          "dimension": "FRESHNESS",
+          "passed": 1,
+          "score_pct": 100.0,
+          "status": "PASS",
+          "total": 1
+        },
+        {
+          "dimension": "INTEGRITY",
+          "passed": 1,
+          "score_pct": 100.0,
+          "status": "PASS",
+          "total": 1
+        }
+      ],
+      "failed_rules": 0,
+      "nutri_grade": {
+        "color_hex": "#007A33",
+        "critical_failures": 0,
+        "grade": "A",
+        "label": "Contract Certified (9/9 Rules \u2022 100% SLA Compliant)",
+        "score_pct": 100.0
+      },
+      "passed_rules": 9,
+      "rows_evaluated": 10,
+      "rules": [
+        {
+          "column": "trade_id",
+          "description": "Completeness: trade_id primary key must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Completeness: trade_id primary key must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "instrument_code",
+          "description": "Completeness: instrument_code ticker must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Completeness: instrument_code ticker must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "price",
+          "description": "Completeness: execution price must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Completeness: execution price must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "volume",
+          "description": "Completeness: traded share volume must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Completeness: traded share volume must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "price",
+          "description": "Validity: Trade price must be strictly positive (\u003e 0)",
+          "dimension": "VALIDITY",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Validity: Trade price must be strictly positive (\u003e 0)",
+          "rule_type": "Range Check",
+          "status": "PASS"
+        },
+        {
+          "column": "volume",
+          "description": "Validity: Trade volume must be strictly positive (\u003e 0)",
+          "dimension": "VALIDITY",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Validity: Trade volume must be strictly positive (\u003e 0)",
+          "rule_type": "Range Check",
+          "status": "PASS"
+        },
+        {
+          "column": "trade_status",
+          "description": "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED",
+          "dimension": "VALIDITY",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED",
+          "rule_type": "Set",
+          "status": "PASS"
+        },
+        {
+          "column": "trade_timestamp",
+          "description": "Freshness SLA: Trade execution timestamp must be within 2 hours of current time",
+          "dimension": "FRESHNESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Freshness SLA: Trade execution timestamp must be within 2 hours of current time",
+          "rule_type": "Row condition",
+          "status": "PASS"
+        },
+        {
+          "column": null,
+          "description": "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id",
+          "dimension": "INTEGRITY",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 10,
+          "rule_name": "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id",
+          "rule_type": "Row condition",
+          "status": "PASS"
+        }
+      ],
+      "subtitle": "Contract-enforced analytical view (10 certified rows passing all 9 predicates + 2 derived columns)",
+      "table_fqn": "sgx_market_data.equity_trades_curated",
+      "title": "Curated Contract View (Consumer Certified)",
+      "total_rules": 9
+    },
+    "raw": {
+      "asset_id": "equity-trades-raw",
+      "dimensions": [
+        {
+          "dimension": "COMPLETENESS",
+          "passed": 4,
+          "score_pct": 100.0,
+          "status": "PASS",
+          "total": 4
+        },
+        {
+          "dimension": "VALIDITY",
+          "passed": 1,
+          "score_pct": 33.33,
+          "status": "FAIL",
+          "total": 3
+        },
+        {
+          "dimension": "FRESHNESS",
+          "passed": 0,
+          "score_pct": 0.0,
+          "status": "FAIL",
+          "total": 1
+        },
+        {
+          "dimension": "INTEGRITY",
+          "passed": 0,
+          "score_pct": 0.0,
+          "status": "FAIL",
+          "total": 1
+        }
+      ],
+      "failed_rules": 4,
+      "nutri_grade": {
+        "color_hex": "#D92B2B",
+        "critical_failures": 4,
+        "grade": "E",
+        "label": "Non-Compliant / Unfiltered Stream (\u003c= 5/9 Rules Passed)",
+        "score_pct": 55.56
+      },
+      "passed_rules": 5,
+      "rows_evaluated": 14,
+      "rules": [
+        {
+          "column": "trade_id",
+          "description": "Completeness: trade_id primary key must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 14,
+          "rule_name": "Completeness: trade_id primary key must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "instrument_code",
+          "description": "Completeness: instrument_code ticker must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 14,
+          "rule_name": "Completeness: instrument_code ticker must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "price",
+          "description": "Completeness: execution price must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 14,
+          "rule_name": "Completeness: execution price must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "volume",
+          "description": "Completeness: traded share volume must not be null",
+          "dimension": "COMPLETENESS",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 14,
+          "rule_name": "Completeness: traded share volume must not be null",
+          "rule_type": "Non-null",
+          "status": "PASS"
+        },
+        {
+          "column": "price",
+          "description": "Validity: Trade price must be strictly positive (\u003e 0)",
+          "dimension": "VALIDITY",
+          "failed_records": 1,
+          "pass_rate": 92.86,
+          "passed_records": 13,
+          "rule_name": "Validity: Trade price must be strictly positive (\u003e 0)",
+          "rule_type": "Range Check",
+          "status": "FAIL"
+        },
+        {
+          "column": "volume",
+          "description": "Validity: Trade volume must be strictly positive (\u003e 0)",
+          "dimension": "VALIDITY",
+          "failed_records": 1,
+          "pass_rate": 92.86,
+          "passed_records": 13,
+          "rule_name": "Validity: Trade volume must be strictly positive (\u003e 0)",
+          "rule_type": "Range Check",
+          "status": "FAIL"
+        },
+        {
+          "column": "trade_status",
+          "description": "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED",
+          "dimension": "VALIDITY",
+          "failed_records": 0,
+          "pass_rate": 100.0,
+          "passed_records": 14,
+          "rule_name": "Validity: trade_status must be EXECUTED, CANCELLED, or AMENDED",
+          "rule_type": "Set",
+          "status": "PASS"
+        },
+        {
+          "column": "trade_timestamp",
+          "description": "Freshness SLA: Trade execution timestamp must be within 2 hours of current time",
+          "dimension": "FRESHNESS",
+          "failed_records": 1,
+          "pass_rate": 92.86,
+          "passed_records": 13,
+          "rule_name": "Freshness SLA: Trade execution timestamp must be within 2 hours of current time",
+          "rule_type": "Row condition",
+          "status": "FAIL"
+        },
+        {
+          "column": null,
+          "description": "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id",
+          "dimension": "INTEGRITY",
+          "failed_records": 1,
+          "pass_rate": 92.86,
+          "passed_records": 13,
+          "rule_name": "Integrity: Anti-wash trading rule - buyer_id must not equal seller_id",
+          "rule_type": "Row condition",
+          "status": "FAIL"
+        }
+      ],
+      "subtitle": "Unfiltered Pub/Sub Storage Write API ingress table (14 evaluated rows: 10 conforming + 4 injected anomalies)",
+      "table_fqn": "sgx_market_data.equity_trades",
+      "title": "Raw Landing Table (Zero-ETL Stream)",
+      "total_rules": 9
+    }
+  },
+  "quarantine_samples": [
+    {
+      "disposition": "HTTP 400 INVALID_ARGUMENT (Blocked at Ingress)",
+      "gate": "Gate 1 \u2014 Pub/Sub Wire Schema Enforcement",
+      "instrument_code": "D05.SI",
+      "payload_json": "{\n  \"trade_id\": \"TR-MALFORMED-WIRE-001\",\n  \"instrument_code\": \"D05.SI\",\n  \"price\": \"INVALID_PRICE_STRING\",\n  \"volume\": 1000\n}",
+      "rule_triggered": "Avro Schema Contract (schemas/trade_event_v1.avsc)",
+      "summary": "Upstream publisher attempted to send string 'INVALID_PRICE' for numeric field `price` and omitted required `buyer_id`. Blocked before reaching BigQuery.",
+      "trade_id": "TR-MALFORMED-WIRE-001"
+    },
+    {
+      "disposition": "Routed to Dead-Letter Topic (sgx-equity-trades-dlq-topic)",
+      "gate": "Gate 2 \u2014 BigQuery Direct Subscription DLQ Routing",
+      "instrument_code": "Z74.SI",
+      "payload_json": "{\n  \"trade_id\": \"TR-DLQ-OVERFLOW-002\",\n  \"instrument_code\": \"Z74.SI\",\n  \"price\": 31.25,\n  \"volume\": 500,\n  \"buyer_id\": \"BROKER_UOB_01\",\n  \"seller_id\": \"BROKER_DBS_02\",\n  \"trade_timestamp\": \"NOT_A_UTC_TIMESTAMP\",\n  \"trade_status\": \"EXECUTED\"\n}",
+      "rule_triggered": "BigQuery Storage Write API Type / Constraint Mismatch",
+      "summary": "Unparseable timestamp format (`NOT_A_UTC_TIMESTAMP`) rejected by BigQuery table schema and preserved in DLQ with zero data loss.",
+      "trade_id": "TR-DLQ-OVERFLOW-002"
+    },
+    {
+      "disposition": "Excluded from Curated Contract View (Flagged in Raw Table)",
+      "gate": "Gate 3 \u2014 Dataplex Auto DQ \u0026 Curated View Filter",
+      "instrument_code": "U11.SI",
+      "payload_json": "{\n  \"wash_trade_anomaly\": {\n    \"trade_id\": \"TR-VIOL-WASH-004\",\n    \"instrument_code\": \"U11.SI\",\n    \"price\": 32.1,\n    \"volume\": 10000,\n    \"buyer_id\": \"WASH_BROKER_999\",\n    \"seller_id\": \"WASH_BROKER_999\"\n  },\n  \"negative_price_anomaly\": {\n    \"trade_id\": \"TR-VIOL-PRICE-002\",\n    \"instrument_code\": \"Z74.SI\",\n    \"price\": -12.5,\n    \"volume\": 500\n  }\n}",
+      "rule_triggered": "Anti-Wash Trading \u0026 Validity Rules (buyer_id != seller_id, price \u003e 0)",
+      "summary": "Injected synthetic anomalies `TR-VIOL-WASH-004` (self-trade `WASH_BROKER_999`) and `TR-VIOL-PRICE-002` (negative price `-12.5`) fail raw DataScan (55.56% Grade E) and are filtered out of `equity_trades_curated` (100.0% Grade A).",
+      "trade_id": "TR-VIOL-WASH-004"
+    }
+  ]
+}
+  </script>
+  <script>
+    (function() {
+      const snapshotEl = document.getElementById("contract-snapshot-data");
+      const snapshot = JSON.parse(snapshotEl.textContent);
+      let currentLayer = "curated";
+      let currentFilter = "all";
+
+      function initDynamicChrome() {
+        const ls = snapshot.live_status || {};
+        const banner = document.getElementById("mode-status-banner");
+        banner.textContent = ls.banner_text || "OFFLINE SIMULATION MODE";
+        if (ls.mode === "live") {
+          banner.classList.add("live");
+        }
+
+        const cProf = snapshot.profiles.curated;
+        const rProf = snapshot.profiles.raw;
+        document.getElementById("btn-layer-curated").textContent =
+          "Curated Contract View (Grade " + cProf.nutri_grade.grade + " — " +
+          cProf.nutri_grade.score_pct.toFixed(1) + "% • " + cProf.passed_rules + "/" + cProf.total_rules + " Rules)";
+        document.getElementById("btn-layer-raw").textContent =
+          "Raw Landing Table (Grade " + rProf.nutri_grade.grade + " — " +
+          rProf.nutri_grade.score_pct.toFixed(1) + "% • " + rProf.passed_rules + "/" + rProf.total_rules + " Rules)";
+
+        const cc = snapshot.column_counts || {};
+        document.getElementById("filter-all").textContent = "All Columns (" + (cc.all || 0) + ")";
+        document.getElementById("filter-inherited").textContent = "Inherited: Source Dictionary (" + (cc.inherited || 0) + ")";
+        document.getElementById("filter-ai").textContent = "Platform-Derived: Steward Authored (" + (cc.ai_enriched || 0) + ")";
+      }
+
+      function renderHandshake() {
+        const container = document.getElementById("handshake-container");
+        container.textContent = "";
+        const hs = snapshot.handshake || {};
+        const l1 = hs.layer_1_producer || {};
+        const l2 = hs.layer_2_steward || {};
+        const l3 = hs.layer_3_consumers || {};
+
+        const layers = [
+          { cls: "layer-box", role: l1.role || "Layer 1", team: l1.team || "", items: l1.responsibilities || [] },
+          { cls: "layer-box steward", role: l2.role || "Layer 2", team: l2.team || "", items: l2.responsibilities || [] },
+          {
+            cls: "layer-box consumer",
+            role: l3.role || "Layer 3",
+            team: "Approved Downstream Business Teams",
+            items: (l3.teams || []).map(t => t.display_name + " — " + t.purpose + " (" + t.sla_tier + ")")
+          }
+        ];
+
+        layers.forEach(l => {
+          const box = document.createElement("div");
+          box.className = l.cls;
+          const r = document.createElement("div");
+          r.className = "layer-role";
+          r.textContent = l.role;
+          const t = document.createElement("div");
+          t.className = "layer-team";
+          t.textContent = l.team;
+          const ul = document.createElement("ul");
+          ul.className = "layer-list";
+          l.items.forEach(itemText => {
+            const li = document.createElement("li");
+            li.textContent = itemText;
+            ul.appendChild(li);
+          });
+          box.appendChild(r);
+          box.appendChild(t);
+          box.appendChild(ul);
+          container.appendChild(box);
+        });
+      }
+
+      function renderScorecard() {
+        const prof = snapshot.profiles[currentLayer];
+        const ng = prof.nutri_grade;
+        document.getElementById("active-asset-title").textContent = prof.title;
+        document.getElementById("active-asset-fqn").textContent =
+          prof.table_fqn + " (" + prof.rows_evaluated + " evaluated rows)";
+        document.getElementById("active-grade-score").textContent =
+          "Grade " + ng.grade + " — " + ng.score_pct.toFixed(2) + "% (" + prof.passed_rules + "/" + prof.total_rules + " Rules Passed)";
+        document.getElementById("active-grade-score").style.color = ng.color_hex;
+        document.getElementById("active-grade-label").textContent = ng.label;
+
+        ["A", "B", "C", "D", "E"].forEach(letter => {
+          const el = document.getElementById("grade-pill-" + letter);
+          if (letter === ng.grade) {
+            el.classList.add("active");
+          } else {
+            el.classList.remove("active");
+          }
+        });
+
+        const dimContainer = document.getElementById("dimensions-container");
+        dimContainer.textContent = "";
+        (prof.dimensions || []).forEach(d => {
+          const card = document.createElement("div");
+          card.className = "dim-card";
+          const hdr = document.createElement("div");
+          hdr.className = "dim-header";
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = d.dimension;
+          const valSpan = document.createElement("span");
+          valSpan.textContent = d.score_pct.toFixed(1) + "% (" + d.passed + "/" + d.total + ")";
+          valSpan.style.color = d.status === "PASS" ? "#007a33" : "#d92b2b";
+          hdr.appendChild(nameSpan);
+          hdr.appendChild(valSpan);
+
+          const track = document.createElement("div");
+          track.className = "progress-track";
+          const fill = document.createElement("div");
+          fill.className = "progress-fill";
+          fill.style.width = Math.max(4, d.score_pct) + "%";
+          fill.style.background = d.status === "PASS" ? "#007a33" : "#d92b2b";
+          track.appendChild(fill);
+
+          card.appendChild(hdr);
+          card.appendChild(track);
+          dimContainer.appendChild(card);
+        });
+      }
+
+      function renderColumns() {
+        const tbody = document.getElementById("column-table-body");
+        tbody.textContent = "";
+        const activeGrade = snapshot.profiles[currentLayer].nutri_grade.grade;
+        const cols = (snapshot.columns || []).filter(c => {
+          if (currentFilter === "all") return true;
+          return c.provenance_category === currentFilter;
+        });
+
+        cols.forEach(c => {
+          const tr = document.createElement("tr");
+
+          const td1 = document.createElement("td");
+          const strong = document.createElement("strong");
+          strong.style.fontFamily = "monospace";
+          strong.textContent = c.column_name;
+          const typeDiv = document.createElement("div");
+          typeDiv.style.fontSize = "11px";
+          typeDiv.style.color = "#4b5563";
+          typeDiv.textContent = c.physical_type + (c.required ? " • REQUIRED" : " • DERIVED");
+          td1.appendChild(strong);
+          td1.appendChild(typeDiv);
+
+          const td2 = document.createElement("td");
+          const badge = document.createElement("span");
+          badge.className = c.provenance_category === "inherited" ? "badge-inherited" : "badge-ai";
+          badge.textContent = c.provenance_badge;
+          const ownerDiv = document.createElement("div");
+          ownerDiv.style.fontSize = "11px";
+          ownerDiv.style.color = "#4b5563";
+          ownerDiv.style.marginTop = "4px";
+          ownerDiv.textContent = c.governance_owner;
+          td2.appendChild(badge);
+          td2.appendChild(ownerDiv);
+
+          const td3 = document.createElement("td");
+          const refStrong = document.createElement("div");
+          refStrong.style.fontWeight = "600";
+          refStrong.textContent = c.source_spec_ref;
+          const pathCode = document.createElement("div");
+          pathCode.style.fontFamily = "monospace";
+          pathCode.style.fontSize = "11px";
+          pathCode.style.color = "#1a73e8";
+          pathCode.textContent = c.glossary_term_id
+            ? "Term: " + c.glossary_term_path + " (" + c.entry_link_curated + ")"
+            : "SQL: " + c.sql_expression;
+          td3.appendChild(refStrong);
+          td3.appendChild(pathCode);
+
+          const td4 = document.createElement("td");
+          td4.textContent = c.description;
+
+          const td5 = document.createElement("td");
+          const statusSpan = document.createElement("span");
+          statusSpan.style.fontWeight = "700";
+          if (currentLayer === "curated") {
+            const curPct = c.curated_score_pct !== null ? c.curated_score_pct : 100.0;
+            const curWord = curPct >= 100.0 ? "PASS" : "WARN";
+            statusSpan.style.color = curPct >= 100.0 ? "#007a33" : "#d92b2b";
+            statusSpan.textContent = curPct.toFixed(1) + "% " + curWord + " (Grade " + activeGrade + " Evaluated)";
+          } else {
+            if (c.raw_score_pct === null) {
+              statusSpan.style.color = "#6b7280";
+              statusSpan.textContent = "N/A (Computed in Curated View)";
+            } else if (c.raw_score_pct < 100) {
+              statusSpan.style.color = "#d92b2b";
+              statusSpan.textContent = c.raw_score_pct.toFixed(0) + "% — " + c.raw_status_detail;
+            } else {
+              statusSpan.style.color = "#007a33";
+              statusSpan.textContent = "100.0% PASS";
+            }
+          }
+          td5.appendChild(statusSpan);
+
+          tr.appendChild(td1);
+          tr.appendChild(td2);
+          tr.appendChild(td3);
+          tr.appendChild(td4);
+          tr.appendChild(td5);
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderQuarantine() {
+        const qContainer = document.getElementById("quarantine-container");
+        qContainer.textContent = "";
+        (snapshot.quarantine_samples || []).forEach(q => {
+          const box = document.createElement("div");
+          box.className = "q-box";
+          const g = document.createElement("div");
+          g.style.fontWeight = "700";
+          g.style.fontSize = "13px";
+          g.style.color = "#991b1b";
+          g.textContent = q.gate;
+          const disp = document.createElement("div");
+          disp.style.fontSize = "11.5px";
+          disp.style.fontWeight = "600";
+          disp.style.marginTop = "2px";
+          disp.textContent = q.disposition;
+          const desc = document.createElement("p");
+          desc.style.fontSize = "12px";
+          desc.style.margin = "6px 0";
+          desc.textContent = q.summary;
+          const pre = document.createElement("pre");
+          pre.textContent = q.payload_json;
+          box.appendChild(g);
+          box.appendChild(disp);
+          box.appendChild(desc);
+          box.appendChild(pre);
+          qContainer.appendChild(box);
+        });
+      }
+
+      function updateAccessModalPayload() {
+        const grp = document.getElementById("access-group-select").value;
+        const meta = snapshot.contract_metadata || {};
+        const dpId = (snapshot.data_product || {}).id || "equity-market-trades";
+        const agSpec = (snapshot.access_groups || {})[grp] || {};
+        const payload = {
+          dataProductResource: "projects/<PROJECT_NUMBER>/locations/" + meta.location + "/dataProducts/" + dpId,
+          dataAssetResource: "projects/<PROJECT_NUMBER>/locations/" + meta.location + "/dataProducts/" + dpId + "/dataAssets/equity-trades-curated",
+          linkedBigQueryResource: "//bigquery.googleapis.com/projects/<PROJECT_ID>/datasets/" + meta.dataset + "/tables/" + meta.curated_view,
+          accessGroupConfig: {
+            accessGroupId: grp,
+            principalGoogleGroup: agSpec.default_principal_group || (grp + "-consumers@example.com"),
+            iamRoles: agSpec.iam_roles || ["roles/bigquery.dataViewer"]
+          }
+        };
+        document.getElementById("access-payload-preview").textContent = JSON.stringify(payload, null, 2);
+      }
+
+      document.getElementById("btn-layer-curated").addEventListener("click", function() {
+        currentLayer = "curated";
+        this.classList.add("active");
+        document.getElementById("btn-layer-raw").classList.remove("active");
+        renderScorecard();
+        renderColumns();
+      });
+      document.getElementById("btn-layer-raw").addEventListener("click", function() {
+        currentLayer = "raw";
+        this.classList.add("active");
+        document.getElementById("btn-layer-curated").classList.remove("active");
+        renderScorecard();
+        renderColumns();
+      });
+
+      const filterMap = {
+        "filter-all": "all",
+        "filter-inherited": "inherited",
+        "filter-ai": "ai_enriched"
+      };
+      Object.keys(filterMap).forEach(btnId => {
+        document.getElementById(btnId).addEventListener("click", function() {
+          currentFilter = filterMap[btnId];
+          Object.keys(filterMap).forEach(id => document.getElementById(id).classList.remove("active"));
+          this.classList.add("active");
+          renderColumns();
+        });
+      });
+
+      document.getElementById("open-access-modal-btn").addEventListener("click", function() {
+        updateAccessModalPayload();
+        document.getElementById("access-modal").classList.add("open");
+      });
+      document.getElementById("close-access-modal-btn").addEventListener("click", function() {
+        document.getElementById("access-modal").classList.remove("open");
+      });
+      document.getElementById("access-group-select").addEventListener("change", updateAccessModalPayload);
+
+      initDynamicChrome();
+      renderHandshake();
+      renderScorecard();
+      renderColumns();
+      renderQuarantine();
+    })();
+  </script>
+</body>
+</html>

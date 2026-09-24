@@ -1,0 +1,134 @@
+# ==============================================================================
+# Dataplex Data Product, Access Groups & Contract Cadence Specification
+# ==============================================================================
+data_product:
+  id: equity-market-trades
+  display_name: "Equities Market Execution Trades (Contract Product)"
+  description: >-
+    Governed internal warehouse Data Product packaging real-time Exchange
+    Matching Engine trade executions. Enforces the 3-layer data contract
+    handshake between the Upstream Source Producer, the Enterprise Data
+    Platform Steward, and Approved Business Consumers.
+  labels:
+    domain: equities-market
+    contract_version: v1-0-0
+    criticality_tier: tier-1-critical
+    quality_grade_target: grade-a
+
+handshake:
+  layer_1_producer:
+    role: "Upstream Source Producer"
+    team: "Exchange Order Matching Engine Platform"
+    system_id: "matching-engine-fix-ouch"
+    responsibilities:
+      - "Publishes Avro-encoded execution events adhering to schemas/trade_event_v1.avsc"
+      - "Owns the canonical 8-column Upstream Source Dictionary in Dataplex Business Glossary"
+      - "Zero unannounced breaking schema changes (enforced by Pub/Sub Topic Schema Gate 1)"
+  layer_2_steward:
+    role: "Platform Data Steward"
+    team: "Enterprise Data Platform & Warehouse Engineering"
+    system_id: "enterprise-warehouse-platform"
+    responsibilities:
+      - "Operates zero-ETL Pub/Sub-to-BigQuery ingestion and DLQ quarantine routing (Gate 2)"
+      - "Maintains curated contract view (equity_trades_curated) and platform-derived columns"
+      - "Executes automated 9-rule Dataplex Data Quality scans and publishes A-E quality grades (Gate 3)"
+  layer_3_consumers:
+    role: "Approved Business Consumers"
+    teams:
+      - id: market-surveillance
+        display_name: "Market Surveillance & Anti-Wash-Trade Analytics"
+        purpose: "Wash-trade surveillance (buyer_id != seller_id) and anomaly forensics"
+        sla_tier: "2-Hour Contract Freshness SLA (MAS TRM Section 8)"
+      - id: clearing-risk
+        display_name: "Clearing House & Settlement Risk"
+        purpose: "Clearing member exposure and gross notional settlement valuation"
+        sla_tier: "2-Hour Contract Freshness SLA (99.95% availability)"
+
+access_groups:
+  market-surveillance:
+    id: market-surveillance
+    display_name: "Market Surveillance & Regulatory Compliance"
+    description: "Read access (roles/bigquery.dataViewer) to curated contract view and raw forensic landing table."
+    default_principal_group: "market-surveillance-consumers@example.com"
+    iam_roles:
+      - "roles/bigquery.dataViewer"
+  clearing-risk:
+    id: clearing-risk
+    display_name: "Clearing & Settlement Risk Analysts"
+    description: "Read access (roles/bigquery.dataViewer) to curated Grade-A trade execution contract view."
+    default_principal_group: "clearing-risk-consumers@example.com"
+    iam_roles:
+      - "roles/bigquery.dataViewer"
+
+assets:
+  - id: equity-trades-curated
+    table_suffix: "_curated"
+    display_name: "Curated Equity Trades Contract View (Grade A)"
+    layer: "curated_contract_view"
+    target_grade: "A"
+    access_group_roles:
+      market-surveillance:
+        - "roles/bigquery.dataViewer"
+      clearing-risk:
+        - "roles/bigquery.dataViewer"
+    description: >-
+      Contract-verified BigQuery view enforcing all 9 ODCS data quality rules
+      (including the rolling 2-hour freshness window and anti-wash-trade
+      integrity check) plus 2 platform-derived analytical columns
+      (notional_value, wash_trade_flag).
+  - id: equity-trades-raw
+    table_suffix: ""
+    display_name: "Raw Equity Trades Landing Table (Forensic / Audit)"
+    layer: "raw_landing_table"
+    target_grade: "E"
+    access_group_roles:
+      market-surveillance:
+        - "roles/bigquery.dataViewer"
+    description: >-
+      Unfiltered zero-ETL landing table receiving direct Pub/Sub Storage Write API
+      streams. Preserves anomalous rows (wash trades, negative prices, zero volumes,
+      stale timestamps) for forensic inspection and Dataplex Data Quality evaluation.
+
+refresh_cadence_aspect:
+  # Note: Dataplex system aspect 'projects/dataplex-types/locations/global/aspectTypes/refresh-cadence'
+  # supports enum values: Daily, Weekly, Monthly, Quarterly, Half Yearly, Yearly (Daily is the highest-frequency enum).
+  # The intra-day <= 2h freshness threshold is enforced via the custom 'data-contract-spec' aspect and Curated View SQL.
+  aspect_type: "projects/dataplex-types/locations/global/aspectTypes/refresh-cadence"
+  aspect_key: "dataplex-types.global.refresh-cadence"
+  data:
+    frequency: "Daily"
+    refreshTime: "09:00 SGT"
+
+# 5-Tier Contract Quality Grade Scale (A-E Nutri-Score / Extended Nutri-Grade Style)
+# Calibrated to the 9-rule Dataplex DQ specification so every grade A-E is reachable:
+#   9/9 rules passed (100.00%, 0 critical failures) -> Grade A
+#   8/9 rules passed ( 88.89%, 0 critical failures) -> Grade B
+#   7/9 rules passed ( 77.78%, <=1 critical failure) -> Grade C
+#   6/9 rules passed ( 66.67%, <=2 critical failures) -> Grade D
+#  <=5/9 rules passed (<=55.56% or >=3 critical failures) -> Grade E
+nutri_grade_thresholds:
+  A:
+    min_score: 99.0
+    max_critical_failures: 0
+    color_hex: "#007A33"
+    label: "Contract Certified (9/9 Rules • 100% SLA Compliant)"
+  B:
+    min_score: 88.0
+    max_critical_failures: 0
+    color_hex: "#58A618"
+    label: "Minor Advisory (8/9 Rules • Zero Critical Breaches)"
+  C:
+    min_score: 77.0
+    max_critical_failures: 1
+    color_hex: "#F2A900"
+    label: "Degraded Quality (7/9 Rules • Steward Review Active)"
+  D:
+    min_score: 65.0
+    max_critical_failures: 2
+    color_hex: "#E86C00"
+    label: "SLA Breach (6/9 Rules • Quarantine Routing Active)"
+  E:
+    min_score: 0.0
+    max_critical_failures: 99
+    color_hex: "#D92B2B"
+    label: "Non-Compliant / Unfiltered Stream (<= 5/9 Rules Passed)"

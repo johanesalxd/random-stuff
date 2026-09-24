@@ -268,6 +268,36 @@ bash tests/run_e2e_tests.sh --all
 python3 -m unittest discover -s tests -p "*.py"
 ```
 
+## 🏛️ Native Dataplex Knowledge Catalog Governance (Glossary, EntryLinks & Data Product)
+
+Provision the out-of-the-box Google Cloud Dataplex Knowledge Catalog experience—binding the **8 canonical Upstream Source Dictionary (`v4.2`)** terms via column-level `EntryLinks` across both the raw table and the **Curated Contract View (`equity_trades_curated`)**, alongside a packaged **Dataplex Data Product (`equity-market-trades`)**:
+
+```bash
+# Dry-run the 33-step Dataplex Catalog REST plan offline (zero credentials needed)
+python3 scripts/provision_catalog.py apply --dry-run
+
+# Provision live Curated View, Business Glossary, 16 Column EntryLinks & Data Product
+python3 scripts/provision_catalog.py apply --project-id=my-project
+
+# Or run as part of setup.sh / cleanup.sh
+./setup.sh --project-id=my-project --with-catalog
+./cleanup.sh --project-id=my-project --with-catalog --force
+```
+
+---
+
+## 🏷️ Business Data Contract & Nutri-Grade (`A–E`) Portal
+
+For business consumers and platform stewards who want a single-pane executive scorecard showing the **3-Layer Internal Handshake**, **Nutri-Grade (`A–E`) Quality Badge** (comparing `Curated Contract View — Grade A 100.0%` vs. `Raw Landing Table — Grade E 55.6%`), and **Column Provenance Explorer** (`Inherited: Source Dictionary (8)` vs. `AI-Enriched: Platform Derived (2)`):
+
+```bash
+# Export standalone zero-dependency HTML portal (portal/index.html)
+python3 scripts/run_contract_portal.py export
+
+# Serve interactive local portal on http://127.0.0.1:8765
+python3 scripts/run_contract_portal.py serve --port 8765
+```
+
 ---
 
 ## 🎤 Speaker & Presentation Guide
@@ -277,6 +307,7 @@ Delivering this demo to engineering leadership or regulatory stakeholders? Check
 * Verbatim speaking scripts
 * Step-by-step console click paths and terminal commands
 * Anticipated regulatory and technical Q&A (FINRA, SEC, MAS TRM Section 8)
+
 
 ---
 

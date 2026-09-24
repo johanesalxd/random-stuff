@@ -20,6 +20,7 @@ BQ_SUB_ID="sgx-equity-trades-bq-sub"
 DATASCAN_ID="sgx-equity-trades-dq"
 ASPECT_TYPE_ID="data-contract-spec"
 FORCE=false
+WITH_CATALOG=false
 
 show_help() {
   cat <<EOF
@@ -39,6 +40,7 @@ Options:
   --sub=SUB               BigQuery direct subscription ID (default: sgx-equity-trades-bq-sub)
   --datascan=SCAN         Dataplex Data Quality Scan ID (default: sgx-equity-trades-dq)
   --aspect-type=ASPECT    Dataplex Aspect Type ID (default: data-contract-spec)
+  --with-catalog          Also delete Dataplex Business Glossary, EntryLinks, and Data Product
   --force                 Non-interactive mode; bypass [y/N] confirmation prompt
   -h, --help              Show this help message and exit
 EOF
@@ -69,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --datascan) DATASCAN_ID="$2"; shift ;;
     --aspect-type=*) ASPECT_TYPE_ID="${1#*=}" ;;
     --aspect-type) ASPECT_TYPE_ID="$2"; shift ;;
+    --with-catalog) WITH_CATALOG=true ;;
     --force) FORCE=true ;;
     -h|--help) show_help; exit 0 ;;
     *) echo "[ERROR] Unknown flag: $1" >&2; show_help; exit 1 ;;
@@ -109,6 +112,11 @@ if [[ "${FORCE}" != "true" ]]; then
     echo "Cleanup cancelled by user."
     exit 0
   fi
+fi
+
+if [[ "${WITH_CATALOG}" == "true" ]]; then
+  echo -e "\n>> [Catalog Teardown] Deleting Dataplex Business Glossary, EntryLinks & Data Product..."
+  python3 scripts/provision_catalog.py teardown --project-id="${PROJECT_ID}" --location="${REGION}" || true
 fi
 
 # Step 1: Dataplex DataScan Teardown
