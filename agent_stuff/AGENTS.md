@@ -15,6 +15,7 @@ Portable operating contract for coding agents. For code creation, modification, 
 
 - Make the smallest coherent change that satisfies the task. Avoid incidental refactors, dependency additions, formatting churn, or toolchain migrations.
 - Use a brief plan when complexity, risk, or multiple dependent steps warrant one; do not add ceremony to simple work.
+- Treat workflow templates and skills as execution methods, not authority to expand task requirements, testing scope, or approval gates. Apply the risk-proportionate testing policy in `CODE_STANDARDS.md`.
 - Delegate, parallelize, or isolate work in branches/worktrees only when scale, independence, or blast radius justifies it.
 - Investigate failures before changing direction. Continue safe diagnosis and verification unless blocked, unsafe, or outside scope.
 - Ask only when ambiguity materially affects correctness, scope, safety, cost, or external consequences.

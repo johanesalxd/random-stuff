@@ -55,6 +55,8 @@ Google style is the north star, not a reason to fight repository tooling or curr
 
 ### Testing
 
+- Keep testing effort proportional to the change and risk. TDD is an available method, not a universal gate unless explicitly required by the user or repository; do not discard sound implementation solely to recreate test-first ceremony.
+- Run relevant existing checks; for bug fixes, prefer a focused regression test that reproduces the defect. Add tests for distinct required behaviors or credible failure modes, not imagined graders, arbitrary test counts, or speculative features.
 - Test observable contracts, meaningful decisions, failure paths, and boundaries—not coverage numbers or framework internals.
 - Choose unit, integration, contract, end-to-end, property, and visual tests according to risk.
 - Prefer real values, fakes, or lightweight implementations. Mock external or nondeterministic boundaries when useful.
