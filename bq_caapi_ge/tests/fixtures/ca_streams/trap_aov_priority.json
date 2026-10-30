@@ -1,0 +1,149 @@
+{
+  "prompt_id": "trap_aov_priority",
+  "question": "What is the average order value for priority segment customers?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "The average order value for customers in the **priority** segment is **$267.67 USD** across 43 orders totaling $11,510 USD."
+        ]
+      }
+    },
+    {
+      "data": {
+        "query": {
+          "datasources": [
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "customers"
+              }
+            },
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "orders"
+              }
+            }
+          ],
+          "question": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "data": {
+        "generated_sql": "SELECT ROUND(AVG(orders.order_amount_usd), 2) AS avg_order_value_usd,\n       COUNT(orders.order_id) AS total_orders,\n       SUM(orders.order_amount_usd) AS total_order_amount_usd\nFROM `example-project.example_dataset.orders` AS orders\nINNER JOIN `example-project.example_dataset.customers` AS customers ON orders.customer_id = customers.customer_id\nWHERE LOWER(customers.segment) = 'priority'"
+      }
+    },
+    {
+      "data": {}
+    },
+    {
+      "data": {
+        "result": {
+          "data": [
+            {
+              "total_orders": 43.0,
+              "total_order_amount_usd": 11510.0,
+              "avg_order_value_usd": 267.67
+            }
+          ],
+          "name": "avg_order_value_priority_customers",
+          "schema": {
+            "fields": [
+              {
+                "name": "avg_order_value_usd",
+                "type_": "FLOAT",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              },
+              {
+                "name": "total_orders",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              },
+              {
+                "name": "total_order_amount_usd",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              }
+            ],
+            "description": "",
+            "synonyms": [],
+            "tags": [],
+            "display_name": "",
+            "filters": []
+          }
+        }
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "Compare the average order value across all customer segments.",
+          "Break down priority segment orders by order status and fiscal quarter.",
+          "Find the top selling SKUs among priority segment customers."
+        ]
+      }
+    }
+  ]
+}

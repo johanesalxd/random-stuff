@@ -2,11 +2,14 @@
 
 ## Status
 
-Status: **proposed; implementation has not started**.
+Status: **Historical Design Plan — Implemented (with noted implementation deviations)**.
 
-This document is the review checkpoint for simplifying the
-`semantic_analytics` workflow. No implementation should begin until this plan is
-approved.
+This document serves as the historical architecture design plan for the simplified
+`semantic_analytics` workflow. The implementation is complete across `bq_caapi_ge/semantic/`,
+with the following notable pragmatic deviations from the early draft plan:
+- Retained modular helpers `build_semantic_context` and `load_contract` for deterministic runtime context preparation.
+- Preserved deterministic `now=` test hooks across catalog metadata builders.
+- Maintained `GOOGLE_GENAI_USE_ENTERPRISE` support alongside Vertex AI configuration.
 
 ## Objective
 
@@ -757,22 +760,14 @@ Restoration should respond to observed failures, not anticipated complexity.
 
 These risks are explicit and acceptable for the local semantic-first experiment.
 
-## Review Checkpoint
+## Implementation Summary & Retained Scope
 
-Implementation must not begin until the user approves this document. Review should
-confirm:
-
-- The simplified workflow is the intended first iteration.
-- The removal list is acceptable.
-- `LookupContext` belongs in V2.
-- Gemini selector plus Claude Sonnet 5 SQL generation is correct.
-- One-shot execution is acceptable.
-- The retained basic `WriteMode.BLOCKED` behavior is acceptable.
-- Dataset-wide CA fallback removal is acceptable.
-- Deployment and evaluation remain deferred.
-
-After approval, implementation should proceed in small verified slices rather than
-as one large rewrite.
+The design plan has been implemented across `bq_caapi_ge/semantic/`, with the deviations noted above:
+- The simplified workflow operates as the implemented local experimental iteration.
+- `LookupContext` is fully integrated via Knowledge Catalog.
+- Dual-model orchestration uses Gemini selector + Claude Sonnet 5 SQL generation.
+- One-shot execution with `WriteMode.BLOCKED` is active.
+- Grounding provenance is surfaced cleanly in final response events.
 
 ## Official References
 
@@ -781,6 +776,6 @@ as one large rewrite.
 - [ADK BigQuery integration](https://adk.dev/integrations/bigquery/)
 - [Claude Sonnet 5](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude/sonnet-5)
 - [Claude Opus 4.8](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude/opus-4-8)
-- [Knowledge Catalog search](https://docs.cloud.google.com/dataplex/docs/search-assets)
-- [Knowledge Catalog context retrieval](https://docs.cloud.google.com/dataplex/docs/retrieve-data-context)
+- [Knowledge Catalog search](https://docs.cloud.google.com/knowledge-catalog/docs/search-assets)
+- [Knowledge Catalog context retrieval](https://docs.cloud.google.com/knowledge-catalog/docs/retrieve-data-context)
 - [BigQuery query execution](https://docs.cloud.google.com/bigquery/docs/running-queries)

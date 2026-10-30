@@ -446,28 +446,31 @@ class KnowledgeCatalogAdapter:
         if not allowed_projects and not allowed_datasets:
             return ()
         seen: dict[str, CatalogSource] = {}
-        for project in _distinct_allowed_projects(
-            allowed_projects,
-            allowed_datasets,
-        ):
-            for source, entry_name in self._search_entries(
-                question=question,
-                scope_project=project,
-                semantic_search=True,
+        try:
+            for project in _distinct_allowed_projects(
+                allowed_projects,
+                allowed_datasets,
             ):
-                if not is_source_in_scope(
-                    source,
-                    allowed_projects=allowed_projects,
-                    allowed_datasets=allowed_datasets,
+                for source, entry_name in self._search_entries(
+                    question=question,
+                    scope_project=project,
+                    semantic_search=True,
                 ):
-                    continue
-                seen.setdefault(source.qualified_name, source)
-                if entry_name:
-                    self._entry_names[source.qualified_name] = entry_name
+                    if not is_source_in_scope(
+                        source,
+                        allowed_projects=allowed_projects,
+                        allowed_datasets=allowed_datasets,
+                    ):
+                        continue
+                    seen.setdefault(source.qualified_name, source)
+                    if entry_name:
+                        self._entry_names[source.qualified_name] = entry_name
+                    if len(seen) >= _MAX_TABLES:
+                        break
                 if len(seen) >= _MAX_TABLES:
                     break
-            if len(seen) >= _MAX_TABLES:
-                break
+        except _dataplex_errors() as error:
+            raise CatalogAccessError(str(error)) from error
         sources = tuple(seen[name] for name in sorted(seen))
         return self.fetch_table_metadata(sources)
 
@@ -489,7 +492,10 @@ class KnowledgeCatalogAdapter:
                 grouped.setdefault(location, []).append(entry_name)
 
         contexts: list[dict[str, Any]] = []
-        client = self._get_client()
+        try:
+            client = self._get_client()
+        except _dataplex_errors():
+            return ()
         for location, resource_names in sorted(grouped.items()):
             for offset in range(0, len(resource_names), _MAX_CONTEXT_RESOURCES):
                 resources = resource_names[offset : offset + _MAX_CONTEXT_RESOURCES]

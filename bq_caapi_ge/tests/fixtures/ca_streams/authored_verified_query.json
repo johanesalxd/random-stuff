@@ -1,0 +1,112 @@
+{
+  "prompt_id": "verified_completed_orders",
+  "question": "How many completed orders do we have?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "Matched a verified query",
+          "SELECT COUNT(DISTINCT order_id) AS completed_order_count\nFROM `example-project.example_dataset.orders`\nWHERE status = 'completed'"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "Running a query",
+          "SELECT COUNT(DISTINCT order_id) AS completed_order_count\nFROM `example-project.example_dataset.orders`\nWHERE status = 'completed'"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "data": {
+        "query": {
+          "datasources": [
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "orders"
+              }
+            }
+          ],
+          "question": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "data": {}
+    },
+    {
+      "data": {
+        "result": {
+          "data": [
+            {
+              "completed_order_count": 116.0
+            }
+          ],
+          "name": "verified_query",
+          "schema": {
+            "fields": [
+              {
+                "name": "completed_order_count",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              }
+            ],
+            "description": "",
+            "synonyms": [],
+            "tags": [],
+            "display_name": "",
+            "filters": []
+          }
+        }
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "There are **116** completed orders."
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "Group completed orders by month to show the trend over time.",
+          "Calculate the total revenue generated from completed orders."
+        ]
+      }
+    }
+  ]
+}

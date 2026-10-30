@@ -1,8 +1,20 @@
-import os
-import subprocess
+from __future__ import annotations
+
 import json
 import logging
-from dotenv import load_dotenv
+import os
+from pathlib import Path
+import sys
+import urllib.error
+import urllib.request
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from dotenv import load_dotenv  # noqa: E402
+
+from config.gcp_auth import get_gcloud_or_adc_access_token  # noqa: E402
 
 load_dotenv()
 
@@ -11,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+GE_LOCATION = os.getenv("GEMINI_APP_LOCATION", "global")
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
@@ -39,12 +51,12 @@ def create_auth_resource(auth_id: str) -> None:
     # Authorization resources are addressed by project number so the reference
     # built by register_agents.py resolves to the resource created here.
     url = (
-        f"https://{LOCATION}-discoveryengine.googleapis.com/v1alpha/"
-        f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations?authorizationId={auth_id}"
+        f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha/"
+        f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations?authorizationId={auth_id}"
     )
 
     payload = {
-        "name": f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{auth_id}",
+        "name": f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations/{auth_id}",
         "serverSideOauth2": {
             "clientId": OAUTH_CLIENT_ID,
             "clientSecret": OAUTH_CLIENT_SECRET,
@@ -55,38 +67,36 @@ def create_auth_resource(auth_id: str) -> None:
         },
     }
 
-    try:
-        token = (
-            subprocess.check_output(["gcloud", "auth", "print-access-token"])
-            .decode()
-            .strip()
-        )
-    except Exception as e:
-        logger.error("Failed to get token: %s", e)
-        return
+    token = get_gcloud_or_adc_access_token()
 
-    cmd = [
-        "curl",
-        "-s",
-        "-X",
-        "POST",
-        "-H",
-        f"Authorization: Bearer {token}",
-        "-H",
-        "Content-Type: application/json",
-        "-H",
-        f"X-Goog-User-Project: {PROJECT_ID}",
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    if PROJECT_ID:
+        headers["X-Goog-User-Project"] = PROJECT_ID
+
+    req = urllib.request.Request(
         url,
-        "-d",
-        json.dumps(payload),
-    ]
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    if result.returncode == 0:
-        logger.info("Response for %s: %s", auth_id, result.stdout)
-    else:
-        logger.error("Failed to create %s: %s", auth_id, result.stderr)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp_body = resp.read().decode("utf-8")
+            logger.info("Response for %s: %s", auth_id, resp_body)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        try:
+            err_json = json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message", err_body)
+        except json.JSONDecodeError:
+            err_msg = err_body
+        logger.error("Failed to create %s (%s): %s", auth_id, e.code, err_msg)
+    except Exception as e:
+        logger.error("Failed to create %s: %s", auth_id, e)
 
 
 if __name__ == "__main__":

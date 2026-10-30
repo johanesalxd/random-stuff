@@ -21,11 +21,18 @@ Requirements:
 import base64
 import json
 import os
-import subprocess
+from pathlib import Path
+import sys
 
-import altair as alt
 import requests
 from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config.ca_locations import ca_api_endpoint  # noqa: E402
+from config.gcp_auth import get_gcloud_or_adc_access_token  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -37,16 +44,7 @@ LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 DATA_AGENT_NAME = (
     f"projects/{PROJECT_ID}/locations/{LOCATION}/dataAgents/{DATA_AGENT_ID}"
 )
-BASE_URL = "https://geminidataanalytics.googleapis.com/v1beta"
-
-
-def get_access_token() -> str:
-    """Get access token from gcloud."""
-    return (
-        subprocess.check_output(["gcloud", "auth", "print-access-token"])
-        .decode()
-        .strip()
-    )
+BASE_URL = f"https://{ca_api_endpoint(LOCATION)}/v1beta"
 
 
 def render_vega_chart(vega_config: dict, output_path: str = "chart.png"):
@@ -59,6 +57,13 @@ def render_vega_chart(vega_config: dict, output_path: str = "chart.png"):
     Returns:
         The Altair chart object.
     """
+    try:
+        import altair as alt
+    except ImportError as e:
+        raise ImportError(
+            "Install altair (e.g. `uv run --with altair python advanced/docs/examples/chart_with_ca_api.py`) to render Vega-Lite specs locally."
+        ) from e
+
     print("\n=== Vega-Lite Spec ===")
     print(json.dumps(vega_config, indent=2)[:2000])
     if len(json.dumps(vega_config)) > 2000:
@@ -83,13 +88,13 @@ def chat_with_chart_rest(prompt: str):
     print(f"Data Agent: {DATA_AGENT_NAME}")
     print(f"Prompt: {prompt}")
 
-    token = get_access_token()
+    token = get_gcloud_or_adc_access_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
-    # Chat endpoint (same as ADK uses)
+    # Chat endpoint (regional v1beta endpoint)
     chat_url = f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}:chat"
 
     payload = {
@@ -136,6 +141,7 @@ def chat_with_chart_rest(prompt: str):
             # Check for errors
             if "error" in data_json:
                 print(f"[ERROR] {data_json['error']}")
+                accumulator = ""
                 continue
 
             if "systemMessage" not in data_json:
@@ -216,20 +222,23 @@ def chat_with_chart_rest(prompt: str):
 
 def main():
     """Run the chart generation test."""
-    # Test prompts that should trigger chart generation
-    test_prompts = [
-        "Create a bar chart showing the number of orders by status",
-        "Show me a bar graph of total orders per month",
-        "Visualize the distribution of order statuses as a pie chart",
-    ]
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Call the Conversational Analytics REST API and render Vega-Lite charts."
+    )
+    parser.add_argument(
+        "--prompt",
+        default="Create a bar chart showing the number of orders by status",
+        help="Prompt to send to the Conversational Analytics data agent.",
+    )
+    args = parser.parse_args()
 
     print("=" * 60)
     print("CA API Chart Generation Test (REST)")
     print("=" * 60)
 
-    # Try the first prompt
-    prompt = test_prompts[0]
-    messages = chat_with_chart_rest(prompt)
+    messages = chat_with_chart_rest(args.prompt)
 
     print("\n=== Summary ===")
     print(f"Total messages received: {len(messages)}")

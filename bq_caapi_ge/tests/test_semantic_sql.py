@@ -7,9 +7,10 @@ from pathlib import Path
 import sys
 
 import pytest
-from pydantic import Field
 
 pytest.importorskip("google.adk")
+
+from pydantic import Field  # noqa: E402
 
 from google.adk.agents import LlmAgent  # noqa: E402
 from google.adk.events.event import Event  # noqa: E402

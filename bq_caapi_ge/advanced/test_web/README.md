@@ -119,9 +119,13 @@ Open http://localhost:8080 in your browser.
 ## How It Works
 
 1. Login with Google OAuth; the callback validates the OAuth `state` before
-   exchanging the authorization code.
+   exchanging the authorization code. During flow initialization, the transient
+   PKCE `code_verifier` is stored temporarily in Flask's signed cookie session
+   (`session["oauth_code_verifier"]`) and restored onto the callback Flow instance
+   before being popped on successful code exchange.
 2. The access token, refresh token, and expiry are held in a server-side store;
-   only an opaque session id is placed in the signed cookie.
+   only an opaque session id is placed in the signed cookie. Token credentials
+   are never stored in the client-side cookie.
 3. When you send a query, the app refreshes the token if it has expired (or asks
    you to reauthenticate), then reuses a backend session with the token in session
    state under `ADK_OAUTH_TOKEN_STATE_KEY`.

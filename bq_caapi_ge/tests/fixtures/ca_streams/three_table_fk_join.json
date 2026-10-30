@@ -1,0 +1,130 @@
+{
+  "prompt_id": "join_skus_sg",
+  "question": "How many distinct SKUs were ordered by customers in SG across completed orders?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "A total of **43** distinct SKUs were ordered by customers in SG across completed orders."
+        ]
+      }
+    },
+    {
+      "data": {
+        "query": {
+          "datasources": [
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "customers"
+              }
+            },
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "orders"
+              }
+            },
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "order_items"
+              }
+            }
+          ],
+          "question": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "data": {
+        "generated_sql": "SELECT COUNT(DISTINCT oi.sku) AS distinct_sku_count\nFROM `example-project.example_dataset.order_items` AS oi\nINNER JOIN `example-project.example_dataset.orders` AS o ON oi.order_id = o.order_id\nINNER JOIN `example-project.example_dataset.customers` AS c ON o.customer_id = c.customer_id\nWHERE LOWER(c.country) = 'sg'\n  AND LOWER(o.status) = 'completed'"
+      }
+    },
+    {
+      "data": {}
+    },
+    {
+      "data": {
+        "result": {
+          "data": [
+            {
+              "distinct_sku_count": 43.0
+            }
+          ],
+          "name": "distinct_skus_sg_completed_orders",
+          "schema": {
+            "fields": [
+              {
+                "name": "distinct_sku_count",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              }
+            ],
+            "description": "",
+            "synonyms": [],
+            "tags": [],
+            "display_name": "",
+            "filters": []
+          }
+        }
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "List the top 10 most frequently ordered SKUs in SG across completed orders.",
+          "Break down the total order amount in USD by customer segment for completed orders in SG.",
+          "What is the total number of completed orders placed by customers in SG?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,1 +1,1 @@
-"""Semantic context, contract, catalog retrieval, and execution utilities."""
+"""Semantic context, contract, catalog retrieval, execution, and CA API trust utilities."""

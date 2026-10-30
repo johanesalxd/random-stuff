@@ -1,0 +1,32 @@
+{
+  "prompt_id": "trap_active_rate",
+  "question": "What percentage of our customers are active?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "How would you like to define an \"active customer\"? For example:\n1. Customers who have placed at least one order (any status).\n2. Customers who have placed at least one completed order.\n3. Customers who placed an order within a specific timeframe (e.g., recent fiscal quarter or month)."
+        ]
+      }
+    }
+  ]
+}

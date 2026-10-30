@@ -1,0 +1,58 @@
+{
+  "prompt_id": "out_of_scope_churn_refunds",
+  "question": "What is our customer churn rate and forecasted Q3 refund total?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "The requested metrics (**customer churn rate** and **refund total**) cannot be calculated because the available dataset does not track customer churn, subscription/cancellation dates, or refund transactions (order statuses only include `completed`, `pending`, and `cancelled`).\n\nLet me know if you would like to analyze order completion rates, customer order activity, or sales by segment instead."
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "Show total order revenue and order count by customer segment.",
+          "Break down total completed order amount by fiscal quarter.",
+          "List the top selling SKUs by total sales amount."
+        ]
+      }
+    }
+  ]
+}

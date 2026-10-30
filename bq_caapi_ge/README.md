@@ -29,12 +29,22 @@ reads it directly via `external_access_token_key` on every tool call — no cust
 
 ```text
 ├── scripts/
-│   ├── enrich_bigquery_metadata.py # Run Dataplex profile and docs scans
+│   ├── enrich_bigquery_metadata.py # Run Knowledge Catalog profile and docs scans
 │   ├── admin_tools.py              # Create/update CA API data agents
 │   └── register_ge_agents.py       # Fetch A2A card and register in GE
 ├── config/
 │   ├── agent_definitions.py      # Minimal agent table grouping
 │   └── ca_locations.py           # CA API endpoint resolution by location
+├── semantic/                     # Semantic layer, trust evaluation, and context management
+│   ├── ca_trust.py               # Transport-safe stateless chat & 3-tier trust classification
+│   ├── catalog.py                # Knowledge Catalog adapter & metadata search
+│   ├── catalog_runtime.py        # ADK workflow nodes for Knowledge Catalog grounding
+│   ├── context.py                # Semantic context schemas & byte-budget enforcement
+│   ├── registry.py               # YAML semantic contract loader & validation
+│   ├── runtime.py                # ADK workflow nodes for semantic context selection
+│   ├── sql_runtime.py            # ADK workflow nodes for one-shot SQL generation & evaluation
+│   ├── types.py                  # Domain models & contract data classes
+│   └── execution.py              # BigQuery executor with per-user OAuth & ADC modes
 ├── advanced/                     # Custom ADK runtime (see advanced/README.md)
 │   ├── app/                      # ADK agent packages
 │   ├── scripts/                  # Deploy, auth, and registration scripts
@@ -130,8 +140,8 @@ A data agent is only reachable through the endpoint serving its location, so
 
 Run Dataplex scans to automate the same metadata generation you can trigger from
 BigQuery Studio. Publishing is enabled by default so generated descriptions,
-queries, profiles, and relationships are persisted to Dataplex Catalog and
-Knowledge Catalog for the selected dataset and tables.
+queries, profiles, and relationships are persisted to Knowledge Catalog
+for the selected dataset and tables.
 
 By default, data profile scans use `STANDARD` mode with `10%` sampling. Change
 `DATA_PROFILE_MODE` and `DATA_PROFILE_SAMPLING_PERCENT` in `.env` if you need a
@@ -236,6 +246,89 @@ or `AUTH_RESOURCE_INVENTORY`, pass those values to `--agents` and `--auth-ids`.
 Open your Gemini Enterprise app in the Google Cloud console. The registered
 agents appear as available data agents for users to query.
 
+## Direct Stateless Chat & Client-Side 3-Tier Trust Classification
+
+For custom applications that query Conversational Analytics API agents directly (outside Gemini Enterprise or the ADK runtime), `semantic/ca_trust.py` provides transport-safe streaming helpers and a deterministic 3-tier trust classification engine.
+
+### Transport-Scoped User OAuth vs. Looker Credentials
+
+```python
+from semantic.ca_trust import (
+    TrustTier,
+    VerifiedQuerySpec,
+    build_stateless_chat_request,
+    create_chat_client,
+    stream_stateless_chat,
+)
+
+# 1. Bind end-user OAuth token to the gRPC transport channel
+client = create_chat_client(location="us", user_access_token=user_oauth_token)
+
+# 2. Build stateless ChatRequest (never sets DataAgentContext.credentials)
+request = build_stateless_chat_request(
+    project_id="my-project",
+    data_agent_name="projects/my-project/locations/us/dataAgents/order_user_agent",
+    question="How many completed orders do we have?",
+    location="us",
+)
+
+# 3. Stream and classify response into trust tiers
+assessment = stream_stateless_chat(
+    client=client,
+    request=request,
+    question="How many completed orders do we have?",
+    authored_verified_queries=[
+        VerifiedQuerySpec(
+            question="How many completed orders do we have?",
+            sql=(
+                "SELECT COUNT(DISTINCT order_id) AS completed_order_count\n"
+                "FROM `my-project.my_dataset.orders`\n"
+                "WHERE status = 'completed'"
+            ),
+            query_id="verified_completed_orders",
+        )
+    ],
+)
+
+print(f"Trust Tier: {assessment.tier.name}")
+print(f"Sub-Mode: {assessment.sub_mode}")
+print(f"Effective SQL: {assessment.final_sql}")
+print(f"Result Rows: {assessment.result_rows}")
+```
+
+> [!IMPORTANT]
+> **Why per-user BigQuery credentials belong on the gRPC transport:**
+> Never set `DataAgentContext.credentials`. That protobuf field (`Credentials` proto) is exclusively for Looker OAuth integration; for BigQuery data sources it is ignored, so BigQuery jobs execute under the Conversational Analytics gRPC channel owner identity (bypassing per-user BigQuery row-level security and column-level security) while exposing access tokens in proto `repr` and debug logs. Calling `create_chat_client(..., user_access_token=token)` passes `google.oauth2.credentials.Credentials` directly to `DataChatServiceClient(credentials=...)` on the gRPC channel, ensuring BigQuery queries run strictly under the caller's identity.
+
+### Non-Persistence of Query Result Rows & Stateless State Management
+
+Building on the official [Conversational Analytics state management documentation](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management), avoiding query result-row persistence across layers relies on three operational guardrails:
+1. **Stateless `ChatRequest`:** Omit `conversation_reference` so conversation turns are not stored as server-managed stateful threads.
+2. **Agent Logging Disabled:** Keep conversation and BigQuery Agent Analytics logging disabled on the target data agent resource.
+3. **Client Non-Persistence:** Ensure the client application does not persist `DataResult` payloads.
+
+### Trust Hierarchy: Tiers 1, 2, and 3 (Defense-in-Depth Heuristics)
+
+The client-side trust engine audits the raw message stream into three distinct operational tiers to provide defense-in-depth safety guardrails:
+
+- **Tier 1 (`TIER_1_VERIFIED_OR_COMPILED`):**
+  - Matched an authored Verified Query wire signature (`THOUGHT` signature `Matched a verified query` + `DataMessage.result.name == "verified_query"` with zero error retries and no trailing in-flight SQL) cross-verified against a client-side allowlist (`authored_verified_queries`), or compiled from a deterministic YAML semantic contract matching the executed query (`compiled_sql=...`).
+  - *Assurance:* Verified against human-curated Golden Queries or deterministic contract compilation.
+- **Tier 2 (`TIER_2_GROUNDED`):**
+  - Dynamic SQL executed cleanly against BigQuery with zero error retries, no post-processing `AnalysisMessage` chunks, no unverified model assumptions, and **client-side heuristic reconciliation of standard prose numbers, currencies, percentages, and row-counts against `result_rows`**.
+  - *Assurance:* Verifies physical SQL execution and prose-vs-result numeric fidelity. *Semantic filter correctness* (e.g. business definition of "active customer") requires authored Verified Queries, Knowledge Catalog metadata/constraints, or YAML semantic contracts.
+- **Tier 3 (`TIER_3_REVIEW_REQUIRED`):**
+  - Clarification questions, out-of-scope refusals, incomplete streams (network drops), error-recovery retries, analysis post-processing, assumption phrases (e.g. `I assumed`), unreconciled prose numbers, or Verified Query prompt mismatches (e.g., Q2 verified SQL replayed for a Q3 question).
+  - *Action:* Must be presented to the user with warning badges or routed for human review.
+
+### ADK `DataAgentToolset` (`locations/global`) vs. Regional Endpoints
+
+The ADK's built-in `DataAgentToolset` targets the global endpoint exclusively (`geminidataanalytics.googleapis.com`). For regional (`asia-southeast1`) or multi-regional (`us`, `eu`) Conversational Analytics API agents, invoke `DataChatServiceClient` directly with `config.ca_locations.ca_api_endpoint(location)` (as implemented in `semantic/ca_trust.py`).
+
+### Location Configuration: Vertex Model Region vs. CA API Multi-Region
+
+Note that `google-genai` and ADK interpret `GOOGLE_CLOUD_LOCATION` as the Vertex AI model hosting region (e.g., `us-central1` or `global`), whereas Conversational Analytics data agents may reside in multi-regions (`us`, `eu`) or regional endpoints. When running the `semantic_analytics` workflow with Vertex models while connecting to a multi-regional CA API agent in `us`, use `create_chat_client(location="us")` or `DataChatServiceClient(client_options={"api_endpoint": ca_api_endpoint("us")})` rather than setting `GOOGLE_CLOUD_LOCATION=us`, which would break Vertex model routing.
+
 ## Script Reference
 
 ### `scripts/enrich_bigquery_metadata.py`
@@ -284,7 +377,7 @@ uv run python scripts/admin_tools.py
 
 The script intentionally does not read Dataplex scan results or write local
 semantic metadata. The agent references BigQuery tables, and generated metadata
-is managed by BigQuery, Dataplex, and Knowledge Catalog.
+is managed by BigQuery and Knowledge Catalog.
 
 ### `scripts/register_ge_agents.py`
 
@@ -346,10 +439,10 @@ exposes the catalog, context, registry, and type modules without ADK installed.
 
 ## Relationship to the cross-cloud lakehouse agent
 
-The [`bq-cross-cloud-lakehouse`](https://github.com/johanesalxd/bq-cross-cloud-lakehouse)
-repository contains an `agent/` package that was extracted from this project. It
-is a **frozen fork**: it is deliberately self-contained (no shared parent
-package, no ADK runtime) so the lakehouse demo can be handed over on its own.
+The `bq-cross-cloud-lakehouse` repository contains an `agent/` package that was
+extracted from this project. It is a **frozen fork**: it is deliberately
+self-contained (no shared parent package, no ADK runtime) so the lakehouse demo
+can be handed over on its own.
 
 **This project is the canonical baseline.** Fixes flow *from* the fork *into*
 here, never the other way around, unless something is broken badly enough in the
@@ -379,6 +472,17 @@ dataset-documentation pre-check, none of which the frozen fork has.
 ![Gemini Enterprise Demo](docs/gemini-enterprise-demo.png)
 
 *Data agent responding to queries in Gemini Enterprise*
+
+## Official References
+
+- [Conversational Analytics API Overview](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/overview)
+- [Conversational Analytics API Locations](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/locations)
+- [Conversational Analytics API Data Residency](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/data-residency)
+- [Conversational Analytics API State Management](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management)
+- [BigQuery Authored Context & Verified Queries](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/data-agent-authored-context-bq)
+- [Conversational Analytics API Access Control](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/access-control)
+- [BigQuery Primary and Foreign Keys](https://docs.cloud.google.com/bigquery/docs/primary-foreign-keys)
+- [Knowledge Catalog Data Insights for Structured Data](https://docs.cloud.google.com/knowledge-catalog/docs/data-insights-structured-data)
 
 ## License
 

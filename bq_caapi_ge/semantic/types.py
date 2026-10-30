@@ -102,7 +102,3 @@ class SemanticContract:
     dimensions: dict[str, Dimension]
     metrics: dict[str, Metric]
 
-    @property
-    def contract_version(self) -> str:
-        """Returns a stable external contract version string."""
-        return f"{self.id}:v{self.version}"

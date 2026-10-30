@@ -42,7 +42,6 @@ from semantic.catalog_runtime import (  # noqa: E402
     assess_broad_context,
     assess_context,
     assess_narrow,
-    finish_catalog_grounding,
     finish_clarification,
     ground_broad,
     ground_narrow,
@@ -452,11 +451,10 @@ def test_build_catalog_adapter_requires_project_and_returns_knowledge(monkeypatc
     assert isinstance(build_catalog_adapter(), KnowledgeCatalogAdapter)
 
 
-def test_finish_terminals_set_next_step():
-    grounded = finish_catalog_grounding({"question": "q"})
-    assert grounded["status"] == "catalog_context_grounded"
+def test_finish_clarification_sets_next_step():
     clarified = finish_clarification({"question": "q"})
     assert clarified["status"] == "catalog_context_insufficient"
+    assert clarified["next_step"] == "clarify_or_refuse"
 
 
 def _weather_selection(node_input):
@@ -476,6 +474,10 @@ def _weather_selection(node_input):
     }
 
 
+def _grounded_sink(node_input):
+    return dict(node_input)
+
+
 async def _run(selector, question):
     workflow = Workflow(
         name="catalog_grounding_test",
@@ -493,7 +495,7 @@ async def _run(selector, question):
             (
                 assess_context,
                 {
-                    "sufficient": finish_catalog_grounding,
+                    "sufficient": _grounded_sink,
                     "insufficient": load_broad_catalog_context,
                 },
             ),
@@ -501,7 +503,7 @@ async def _run(selector, question):
             (
                 assess_broad_context,
                 {
-                    "grounded": finish_catalog_grounding,
+                    "grounded": _grounded_sink,
                     "clarify": finish_clarification,
                 },
             ),
@@ -571,3 +573,51 @@ metrics:
         encoding="utf-8",
     )
     monkeypatch.setenv("SEMANTIC_CONTRACT_PATH", str(contract_path))
+
+
+def test_narrow_fallback_to_broad_clears_stale_narrow_sources_for_sql_generation():
+    """Broad search after narrow failure must pass discovered sources to SQL generation."""
+    from semantic.sql_runtime import enter_sql_generation
+
+    # 1. Narrow grounding fails to find 'missing_readings'
+    missing_source = "example-project.climate.missing_readings"
+    narrow_handoff = {
+        "question": "What are current readings?",
+        "semantic_source_names": [missing_source],
+    }
+    adapter = _FakeCatalogAdapter(
+        narrow={},  # Empty narrow results -> missing
+        broad=[
+            build_table_metadata(
+                source=_READINGS,
+                fields=[
+                    {"name": "reading_id", "type": "STRING"},
+                    {"name": "station_id", "type": "STRING"},
+                    {"name": "temperature", "type": "FLOAT64"},
+                ],
+            )
+        ],
+    )
+    narrow_result = ground_narrow(narrow_handoff, adapter)
+    narrow_assessed, narrow_route = assess_narrow(narrow_result)
+    assert narrow_route == "insufficient"
+    assert narrow_assessed["catalog_missing_sources"] == [missing_source]
+
+    # 2. Fall back to broad search
+    broad_result = ground_broad(
+        narrow_assessed,
+        adapter,
+        allowed_projects=frozenset({"example-project"}),
+        allowed_datasets=frozenset({"example-project.climate"}),
+    )
+    broad_assessed, broad_route = assess_broad(broad_result)
+    assert broad_route == "grounded"
+    assert broad_assessed["catalog_discovered_sources"] == [_READINGS]
+    assert "catalog_permitted_sources" not in broad_assessed
+    assert "catalog_missing_sources" not in broad_assessed
+
+    # 3. Hand off to SQL generation
+    event = enter_sql_generation(broad_assessed)
+    assert event.output["candidate_sources"] == [_READINGS]
+    assert missing_source not in event.output["candidate_sources"]
+

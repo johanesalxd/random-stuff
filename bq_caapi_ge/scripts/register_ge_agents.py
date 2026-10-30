@@ -20,7 +20,7 @@ Usage::
     uv run python scripts/register_ge_agents.py --list
 
     # Delete an agent from GE by its GE agent ID
-    uv run python scripts/register_ge_agents.py --delete 882487484595163651
+    uv run python scripts/register_ge_agents.py --delete 000000000000000000
 """
 
 from __future__ import annotations
@@ -29,8 +29,9 @@ import argparse
 import json
 import logging
 import os
-import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -40,6 +41,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.ca_locations import ca_api_endpoint  # noqa: E402
+from config.gcp_auth import get_gcloud_or_adc_access_token  # noqa: E402
 
 load_dotenv(override=True)
 
@@ -64,33 +66,13 @@ CA_API_BASE = f"https://{ca_api_endpoint(CA_LOCATION)}"
 DE_BASE = f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha"
 
 
-def get_access_token() -> str:
-    """Get an access token via Application Default Credentials.
-
-    Returns:
-        Bearer token string.
-
-    Raises:
-        RuntimeError: If the token cannot be retrieved.
-    """
-    result = subprocess.run(
-        ["gcloud", "auth", "application-default", "print-access-token"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to get access token: {result.stderr.strip()}")
-    return result.stdout.strip()
-
-
 def _request(
     method: str,
     url: str,
     token: str,
     payload: dict | None = None,
 ) -> dict:
-    """Execute an authenticated HTTP request via curl.
+    """Execute an authenticated HTTP request via urllib.
 
     Args:
         method: HTTP method (GET, POST, PATCH, DELETE).
@@ -102,39 +84,55 @@ def _request(
         Parsed JSON response dict.
 
     Raises:
-        RuntimeError: If the curl command fails or the response contains an error.
+        RuntimeError: If the request fails or the response contains an error.
     """
-    cmd = [
-        "curl",
-        "-s",
-        "-X",
-        method,
-        "-H",
-        f"Authorization: Bearer {token}",
-        "-H",
-        "Content-Type: application/json",
-        "-H",
-        f"X-Goog-User-Project: {PROJECT_ID}",
-        url,
-    ]
-    if payload is not None:
-        cmd += ["-d", json.dumps(payload)]
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    if PROJECT_ID:
+        headers["X-Goog-User-Project"] = PROJECT_ID
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"curl failed: {result.stderr.strip()}")
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
     try:
-        # A successful DELETE returns an empty body, which is not valid JSON.
-        data = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Invalid JSON response: {result.stdout[:200]}") from e
-
-    if "error" in data:
-        raise RuntimeError(
-            f"API error {data['error'].get('code')}: {data['error'].get('message')}"
-        )
-    return data
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read().decode("utf-8")
+            if not body or not body.strip():
+                return {}
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Invalid JSON response from {url}: {body[:200]}") from e
+            if isinstance(parsed, dict) and "error" in parsed:
+                err = parsed["error"]
+                if isinstance(err, dict):
+                    code = err.get("code", resp.status)
+                    msg = err.get("message", err)
+                else:
+                    code, msg = resp.status, err
+                raise RuntimeError(f"API error {code}: {msg}")
+            return parsed
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        try:
+            err_json = json.loads(err_body)
+            if isinstance(err_json, dict) and "error" in err_json:
+                err = err_json["error"]
+                if isinstance(err, dict):
+                    code = err.get("code", e.code)
+                    msg = err.get("message", err_body)
+                else:
+                    code, msg = e.code, err
+                raise RuntimeError(f"API error {code}: {msg}") from e
+        except json.JSONDecodeError:
+            pass
+        raise RuntimeError(f"HTTP {e.code} error: {err_body}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error: {e.reason}") from e
+    except (TimeoutError, OSError) as e:
+        raise RuntimeError(f"Transport error calling {url}: {e}") from e
 
 
 def get_agent_card(agent_id: str, token: str) -> dict:
@@ -494,7 +492,7 @@ def main() -> None:
         logger.error("GEMINI_APP_ID is not set.")
         sys.exit(1)
 
-    token = get_access_token()
+    token = get_gcloud_or_adc_access_token()
 
     if args.list:
         list_ge_agents(token)

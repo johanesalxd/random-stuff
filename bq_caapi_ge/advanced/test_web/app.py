@@ -60,8 +60,9 @@ TOKEN_STATE_KEY = os.getenv(
 )
 ADK_LOCAL_BASE_URL = os.getenv("ADK_LOCAL_BASE_URL")
 ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "semantic_analytics")
-# Vertex AI Agent Engine region. GOOGLE_CLOUD_LOCATION=global is for Discovery
-# Engine and is not a valid Vertex region, so this is a separate setting.
+# Vertex AI Agent Engine regional endpoint. AGENT_ENGINE_LOCATION pins the
+# Vertex AI reasoning engine region (e.g. us-central1) separately from
+# GOOGLE_CLOUD_LOCATION / GEMINI_APP_LOCATION.
 AGENT_ENGINE_LOCATION = os.getenv("AGENT_ENGINE_LOCATION", "us-central1")
 
 if ADK_LOCAL_BASE_URL:
@@ -430,6 +431,9 @@ def login():
         prompt="consent",
     )
     session["oauth_state"] = state
+    # Capture code_verifier so PKCE succeeds when callback creates a new Flow instance
+    if getattr(flow, "code_verifier", None):
+        session["oauth_code_verifier"] = flow.code_verifier
     return redirect(authorization_url)
 
 
@@ -440,6 +444,10 @@ def callback():
         return "OAuth state mismatch; possible CSRF. Please retry sign-in.", 400
 
     flow = get_oauth_flow()
+    # Restore code_verifier on the new Flow instance
+    code_verifier = session.pop("oauth_code_verifier", None)
+    if code_verifier and hasattr(flow, "code_verifier"):
+        flow.code_verifier = code_verifier
     flow.fetch_token(authorization_response=request.url)
     credentials = flow.credentials
 
@@ -526,4 +534,8 @@ if __name__ == "__main__":
         print(f"  Reasoning Engine: {REASONING_ENGINE_ID}")
     print(f"  Token State Key: {TOKEN_STATE_KEY}")
     print("\nOpen http://localhost:8080 in your browser\n")
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "8080")),
+        debug=os.getenv("FLASK_DEBUG", "0") == "1",
+    )

@@ -2,7 +2,8 @@
 
 # Deployment script for ADK Agents to Vertex AI Agent Engine
 
-set -e
+set -euo pipefail
+cd "$(dirname "$0")/../.."
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,14 +16,14 @@ echo ""
 # Load environment variables from root .env
 if [ -f .env ]; then
     echo -e "${GREEN}Loading environment variables from .env${NC}"
-    export $(cat .env | xargs)
+    set -a; source .env; set +a
 else
     echo -e "${RED}ERROR: .env file not found in project root${NC}"
     exit 1
 fi
 
 # Verify required environment variables
-if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
+if [ -z "${GOOGLE_CLOUD_PROJECT:-}" ]; then
     echo -e "${RED}ERROR: GOOGLE_CLOUD_PROJECT not set${NC}"
     exit 1
 fi
@@ -32,7 +33,7 @@ echo "  Project: $GOOGLE_CLOUD_PROJECT"
 echo ""
 
 PROJECT_ID="$GOOGLE_CLOUD_PROJECT"
-# Vertex AI Agent Engine region. GOOGLE_CLOUD_LOCATION=global is for Discovery
+# Vertex AI Agent Engine region. GEMINI_APP_LOCATION=global is for Discovery
 # Engine and is not a valid Vertex region, so this is a separate setting.
 LOCATION="${AGENT_ENGINE_LOCATION:-us-central1}"
 

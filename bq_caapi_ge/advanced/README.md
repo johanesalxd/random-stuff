@@ -105,8 +105,6 @@ Create per-agent `.env` files:
 cat > advanced/app/orders/.env << EOF
 GOOGLE_CLOUD_PROJECT=your-project-id
 AGENT_ORDERS_ID=your-orders-data-agent-id
-OAUTH_CLIENT_ID=your-oauth-client-id
-OAUTH_CLIENT_SECRET=your-oauth-client-secret
 EOF
 ```
 
@@ -117,9 +115,11 @@ bash advanced/scripts/deploy_agents.sh
 ```
 
 Deploys to `us-central1` by default; set `AGENT_ENGINE_LOCATION` to target a
-different Vertex AI region (this is separate from `GOOGLE_CLOUD_LOCATION=global`,
+different Vertex AI region (this is separate from `GEMINI_APP_LOCATION=global`,
 which addresses Discovery Engine). Save the Reasoning Engine resource names from
-the output.
+the output. Note that ADK's built-in `DataAgentToolset` targets the global CA API endpoint
+exclusively (`geminidataanalytics.googleapis.com`); for regional or multi-regional agents,
+call `DataChatServiceClient` directly with `config.ca_locations.ca_api_endpoint`.
 
 ### Step 4: Setup OAuth Authorization
 

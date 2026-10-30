@@ -1,0 +1,129 @@
+{
+  "prompt_id": "trap_total_revenue",
+  "question": "What is our total revenue?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "The total revenue across all orders is **$46,610 USD** (with completed orders accounting for **$31,670 USD**)."
+        ]
+      }
+    },
+    {
+      "data": {
+        "query": {
+          "datasources": [
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "orders"
+              }
+            }
+          ],
+          "question": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "data": {
+        "generated_sql": "SELECT SUM(orders.order_amount_usd) AS total_revenue_usd,\n       SUM(CASE\n               WHEN LOWER(orders.status) = 'completed' THEN orders.order_amount_usd\n               ELSE 0\n           END) AS completed_revenue_usd\nFROM `example-project.example_dataset.orders` AS orders"
+      }
+    },
+    {
+      "data": {}
+    },
+    {
+      "data": {
+        "result": {
+          "data": [
+            {
+              "completed_revenue_usd": 31670.0,
+              "total_revenue_usd": 46610.0
+            }
+          ],
+          "name": "total_revenue",
+          "schema": {
+            "fields": [
+              {
+                "name": "total_revenue_usd",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              },
+              {
+                "name": "completed_revenue_usd",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              }
+            ],
+            "description": "",
+            "synonyms": [],
+            "tags": [],
+            "display_name": "",
+            "filters": []
+          }
+        }
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "Break down total revenue by order status.",
+          "Show total revenue by customer segment and country.",
+          "What is the total revenue trend across fiscal quarters?"
+        ]
+      }
+    }
+  ]
+}

@@ -318,20 +318,6 @@ def resolve_selection(
     )
 
 
-def finish_semantic_narrow_resolution(
-    node_input: dict[str, Any],
-) -> dict[str, Any]:
-    """Returns selected semantic context at the current phase boundary."""
-    return node_input
-
-
-def finish_catalog_broad_resolution(
-    node_input: dict[str, Any],
-) -> dict[str, Any]:
-    """Returns a broad-catalog handoff at the current phase boundary."""
-    return node_input
-
-
 def _catalog_broad_response(
     question: str,
     selection: SemanticSelection,

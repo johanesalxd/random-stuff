@@ -1,0 +1,157 @@
+{
+  "prompt_id": "trap_active_rate",
+  "question": "What percentage of our customers are active?",
+  "stream_complete": true,
+  "error": null,
+  "messages": [
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 2,
+        "parts": [
+          "[THOUGHT_STUB]"
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "I assumed an 'active customer' is defined as any customer who has placed at least one order. Let me know if you meant completed orders specifically or a particular timeframe."
+        ]
+      }
+    },
+    {
+      "text": {
+        "text_type": 1,
+        "parts": [
+          "**45.0%** of customers are active (90 out of 200 total customers have placed at least one order)."
+        ]
+      }
+    },
+    {
+      "data": {
+        "query": {
+          "datasources": [
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "customers"
+              }
+            },
+            {
+              "bigquery_table_reference": {
+                "project_id": "example-project",
+                "dataset_id": "example_dataset",
+                "table_id": "orders"
+              }
+            }
+          ],
+          "question": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "data": {
+        "generated_sql": "WITH customer_counts AS\n  (SELECT COUNT(DISTINCT c.customer_id) AS total_customers,\n          COUNT(DISTINCT o.customer_id) AS active_customers\n   FROM `example-project.example_dataset.customers` AS c\n   LEFT JOIN `example-project.example_dataset.orders` AS o ON c.customer_id = o.customer_id)\nSELECT total_customers,\n       active_customers,\n       ROUND(SAFE_DIVIDE(active_customers, total_customers) * 100, 2) AS active_customer_percentage\nFROM customer_counts"
+      }
+    },
+    {
+      "data": {}
+    },
+    {
+      "data": {
+        "result": {
+          "data": [
+            {
+              "active_customers": 90.0,
+              "active_customer_percentage": 45.0,
+              "total_customers": 200.0
+            }
+          ],
+          "name": "customer_active_percentage",
+          "schema": {
+            "fields": [
+              {
+                "name": "total_customers",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              },
+              {
+                "name": "active_customers",
+                "type_": "INTEGER",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              },
+              {
+                "name": "active_customer_percentage",
+                "type_": "FLOAT",
+                "mode": "NULLABLE",
+                "description": "",
+                "synonyms": [],
+                "tags": [],
+                "display_name": "",
+                "subfields": [],
+                "category": "",
+                "value_format": ""
+              }
+            ],
+            "description": "",
+            "synonyms": [],
+            "tags": [],
+            "display_name": "",
+            "filters": []
+          }
+        }
+      }
+    },
+    {
+      "text": {
+        "text_type": 4,
+        "parts": [
+          "Break down active customer percentages by country.",
+          "Break down active customer percentages by customer segment.",
+          "What percentage of customers have completed orders?"
+        ]
+      }
+    }
+  ]
+}

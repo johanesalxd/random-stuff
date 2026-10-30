@@ -182,3 +182,54 @@ def test_callback_rejects_state_mismatch():
         sess["oauth_state"] = "expected-state"
     response = client.get("/auth/callback?state=attacker&code=abc")
     assert response.status_code == 400
+
+
+def test_login_captures_pkce_code_verifier_and_callback_restores_it(monkeypatch):
+    """Login must save code_verifier and callback must restore it on the new Flow."""
+    created_flows = []
+
+    class _FakeFlow:
+        def __init__(self):
+            self.code_verifier = f"verifier-{len(created_flows) + 1}"
+            self.credentials = type(
+                "Creds",
+                (),
+                {"token": "tok-1", "refresh_token": "ref-1", "expiry": None},
+            )()
+            created_flows.append(self)
+
+        def authorization_url(self, **kwargs):
+            return "https://accounts.google.com/o/oauth2/auth?state=st123", "st123"
+
+        def fetch_token(self, authorization_response=None):
+            self.fetched_with_verifier = self.code_verifier
+
+    monkeypatch.setattr(web_app, "get_oauth_flow", lambda: _FakeFlow())
+    monkeypatch.setattr(
+        web_app.requests,
+        "get",
+        lambda *args, **kwargs: type("Resp", (), {"ok": True, "json": lambda *a, **k: {"email": "u@test.com"}})(),
+    )
+
+    client = web_app.app.test_client()
+
+    # 1. Login captures code_verifier
+    resp_login = client.get("/auth/login")
+    assert resp_login.status_code == 302
+    assert "accounts.google.com" in resp_login.headers["Location"]
+    with client.session_transaction() as sess:
+        assert sess.get("oauth_state") == "st123"
+        assert sess.get("oauth_code_verifier") == "verifier-1"
+
+    # 2. Callback restores code_verifier on the second Flow instance
+    resp_callback = client.get("/auth/callback?state=st123&code=auth-code-xyz")
+    assert resp_callback.status_code == 302
+    assert len(created_flows) == 2
+    # Flow 2 received the verifier captured from Flow 1!
+    assert created_flows[1].code_verifier == "verifier-1"
+    assert created_flows[1].fetched_with_verifier == "verifier-1"
+    # Session cleaned up
+    with client.session_transaction() as sess:
+        assert "oauth_code_verifier" not in sess
+        assert "oauth_state" not in sess
+

@@ -18,6 +18,12 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 # Must match the AUTH_RESOURCE_INVENTORY value used when registering the agent.
 AUTH_RESOURCE_ID = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
+# Note: 'adk deploy agent_engine' sets GOOGLE_CLOUD_LOCATION to the Vertex AI hosting
+# region (e.g. us-central1). ADK's DataAgentToolset (_gda_stream_util) hardcodes the
+# global geminidataanalytics.googleapis.com API host (even though the chat URL path reads
+# the location segment from data_agent_name), so ADK toolset agents must target
+# locations/global. Regional/multi-regional (us, eu) CA API agents should call
+# DataChatServiceClient directly with config.ca_locations.ca_api_endpoint.
 DATA_AGENT_NAME = (
     f"projects/{PROJECT_ID}/locations/global/dataAgents/{AGENT_INVENTORY_ID}"
 )

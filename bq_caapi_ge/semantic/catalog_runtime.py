@@ -1,6 +1,6 @@
 """Domain-neutral ADK nodes for V2 Knowledge Catalog grounding.
 
-These nodes consume the Phase 6 semantic handoff, ground it against current
+These nodes consume the semantic handoff, ground it against current
 catalog metadata through an injectable adapter, assess context sufficiency with
 deterministic rules, and hand off to one-shot SQL generation or clarification.
 No node in this module generates or executes SQL.
@@ -34,7 +34,7 @@ def load_narrow_catalog_context(node_input: dict[str, Any]) -> Event:
     """Grounds the narrow path against exactly the selected semantic sources.
 
     Args:
-        node_input: The Phase 6 ``semantic_narrow`` handoff payload.
+        node_input: The ``semantic_narrow`` handoff payload.
 
     Returns:
         Event carrying the handoff plus bounded narrow catalog context.
@@ -91,14 +91,6 @@ async def assess_broad_context(ctx: Context, node_input: dict[str, Any]) -> Even
     return Event(output=output, route=route)
 
 
-def finish_catalog_grounding(node_input: dict[str, Any]) -> dict[str, Any]:
-    """Returns grounded context at the one-shot SQL-generation boundary."""
-    payload = dict(node_input)
-    payload["status"] = "catalog_context_grounded"
-    payload["next_step"] = "one_shot_sql_generation"
-    return payload
-
-
 def finish_clarification(node_input: dict[str, Any]) -> dict[str, Any]:
     """Returns a clarification handoff when no grounded context is available."""
     payload = dict(node_input)
@@ -114,7 +106,7 @@ def ground_narrow(
     """Fetches bounded metadata for exactly the selected narrow sources.
 
     Args:
-        handoff: Phase 6 narrow handoff payload.
+        handoff: Narrow handoff payload.
         adapter: Injected catalog adapter.
     Returns:
         The handoff augmented with narrow catalog context and any access error.
@@ -137,12 +129,16 @@ def ground_narrow(
     in_scope = [item for item in metadata if item.source in permitted]
     resolved = {item.source for item in in_scope if item.fields}
     payload["catalog_context"] = [item.to_context() for item in in_scope]
-    payload["knowledge_catalog_context"] = list(
-        adapter.fetch_knowledge_context(
-            tuple(source for source in sources if source.qualified_name in permitted),
-            question=str(handoff.get("question", "")),
+    try:
+        knowledge_context = list(
+            adapter.fetch_knowledge_context(
+                tuple(source for source in sources if source.qualified_name in permitted),
+                question=str(handoff.get("question", "")),
+            )
         )
-    )
+    except CatalogAccessError:
+        knowledge_context = []
+    payload["knowledge_catalog_context"] = knowledge_context
     payload["catalog_permitted_sources"] = sorted(permitted)
     payload["catalog_missing_sources"] = sorted(permitted - resolved)
     return payload
@@ -198,8 +194,13 @@ def ground_broad(
     payload["catalog_route"] = "broad"
     payload["catalog_allowed_projects"] = sorted(allowed_projects)
     payload["catalog_allowed_datasets"] = sorted(allowed_datasets)
+    # Clear stale narrow keys inherited from handoff so enter_sql_generation uses discovered sources
+    payload.pop("catalog_permitted_sources", None)
+    payload.pop("catalog_missing_sources", None)
+    payload.pop("catalog_error", None)
+    payload.pop("knowledge_catalog_context", None)
+    payload["catalog_context"] = []
     if not allowed_projects and not allowed_datasets:
-        payload["catalog_context"] = []
         payload["catalog_error"] = (
             "broad search allowlists are unconfigured; failing closed"
         )
@@ -211,7 +212,6 @@ def ground_broad(
             allowed_datasets=allowed_datasets,
         )
     except CatalogAccessError as error:
-        payload["catalog_context"] = []
         payload["catalog_error"] = str(error)[:_MAX_ERROR_CHARS]
         return payload
 
@@ -231,12 +231,16 @@ def ground_broad(
     payload["catalog_context"] = [item.to_context() for item in bounded]
     payload["catalog_discovered_sources"] = sorted(item.source for item in bounded)
     context_sources = tuple(parse_catalog_source(item.source) for item in bounded)
-    payload["knowledge_catalog_context"] = list(
-        adapter.fetch_knowledge_context(
-            context_sources,
-            question=str(handoff.get("question", "")),
+    try:
+        knowledge_context = list(
+            adapter.fetch_knowledge_context(
+                context_sources,
+                question=str(handoff.get("question", "")),
+            )
         )
-    )
+    except CatalogAccessError:
+        knowledge_context = []
+    payload["knowledge_catalog_context"] = knowledge_context
     payload["catalog_discovery_backend"] = getattr(
         adapter, "discovery_backend", "knowledge_catalog_semantic"
     )

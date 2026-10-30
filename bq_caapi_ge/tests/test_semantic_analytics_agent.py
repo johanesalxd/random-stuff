@@ -9,9 +9,10 @@ from pathlib import Path
 import sys
 
 import pytest
-from pydantic import Field
 
 pytest.importorskip("google.adk")
+
+from pydantic import Field  # noqa: E402
 
 from google.adk.runners import Runner  # noqa: E402
 from google.adk.models import BaseLlm, LlmRequest, LlmResponse  # noqa: E402
@@ -28,8 +29,6 @@ from semantic.registry import load_contract, load_contracts  # noqa: E402
 from semantic.runtime import (  # noqa: E402
     SemanticConceptSelection,
     SemanticSelection,
-    finish_catalog_broad_resolution,
-    finish_semantic_narrow_resolution,
     load_semantic_registry,
     recover_invalid_semantic_selection,
     resolve_selection,
@@ -576,6 +575,14 @@ def _select_malformed_context(node_input):
     }
 
 
+def _finish_narrow_node(node_input):
+    return node_input
+
+
+def _finish_broad_node(node_input):
+    return node_input
+
+
 async def _run_workflow(selector, question):
     selector_name = getattr(selector, "name", None) or selector.__name__
     workflow = Workflow(
@@ -586,8 +593,8 @@ async def _run_workflow(selector, question):
             (
                 resolve_semantic_selection,
                 {
-                    "semantic_narrow": finish_semantic_narrow_resolution,
-                    "catalog_broad": finish_catalog_broad_resolution,
+                    "semantic_narrow": _finish_narrow_node,
+                    "catalog_broad": _finish_broad_node,
                 },
             ),
         ],

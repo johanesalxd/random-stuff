@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from pydantic import BaseModel
 
 pytest.importorskip("google.adk")
+
+from pydantic import BaseModel  # noqa: E402
 
 from google.adk.agents import LlmAgent  # noqa: E402
 from google.adk.agents.context import Context  # noqa: E402

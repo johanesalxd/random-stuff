@@ -1,11 +1,22 @@
 """Utility for registering ADK Agent Engine agents in Gemini Enterprise."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
-import subprocess
+from pathlib import Path
+import sys
+import urllib.error
+import urllib.request
 
-from dotenv import load_dotenv
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from dotenv import load_dotenv  # noqa: E402
+
+from config.gcp_auth import get_gcloud_or_adc_access_token  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -20,7 +31,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
 APP_ID = os.getenv("GEMINI_APP_ID")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+GE_LOCATION = os.getenv("GEMINI_APP_LOCATION", "global")
 AUTH_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth-orders")
 AUTH_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
 
@@ -41,25 +52,16 @@ def register_agent(
     """
     logger.info("Registering %s...", display_name)
 
-    # We use curl to call the REST API as it's easier to handle the v1alpha endpoint
-    try:
-        token = (
-            subprocess.check_output(["gcloud", "auth", "print-access-token"])
-            .decode()
-            .strip()
-        )
-    except subprocess.CalledProcessError as e:
-        logger.error("Failed to get gcloud access token. Ensure you are authenticated.")
-        raise RuntimeError("Authentication failed") from e
+    token = get_gcloud_or_adc_access_token()
 
     url = (
-        f"https://{LOCATION}-discoveryengine.googleapis.com/v1alpha/"
-        f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection/"
+        f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha/"
+        f"projects/{PROJECT_ID}/locations/{GE_LOCATION}/collections/default_collection/"
         f"engines/{APP_ID}/assistants/default_assistant/agents"
     )
 
     # Construct payload for ADK Agent (Agent Engine)
-    payload = {
+    payload: dict = {
         "displayName": display_name,
         "description": description,
         "adkAgentDefinition": {
@@ -70,41 +72,44 @@ def register_agent(
     if auth_resource:
         payload["authorizationConfig"] = {"toolAuthorizations": [auth_resource]}
 
-    cmd = [
-        "curl",
-        "-s",
-        "-X",
-        "POST",
-        "-H",
-        f"Authorization: Bearer {token}",
-        "-H",
-        "Content-Type: application/json",
-        "-H",
-        f"X-Goog-User-Project: {PROJECT_ID}",
-        url,
-        "-d",
-        json.dumps(payload),
-    ]
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    if PROJECT_ID:
+        headers["X-Goog-User-Project"] = PROJECT_ID
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode == 0:
-        response_json = json.loads(result.stdout)
-        if "error" in response_json:
-            logger.error(
-                "Registration failed for %s: %s", display_name, response_json["error"]
-            )
-        else:
-            logger.info(
-                "Successfully registered %s: %s",
-                display_name,
-                response_json.get("name"),
-            )
-    else:
-        logger.error(
-            "Failed to execute registration command for %s: %s",
-            display_name,
-            result.stderr,
-        )
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp_body = resp.read().decode("utf-8")
+            response_json = json.loads(resp_body) if resp_body.strip() else {}
+            if "error" in response_json:
+                logger.error(
+                    "Registration failed for %s: %s", display_name, response_json["error"]
+                )
+            else:
+                logger.info(
+                    "Successfully registered %s: %s",
+                    display_name,
+                    response_json.get("name"),
+                )
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        try:
+            err_json = json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message", err_body)
+        except json.JSONDecodeError:
+            err_msg = err_body
+        logger.error("Registration failed for %s (%s): %s", display_name, e.code, err_msg)
+    except Exception as e:
+        logger.error("Failed to execute registration request for %s: %s", display_name, e)
 
 
 if __name__ == "__main__":
@@ -149,7 +154,7 @@ if __name__ == "__main__":
             "Order & User Analyst",
             "Expert in customer journeys and order tracking.",
             args.orders_resource,
-            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_ORDERS}",
+            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations/{AUTH_ORDERS}",
         )
 
     # 2. Inventory Agent
@@ -158,5 +163,5 @@ if __name__ == "__main__":
             "Inventory & Product Analyst",
             "Expert in stock levels and product catalog.",
             args.inventory_resource,
-            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/authorizations/{AUTH_INVENTORY}",
+            auth_resource=f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations/{AUTH_INVENTORY}",
         )
