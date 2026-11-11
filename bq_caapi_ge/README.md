@@ -1,274 +1,201 @@
-# Conversational Analytics API with Gemini Enterprise
+# High-Precision Agentic Analytics on BigQuery — Beyond Out-of-the-Box Conversational Analytics
 
-Create BigQuery data agents using the Conversational Analytics API and publish
-them to Gemini Enterprise via the built-in A2A protocol. No custom agent
-runtime or deployment infrastructure required.
+`bq_caapi_ge` is a reference architecture and toolkit for delivering high-precision, enterprise-governed conversational analytics on BigQuery. While out-of-the-box **BigQuery Conversational Analytics (BQCA)** provides rapid, zero-infrastructure self-service exploration, enterprise applications require deterministic KPI precision, wide-schema routing (50+ tables), pre-execution SQL policy enforcement, client-verifiable stream trust, and transport-level user OAuth for Row-Level Security (RLS).
 
-## Architecture
+This repository demonstrates a **progressive 3-layer architecture** driven by a single source of truth: portable YAML semantic contracts (`config/semantic_contracts/*.yaml`).
 
 ```mermaid
-sequenceDiagram
-    participant User
-    participant GE as Gemini Enterprise
-    participant CA as Conversational Analytics API
-    participant BQ as BigQuery
+flowchart TB
+    YAML["Portable YAML Semantic Contract<br/>(config/semantic_contracts/*.yaml)"]
 
-    User->>GE: Asks question
-    GE->>CA: Routes via A2A
-    CA->>BQ: Executes SQL (as user)
-    BQ-->>CA: Returns data
-    CA-->>GE: Returns answer
-    GE-->>User: Displays answer
+    subgraph L1["Layer 1: Upgrade Native BQCA (semantic/graph_export.py)"]
+        GDDL["GA BigQuery Graph DDL<br/>CREATE PROPERTY GRAPH + MEASURE()"]
+        FKDDL["PK / FK NOT ENFORCED DDL<br/>+ Uniqueness/Orphan Pre-Checks"]
+        VQS["Authored Verified Queries<br/>+ v1beta propertyGraphReferences JSON"]
+    end
+
+    subgraph L2["Layer 2: Client Trust & RLS Wrapper (semantic/ca_trust.py)"]
+        RLS["Stateless Chat + Transport User-OAuth RLS"]
+        TRUST["3-Tier Stream Classifier + Numeric Reconciler<br/>(Verified/Compiled · Graph-Measure/Dynamic · Review)"]
+    end
+
+    subgraph L3["Layer 3: ADK High-Precision Runtime (advanced/app/semantic_analytics)"]
+        SEL["Semantic Domain Selector + Token Coverage Gate"]
+        T1["Tier-1 Deterministic Compiler (semantic/compiler.py)<br/>Zero Stage-2 LLM Drift + Cross-Table Ratios"]
+        T2["Tier-2 Guarded Generation (semantic/guardrails.py)<br/>Narrow/Broad Knowledge Catalog + Dry-Run SELECT/Source/Byte Gate"]
+    end
+
+    YAML --> L1
+    YAML --> L3
+    L1 --> L2
+    L3 --> TRUST
 ```
 
-**Key Feature:** OAuth identity passthrough ensures queries execute with the end user's BigQuery permissions.
-Gemini Enterprise deposits the user's access token into the ADK session state; `DataAgentCredentialsConfig`
-reads it directly via `external_access_token_key` on every tool call — no custom callback required.
+For the comprehensive design rationale, architectural comparison matrix, and adoption guide, see [docs/architecture.md](docs/architecture.md).
+
+---
+
+## The 3-Layer Adoption Path
+
+### Layer 1: Contract-Driven BQCA & Graph Measures Exporter
+*Zero-code upgrade for native BigQuery Conversational Analytics.*
+- Exports `CREATE OR REPLACE PROPERTY GRAPH ... MEASURE(...)` DDL utilizing official [BigQuery Graph Measures](https://docs.cloud.google.com/bigquery/docs/graph-measures).
+- Generates `NOT ENFORCED` Primary and Foreign Key constraints with pre-flight uniqueness and orphan validation queries.
+- Exports Verified Queries and `v1beta` `propertyGraphReferences` + `tableReferences` REST payloads.
+- Run via `scripts/export_semantic_layer.py`.
+
+### Layer 2: Stateless User-OAuth RLS & 3-Tier Stream Trust Wrapper
+*Client-side governance and auditing library for any CA stream consumer.*
+- Enforces user-scoped BigQuery RLS/CLS by passing user OAuth tokens over gRPC transport credentials (`DataAgentContext.credentials` is Looker-only).
+- Classifies streaming response chunks into 3 Trust Tiers (`TIER_1_VERIFIED_OR_COMPILED`, `TIER_2_GROUNDED`, `TIER_3_REVIEW_REQUIRED`).
+- Reconciles numerical claims in generated prose against raw returned BigQuery rows (`semantic/numeric_reconcile.py`).
+- Implemented in `semantic/ca_trust.py`.
+
+### Layer 3: Custom ADK High-Precision Runtime
+*Autonomous, enterprise-grade multi-agent runtime for mission-critical analytics.*
+- **Tier-1 Deterministic Compiler:** Resolves single-metric questions to exact GoogleSQL deterministically (`semantic/compiler.py`), eliminating Stage-2 SQL generation variance for covered single-metric intents.
+- **Cross-Table Ratio Support:** Accurately computes multi-table ratios with unmatched denominator rows (e.g. `active_buyer_rate`) using join cardinality guards.
+- **Knowledge Catalog Discovery:** Grounds exploratory questions in allowlisted BigQuery assets via Knowledge Catalog (`dataplex.googleapis.com`).
+- **Pre-Execution Dry-Run Policy Gate:** Enforces `SELECT`-only execution, table allowlists, and per-query scan byte caps (`SQL_MAX_BYTES_BILLED`) before executing once.
+- Implemented in `advanced/app/semantic_analytics/`.
+
+---
 
 ## Project Structure
 
 ```text
-├── scripts/
-│   ├── enrich_bigquery_metadata.py # Run Knowledge Catalog profile and docs scans
-│   ├── admin_tools.py              # Create/update CA API data agents
-│   └── register_ge_agents.py       # Fetch A2A card and register in GE
 ├── config/
-│   ├── agent_definitions.py      # Minimal agent table grouping
-│   └── ca_locations.py           # CA API endpoint resolution by location
-├── semantic/                     # Semantic layer, trust evaluation, and context management
-│   ├── ca_trust.py               # Transport-safe stateless chat & 3-tier trust classification
-│   ├── catalog.py                # Knowledge Catalog adapter & metadata search
-│   ├── catalog_runtime.py        # ADK workflow nodes for Knowledge Catalog grounding
-│   ├── context.py                # Semantic context schemas & byte-budget enforcement
-│   ├── registry.py               # YAML semantic contract loader & validation
-│   ├── runtime.py                # ADK workflow nodes for semantic context selection
-│   ├── sql_runtime.py            # ADK workflow nodes for one-shot SQL generation & evaluation
-│   ├── types.py                  # Domain models & contract data classes
-│   └── execution.py              # BigQuery executor with per-user OAuth & ADC modes
-├── advanced/                     # Custom ADK runtime (see advanced/README.md)
-│   ├── app/                      # ADK agent packages
-│   ├── scripts/                  # Deploy, auth, and registration scripts
-│   └── test_web/                 # Flask OAuth test harness
+│   ├── semantic_contracts/         # Canonical YAML semantic contracts
+│   │   ├── thelook_orders.yaml     # Orders domain metrics, dimensions & joins
+│   │   └── thelook_inventory.yaml  # Inventory & catalog metrics & joins
+│   ├── agent_definitions.py        # Baseline CA API agent definitions
+│   ├── ca_locations.py             # CA API endpoint resolution by location
+│   └── gcp_auth.py                 # Ambient and gcloud ADC token discovery
+├── semantic/                       # Core semantic layer and trust evaluation
+│   ├── compiler.py                 # Tier-1 deterministic SQL compiler & fan-out guards
+│   ├── graph_export.py             # BigQuery Property Graph & PK/FK DDL generator
+│   ├── guardrails.py               # Pre-execution dry-run SQL policy verifier
+│   ├── ca_trust.py                 # Stateless streaming client & 3-tier trust classifier
+│   ├── numeric_reconcile.py        # Prose-to-row numerical reconciliation
+│   ├── sql_lex.py                  # GoogleSQL lexer and tokenizer
+│   ├── catalog.py                  # Knowledge Catalog adapter & metadata search
+│   ├── catalog_runtime.py          # ADK workflow nodes for Knowledge Catalog grounding
+│   ├── runtime.py                  # ADK workflow nodes for semantic context selection
+│   ├── sql_runtime.py              # ADK workflow nodes for guarded SQL generation
+│   ├── registry.py                 # YAML contract loader & validation
+│   ├── context.py                  # Context schemas and byte budget budgeting
+│   ├── types.py                    # Contract data models & domain types
+│   └── execution.py                # BigQuery executor with per-user OAuth & ADC modes
+├── scripts/                        # Automation & baseline CA API tools
+│   ├── export_semantic_layer.py    # CLI to export Graph DDL, FK constraints & VQ JSON
+│   ├── enrich_bigquery_metadata.py # Run Knowledge Catalog profile and docs DataScans
+│   ├── admin_tools.py              # Create/update baseline CA API data agents
+│   └── register_ge_agents.py       # Register baseline CA API agents in Gemini Enterprise
+├── advanced/                       # Custom ADK runtime & deployment
+│   ├── app/
+│   │   └── semantic_analytics/     # High-precision analytics ADK Workflow
+│   │       └── evals/              # Native ADK evaluation benchmark suite
+│   ├── scripts/
+│   │   ├── deploy_agents.sh        # Deploy or stage agent for Vertex AI Agent Engine
+│   │   ├── setup_auth.py           # Create OAuth authorization resource in GE
+│   │   └── register_agents.py      # Register Agent Engine agent with Gemini Enterprise
+│   ├── test_web/                   # Flask OAuth test harness with provenance display
+│   └── README.md                   # Advanced runtime documentation
 ├── docs/
-│   ├── adk_semantic_layer_plan_v2.md # Current semantic workflow design
-│   ├── adk_semantic_layer_plan.md    # Historical V1 design
-│   ├── eval-with-prism.md          # CA data-agent evaluation with Prism
-│   └── gemini-enterprise-demo.png
-├── .env.example
-├── pyproject.toml
+│   ├── architecture.md             # Complete architectural whitepaper & comparison matrix
+│   └── eval-with-prism.md          # Evaluating CA data agents with Prism
+├── .env.example                    # Environment configuration template
+├── pyproject.toml                  # Project dependencies & build config
 └── README.md
 ```
 
-## Prerequisites
-
-1. Python 3.11+ with [`uv`](https://docs.astral.sh/uv/) package manager
-2. Google Cloud project with APIs enabled:
-   - Conversational Analytics API (`geminidataanalytics.googleapis.com`)
-   - Discovery Engine API (`discoveryengine.googleapis.com`)
-   - BigQuery API (`bigquery.googleapis.com`)
-   - Dataplex API (`dataplex.googleapis.com`)
-   - Gemini for Google Cloud API (`cloudaicompanion.googleapis.com`)
-3. OAuth 2.0 client credentials (Client ID + Secret) with redirect URIs:
-   - `https://vertexaisearch.cloud.google.com/oauth-redirect`
-   - `https://vertexaisearch.cloud.google.com/static/oauth/oauth.html`
-4. A Gemini Enterprise app (for agent registration)
-5. gcloud CLI authenticated:
-   ```bash
-   gcloud auth application-default login
-   ```
+---
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Prerequisites
+- Python 3.11+ with [`uv`](https://docs.astral.sh/uv/) package manager
+- Google Cloud project with billing enabled
+- Enabled Google Cloud APIs:
+  - BigQuery API (`bigquery.googleapis.com`)
+  - Conversational Analytics API (`geminidataanalytics.googleapis.com`)
+  - Knowledge Catalog / Dataplex API (`dataplex.googleapis.com`)
+  - Vertex AI API (`aiplatform.googleapis.com`)
+  - Discovery Engine API (`discoveryengine.googleapis.com`)
+- Authenticated `gcloud` credentials:
+  ```bash
+  gcloud auth application-default login
+  ```
 
+### 2. Installation
 ```bash
-uv sync
+uv sync --extra advanced --extra web
 ```
 
-### 2. Configure Environment
-
+### 3. Configuration
 ```bash
 cp .env.example .env
 ```
+Edit `.env` to configure your GCP project, region, and model settings.
 
-Edit `.env` with your project details:
+---
 
-```bash
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_PROJECT_NUMBER=your-project-number
-GOOGLE_CLOUD_LOCATION=global
-GEMINI_APP_LOCATION=global
-BIGQUERY_LOCATION=us
-DATAPLEX_LOCATION=us-central1
-BIGQUERY_DATASET_ID=your-dataset-id
-AGENT_ORDERS_ID=order_user_agent
-AGENT_INVENTORY_ID=inventory_product_agent
-GEMINI_APP_ID=your-gemini-app-id
-OAUTH_CLIENT_ID=your-oauth-client-id
-OAUTH_CLIENT_SECRET=your-oauth-client-secret
-AUTH_RESOURCE_ORDERS=bq-caapi-oauth-orders
-AUTH_RESOURCE_INVENTORY=bq-caapi-oauth-inventory
-```
+## Layer 1: Exporting Semantic Contracts to BigQuery Graph
 
-#### Locations
-
-Four locations are configured independently, because they are genuinely
-different resources:
-
-| Variable | Applies to | Notes |
-|---|---|---|
-| `GOOGLE_CLOUD_LOCATION` | The CA API data agent | `global`, a region (`asia-southeast1`), or a multi-region (`us`). Selects the CA API endpoint. |
-| `GEMINI_APP_LOCATION` | The Gemini Enterprise app | Usually `global`. A regional data agent can be registered into a global GE app. |
-| `BIGQUERY_LOCATION` | The BigQuery dataset | Multi-regions (`us`, `eu`) are valid here. |
-| `DATAPLEX_LOCATION` | Dataplex DataScans | **Must be a single region.** Multi-regions are rejected up front — see the note under "Enrich BigQuery Metadata". |
-
-A data agent is only reachable through the endpoint serving its location, so
-`GOOGLE_CLOUD_LOCATION` is resolved to a hostname by
-[`config/ca_locations.py`](config/ca_locations.py):
-
-| `GOOGLE_CLOUD_LOCATION` | CA API host |
-|---|---|
-| `global` (default) | `geminidataanalytics.googleapis.com` |
-| `asia-southeast1` (region) | `geminidataanalytics-asia-southeast1.googleapis.com` |
-| `us` (multi-region) | `geminidataanalytics.us.rep.googleapis.com` |
-
-> **`.env` wins over the shell.** These scripts call `load_dotenv(override=True)`,
-> so a value in `.env` overrides an exported environment variable of the same
-> name. Edit `.env` rather than exporting when a setting appears to be ignored.
-
-### 3. Enrich BigQuery Metadata
-
-Run Dataplex scans to automate the same metadata generation you can trigger from
-BigQuery Studio. Publishing is enabled by default so generated descriptions,
-queries, profiles, and relationships are persisted to Knowledge Catalog
-for the selected dataset and tables.
-
-By default, data profile scans use `STANDARD` mode with `10%` sampling. Change
-`DATA_PROFILE_MODE` and `DATA_PROFILE_SAMPLING_PERCENT` in `.env` if you need a
-different profiling setup.
+Export your YAML contracts as GA BigQuery Property Graph DDL, non-enforced foreign keys, and Verified Queries:
 
 ```bash
-# Preview the Dataplex payloads without creating scans.
-uv run python scripts/enrich_bigquery_metadata.py --dry-run
+# Export GA Property Graph DDL with MEASURE() definitions
+uv run python scripts/export_semantic_layer.py \
+  --contract config/semantic_contracts/thelook_orders.yaml \
+  --graph-project my-project \
+  --graph-dataset analytics_graph \
+  --format graph-ddl
 
-# Create and run scans asynchronously. Publishing is enabled by default.
-uv run python scripts/enrich_bigquery_metadata.py
+# Export Primary Key & Foreign Key (NOT ENFORCED) DDL with validation checks
+uv run python scripts/export_semantic_layer.py \
+  --contract config/semantic_contracts/thelook_orders.yaml \
+  --target-project my-project \
+  --target-dataset analytics_curated \
+  --format fk-ddl
 
-# Recommended: wait for scan jobs, then write the generated descriptions
-# back into the table schemas.
-uv run python scripts/enrich_bigquery_metadata.py --wait
+# Export Verified Queries and v1beta DataSourceReference JSON
+uv run python scripts/export_semantic_layer.py \
+  --contract config/semantic_contracts/thelook_orders.yaml \
+  --format verified-queries
+uv run python scripts/export_semantic_layer.py \
+  --contract config/semantic_contracts/thelook_orders.yaml \
+  --graph-project my-project \
+  --graph-dataset analytics_graph \
+  --format datasource-json
 ```
 
-Publishing has two parts, and both are on by default:
+*(Note: Exported Verified Queries use starter question templates that should be customized to match expected user prompt phrasings when used with `ca_trust`.)*
 
-1. **Labels** (`publish_documentation_to_table`) — surfaces the generated
-   descriptions on the BigQuery Studio **Insights** tab.
-2. **Schema write-back** (`apply_documentation_to_schema`) — writes the generated
-   table overview and column descriptions **into the table schema**. This is the
-   programmatic equivalent of the console "Save to schema" action, and it is what
-   makes the enrichment visible to anyone reading the table — and usable as agent
-   context.
+For more details on BigQuery Graph integration, see [BigQuery Graph Measures](https://docs.cloud.google.com/bigquery/docs/graph-measures) and [BigQuery Graph Chat](https://docs.cloud.google.com/bigquery/docs/graph-chat).
 
-> [!IMPORTANT]
-> **Schema write-back requires `--wait`.** The descriptions only exist once the
-> documentation job has finished, so a fire-and-forget run has nothing to save. The
-> script logs a warning if you ask for write-back without `--wait`.
+---
 
-> [!WARNING]
-> **`DATAPLEX_LOCATION` must be a single region, never a BigQuery multi-region.**
-> Dataplex DataScans cannot be created in `us` or `eu` — the API returns an opaque
-> `400 Malformed name`. Use a region inside the multi-region that holds the
-> dataset (`us-central1` for US, `europe-west1` for EU). The script validates this
-> up front. Dataset-level documentation additionally requires **at least two
-> non-partitioned tables** in the dataset; the script counts them first and skips
-> with an explanation rather than failing.
+## Layer 2: Client Trust Classification & User OAuth RLS
 
-Use `--dataset` to pick the dataset. The `BIGQUERY_DATASET_ID` environment
-variable cannot be overridden from the shell, because `.env` is loaded with
-`override=True`.
-
-Measured timings: profile jobs ~5s, table documentation ~55-60s, dataset-level
-documentation ~120s. The default `--poll-interval` is 5s to avoid spending most
-of the wall clock asleep.
-
-Use `--no-publish` for ad hoc scan results that are not persisted anywhere, or
-`--skip-schema-write-back` to publish to Knowledge Catalog but leave table schemas
-untouched.
-
-At the end of a run the script logs deep links to the BigQuery Studio Insights tab
-for each enriched table and to Knowledge Catalog search.
-
-After the scans finish, review the generated descriptions, suggested queries,
-profiles, and relationships in BigQuery or Knowledge Catalog. Add or adjust
-verified queries in the agent later if you need deterministic business logic.
-
-> The generic Dataplex REST plumbing is kept byte-compatible with
-> `bq_cross_cloud_lakehouse/agent/scripts/enrich_bigquery_metadata.py` so the two
-> stay easy to sync.
-
-### 4. Create Data Agents
-
-Create the CA API data agents in your project:
-
-```bash
-uv run python scripts/admin_tools.py
-```
-
-This creates or updates backend data agents with the minimal table lists from
-`config/agent_definitions.py` and short scope instructions. Table descriptions,
-column descriptions, data profiles, and dataset relationships are managed in
-BigQuery and Knowledge Catalog, not in local agent config.
-
-### 5. Register in Gemini Enterprise
-
-Fetch the A2A agent cards from the CA API and register them in GE:
-
-```bash
-# Register specific agents with an OAuth authorization resource
-uv run python scripts/register_ge_agents.py \
-  --agents order_user_agent inventory_product_agent \
-  --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inventory
-
-# List agents registered in the GE app
-uv run python scripts/register_ge_agents.py --list
-```
-
-The script:
-1. Calls the CA API `getCard` endpoint to fetch the canonical A2A agent card
-2. Creates an OAuth authorization resource in GE (if `--auth-id` is provided)
-3. Registers each agent in GE via the Discovery Engine API
-
-If you changed `AGENT_ORDERS_ID`, `AGENT_INVENTORY_ID`, `AUTH_RESOURCE_ORDERS`,
-or `AUTH_RESOURCE_INVENTORY`, pass those values to `--agents` and `--auth-ids`.
-
-### 6. Use in Gemini Enterprise
-
-Open your Gemini Enterprise app in the Google Cloud console. The registered
-agents appear as available data agents for users to query.
-
-## Direct Stateless Chat & Client-Side 3-Tier Trust Classification
-
-For custom applications that query Conversational Analytics API agents directly (outside Gemini Enterprise or the ADK runtime), `semantic/ca_trust.py` provides transport-safe streaming helpers and a deterministic 3-tier trust classification engine.
-
-### Transport-Scoped User OAuth vs. Looker Credentials
+Query conversational analytics endpoints using per-request transport-level user OAuth credentials for BigQuery RLS/CLS and 3-Tier trust classification (pair stateless requests with disabled Data Agent logging when server-side non-persistence is required):
 
 ```python
 from semantic.ca_trust import (
-    TrustTier,
-    VerifiedQuerySpec,
-    build_stateless_chat_request,
     create_chat_client,
+    build_stateless_chat_request,
     stream_stateless_chat,
+    VerifiedQuerySpec,
 )
 
-# 1. Bind end-user OAuth token to the gRPC transport channel
+# 1. Bind end-user OAuth token to transport credentials
 client = create_chat_client(location="us", user_access_token=user_oauth_token)
 
-# 2. Build stateless ChatRequest (never sets DataAgentContext.credentials)
+# 2. Build stateless ChatRequest
 request = build_stateless_chat_request(
     project_id="my-project",
     data_agent_name="projects/my-project/locations/us/dataAgents/order_user_agent",
-    question="How many completed orders do we have?",
+    question="How many completed orders were placed?",
     location="us",
 )
 
@@ -276,214 +203,81 @@ request = build_stateless_chat_request(
 assessment = stream_stateless_chat(
     client=client,
     request=request,
-    question="How many completed orders do we have?",
+    question="How many completed orders were placed?",
     authored_verified_queries=[
         VerifiedQuerySpec(
-            question="How many completed orders do we have?",
-            sql=(
-                "SELECT COUNT(DISTINCT order_id) AS completed_order_count\n"
-                "FROM `my-project.my_dataset.orders`\n"
-                "WHERE status = 'completed'"
-            ),
+            question="How many completed orders were placed?",
+            sql="SELECT COUNT(DISTINCT order_id) AS completed_orders FROM `bigquery-public-data.thelook_ecommerce.orders` WHERE status = 'Complete'",
             query_id="verified_completed_orders",
         )
     ],
 )
 
 print(f"Trust Tier: {assessment.tier.name}")
-print(f"Sub-Mode: {assessment.sub_mode}")
-print(f"Effective SQL: {assessment.final_sql}")
-print(f"Result Rows: {assessment.result_rows}")
+print(f"Sub-Mode:   {assessment.sub_mode}")
+print(f"SQL:        {assessment.final_sql}")
+print(f"Rows:       {assessment.result_rows}")
 ```
 
-> [!IMPORTANT]
-> **Why per-user BigQuery credentials belong on the gRPC transport:**
-> Never set `DataAgentContext.credentials`. That protobuf field (`Credentials` proto) is exclusively for Looker OAuth integration; for BigQuery data sources it is ignored, so BigQuery jobs execute under the Conversational Analytics gRPC channel owner identity (bypassing per-user BigQuery row-level security and column-level security) while exposing access tokens in proto `repr` and debug logs. Calling `create_chat_client(..., user_access_token=token)` passes `google.oauth2.credentials.Credentials` directly to `DataChatServiceClient(credentials=...)` on the gRPC channel, ensuring BigQuery queries run strictly under the caller's identity.
+---
 
-### Non-Persistence of Query Result Rows & Stateless State Management
+## Layer 3: Running the Custom ADK High-Precision Runtime
 
-Building on the official [Conversational Analytics state management documentation](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management), avoiding query result-row persistence across layers relies on three operational guardrails:
-1. **Stateless `ChatRequest`:** Omit `conversation_reference` so conversation turns are not stored as server-managed stateful threads.
-2. **Agent Logging Disabled:** Keep conversation and BigQuery Agent Analytics logging disabled on the target data agent resource.
-3. **Client Non-Persistence:** Ensure the client application does not persist `DataResult` payloads.
-
-### Trust Hierarchy: Tiers 1, 2, and 3 (Defense-in-Depth Heuristics)
-
-The client-side trust engine audits the raw message stream into three distinct operational tiers to provide defense-in-depth safety guardrails:
-
-- **Tier 1 (`TIER_1_VERIFIED_OR_COMPILED`):**
-  - Matched an authored Verified Query wire signature (`THOUGHT` signature `Matched a verified query` + `DataMessage.result.name == "verified_query"` with zero error retries and no trailing in-flight SQL) cross-verified against a client-side allowlist (`authored_verified_queries`), or compiled from a deterministic YAML semantic contract matching the executed query (`compiled_sql=...`).
-  - *Assurance:* Verified against human-curated Golden Queries or deterministic contract compilation.
-- **Tier 2 (`TIER_2_GROUNDED`):**
-  - Dynamic SQL executed cleanly against BigQuery with zero error retries, no post-processing `AnalysisMessage` chunks, no unverified model assumptions, and **client-side heuristic reconciliation of standard prose numbers, currencies, percentages, and row-counts against `result_rows`**.
-  - *Assurance:* Verifies physical SQL execution and prose-vs-result numeric fidelity. *Semantic filter correctness* (e.g. business definition of "active customer") requires authored Verified Queries, Knowledge Catalog metadata/constraints, or YAML semantic contracts.
-- **Tier 3 (`TIER_3_REVIEW_REQUIRED`):**
-  - Clarification questions, out-of-scope refusals, incomplete streams (network drops), error-recovery retries, analysis post-processing, assumption phrases (e.g. `I assumed`), unreconciled prose numbers, or Verified Query prompt mismatches (e.g., Q2 verified SQL replayed for a Q3 question).
-  - *Action:* Must be presented to the user with warning badges or routed for human review.
-
-### ADK `DataAgentToolset` (`locations/global`) vs. Regional Endpoints
-
-The ADK's built-in `DataAgentToolset` targets the global endpoint exclusively (`geminidataanalytics.googleapis.com`). For regional (`asia-southeast1`) or multi-regional (`us`, `eu`) Conversational Analytics API agents, invoke `DataChatServiceClient` directly with `config.ca_locations.ca_api_endpoint(location)` (as implemented in `semantic/ca_trust.py`).
-
-### Location Configuration: Vertex Model Region vs. CA API Multi-Region
-
-Note that `google-genai` and ADK interpret `GOOGLE_CLOUD_LOCATION` as the Vertex AI model hosting region (e.g., `us-central1` or `global`), whereas Conversational Analytics data agents may reside in multi-regions (`us`, `eu`) or regional endpoints. When running the `semantic_analytics` workflow with Vertex models while connecting to a multi-regional CA API agent in `us`, use `create_chat_client(location="us")` or `DataChatServiceClient(client_options={"api_endpoint": ca_api_endpoint("us")})` rather than setting `GOOGLE_CLOUD_LOCATION=us`, which would break Vertex model routing.
-
-## Script Reference
-
-### `scripts/enrich_bigquery_metadata.py`
-
-Run Dataplex data profile and data documentation scans for the configured
-dataset and agent tables.
-
+### Local Interactive Run
 ```bash
-# Run default metadata enrichment scans asynchronously and publish results.
-uv run python scripts/enrich_bigquery_metadata.py
-
-# Generate only table and column descriptions.
-uv run python scripts/enrich_bigquery_metadata.py \
-  --skip-profile \
-  --skip-dataset-docs \
-  --generation-scope TABLE_AND_COLUMN_DESCRIPTIONS
-
-# Override standard profiling settings and export profile results.
-uv run python scripts/enrich_bigquery_metadata.py \
-  --profile-mode STANDARD \
-  --sampling-percent 10 \
-  --profile-results-table your-project.metadata.profile_results \
-  --wait
+set -a; source .env; set +a
+uv run --extra advanced adk run advanced/app/semantic_analytics
 ```
 
-The script runs these scan types:
-
-- Dataset `DATA_DOCUMENTATION` scans for dataset descriptions, relationship
-  insights, and cross-table query suggestions.
-- Table `DATA_PROFILE` scans for null percentages, cardinality, value
-  distributions, min/max/mean, quartiles, and other profile statistics.
-- Table `DATA_DOCUMENTATION` scans for table descriptions, column descriptions,
-  and SQL query suggestions.
-
-The script logs Dataplex scan job IDs and returns immediately by default. Use
-`--wait` when you want the command to poll until scan jobs finish.
-
-### `scripts/admin_tools.py`
-
-Create or update CA API data agents. Idempotent -- creates on first run,
-updates existing agents on subsequent runs.
-
+### Run Native ADK Evals
 ```bash
-uv run python scripts/admin_tools.py
+uv run --extra advanced --extra evaluation adk eval \
+  advanced/app/semantic_analytics \
+  advanced/app/semantic_analytics/evals/thelook_narrow.evalset.json \
+  --config_file_path advanced/app/semantic_analytics/evals/eval_config.json \
+  --print_detailed_results
 ```
 
-The script intentionally does not read Dataplex scan results or write local
-semantic metadata. The agent references BigQuery tables, and generated metadata
-is managed by BigQuery and Knowledge Catalog.
-
-### `scripts/register_ge_agents.py`
-
-Register CA API data agents in Gemini Enterprise via A2A.
-
+### Run Local OAuth Test Web Harness
 ```bash
-# Register agents
-uv run python scripts/register_ge_agents.py \
-  --agents agent_id_1 agent_id_2 \
-  --auth-ids auth-resource-1 auth-resource-2
-
-# Custom display names
-uv run python scripts/register_ge_agents.py \
-  --agents agent_id_1 agent_id_2 \
-  --display-names "Orders Analyst,Inventory Analyst" \
-  --auth-ids auth-resource-1 auth-resource-2
-
-# Update existing agents
-uv run python scripts/register_ge_agents.py \
-  --agents agent_id_1 \
-  --auth-ids my-auth-resource \
-  --force
-
-# List registered agents
-uv run python scripts/register_ge_agents.py --list
-
-# Delete an agent by GE ID
-uv run python scripts/register_ge_agents.py --delete 12345678901234567890
+uv run --extra web python advanced/test_web/app.py
 ```
+Open `http://localhost:8080` in your browser to test live OAuth user identity passthrough, query execution, and provenance inspection.
 
-## Sample Queries
+---
 
-**Orders Agent:**
-- "How many orders are in 'Complete' status?"
-- "Who are the top 5 users by total spend?"
-- "What is the average number of items per order?"
+## Baseline OOTB BQCA & Gemini Enterprise A2A Utilities
 
-**Inventory Agent:**
-- "What is the name and price of product ID 1?"
-- "Which distribution center has the most inventory?"
-- "How many products are in the 'Accessories' category?"
+For comparing custom runtime performance against baseline out-of-the-box BQCA:
 
-## Advanced: Custom ADK Runtime
+1. **Enrich BigQuery Metadata via Knowledge Catalog DataScans:**
+   ```bash
+   uv run python scripts/enrich_bigquery_metadata.py --wait
+   ```
+2. **Create Baseline CA API Agents:**
+   ```bash
+   uv run python scripts/admin_tools.py
+   ```
+3. **Register Baseline Agents in Gemini Enterprise via A2A:**
+   ```bash
+   uv run python scripts/register_ge_agents.py \
+     --agents order_user_agent inventory_product_agent \
+     --auth-ids bq-caapi-oauth-orders bq-caapi-oauth-inventory
+   ```
 
-For use cases requiring custom agent orchestration, a standalone frontend,
-or chart visualization support, see [`advanced/README.md`](advanced/README.md).
+---
 
-The advanced path includes independent Agent Engine wrappers with OAuth identity
-passthrough and the local-first `semantic_analytics` context-selection workflow.
-Install the additional dependencies with:
+## Official Documentation References
 
-```bash
-uv sync --extra advanced
-```
-
-The ADK node modules under `semantic/` (`runtime.py`, `catalog_runtime.py`,
-`sql_runtime.py`, `execution.py`) require the `advanced` extra. The base install
-exposes the catalog, context, registry, and type modules without ADK installed.
-
-## Relationship to the cross-cloud lakehouse agent
-
-The `bq-cross-cloud-lakehouse` repository contains an `agent/` package that was
-extracted from this project. It is a **frozen fork**: it is deliberately
-self-contained (no shared parent package, no ADK runtime) so the lakehouse demo
-can be handed over on its own.
-
-**This project is the canonical baseline.** Fixes flow *from* the fork *into*
-here, never the other way around, unless something is broken badly enough in the
-fork to justify unfreezing it. If you are looking for the up-to-date behaviour,
-it is here.
-
-The remaining differences are intentional:
-
-| Difference | Why |
-|---|---|
-| Fork reads `config.local.env` then `.env`; this project reads `.env` with `override=True` | The fork inherits infrastructure values from the lakehouse deployment |
-| Fork defines one agent; this project defines many (`--agents`, `--auth-ids`, `--display-names`) | This project is the superset |
-| Fork's `TableRef` carries a per-table `dataset_id`; here tables are names inside one `BIGQUERY_DATASET_ID` | The fork needs four-part P.C.N.T references for AWS-federated Iceberg tables |
-| Fork profiles AWS-federated Iceberg tables (`--skip-federated`) | Not applicable here |
-| `semantic/` and `advanced/` exist only here | The fork explicitly excludes the ADK runtime |
-
-Everything else — the Dataplex scan plumbing, documentation write-back, CA API
-endpoint resolution, and Gemini Enterprise registration — should read the same
-in both. This project additionally carries `--dataset`,
-`--skip-schema-write-back`, the Dataplex multi-region guard, and the
-dataset-documentation pre-check, none of which the frozen fork has.
-
-## Demo
-
-### Gemini Enterprise
-
-![Gemini Enterprise Demo](docs/gemini-enterprise-demo.png)
-
-*Data agent responding to queries in Gemini Enterprise*
-
-## Official References
-
+- [BigQuery Graph Measures (GA)](https://docs.cloud.google.com/bigquery/docs/graph-measures)
+- [BigQuery Graph Chat](https://docs.cloud.google.com/bigquery/docs/graph-chat)
 - [Conversational Analytics API Overview](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/overview)
-- [Conversational Analytics API Locations](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/locations)
-- [Conversational Analytics API Data Residency](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/data-residency)
-- [Conversational Analytics API State Management](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management)
-- [BigQuery Authored Context & Verified Queries](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/data-agent-authored-context-bq)
-- [Conversational Analytics API Access Control](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/access-control)
-- [BigQuery Primary and Foreign Keys](https://docs.cloud.google.com/bigquery/docs/primary-foreign-keys)
+- [Conversational Analytics State Management](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management)
 - [Knowledge Catalog Data Insights for Structured Data](https://docs.cloud.google.com/knowledge-catalog/docs/data-insights-structured-data)
+- [BigQuery Primary and Foreign Key Constraints](https://docs.cloud.google.com/bigquery/docs/primary-foreign-keys)
+
+---
 
 ## License
 
-Demonstration project for educational purposes.
+Demonstration and reference architecture project for educational and technical enablement purposes.

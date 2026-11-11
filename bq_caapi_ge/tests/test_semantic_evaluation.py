@@ -39,6 +39,7 @@ def _invocation(
     *,
     selector_text: str | None = None,
     sql_text: str | None = None,
+    sql_author: str = "semantic_analytics.semantic_sql_generator",
 ) -> Invocation:
     events = []
     if selector_text is not None:
@@ -53,7 +54,7 @@ def _invocation(
     if sql_text is not None:
         events.append(
             InvocationEvent(
-                author="semantic_analytics.semantic_sql_generator",
+                author=sql_author,
                 content=types.Content(
                     role="model", parts=[types.Part.from_text(text=sql_text)]
                 ),
@@ -113,7 +114,7 @@ def test_eval_assets_define_aligned_twelve_case_suite():
     eval_cases = eval_set["eval_cases"]
     gold_cases = gold["cases"]
     parsed_eval_set = EvalSet.model_validate(eval_set)
-    contracts = load_contracts(_EVAL_DIR / "contracts")
+    contracts = load_contracts(PROJECT_ROOT / "config" / "semantic_contracts")
     eval_questions = {
         case["conversation"][0]["user_content"]["parts"][0]["text"]
         for case in eval_cases
@@ -134,7 +135,7 @@ def test_eval_assets_define_aligned_twelve_case_suite():
     }
     assert eval_questions == gold_questions
     assert all(
-        source.startswith("johanesa-playground-326616.thelook_ecommerce.")
+        source.startswith("bigquery-public-data.thelook_ecommerce.")
         for case in gold_cases
         for source in case["expected_sources"]
     )
@@ -248,7 +249,7 @@ def test_normalize_sql_removes_supported_code_fence():
 
 def test_execute_checked_query_runs_only_allowed_sources():
     """Tests an allowed SELECT executes with the configured billing cap."""
-    source = "johanesa-playground-326616.thelook_ecommerce.orders"
+    source = "bigquery-public-data.thelook_ecommerce.orders"
     client = _FakeBigQueryClient((source,), ({"value": Decimal("3.25")},))
 
     rows = metrics._execute_checked_query(
@@ -274,10 +275,51 @@ def test_execute_checked_query_rejects_unexpected_source_before_execution():
             client,
             "SELECT 1",
             allowed_sources=frozenset(
-                {"johanesa-playground-326616.thelook_ecommerce.orders"}
+                {"bigquery-public-data.thelook_ecommerce.orders"}
             ),
             maximum_bytes=1_000,
             location="US",
         )
 
     assert len(client.calls) == 1
+
+
+def test_bigquery_result_match_requires_project(monkeypatch):
+    """Tests bigquery_result_match raises ValueError when no project is set."""
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("BQ_COMPUTE_PROJECT", raising=False)
+    invocation = _invocation(
+        "How many completed orders were placed?", sql_text="SELECT 1"
+    )
+    with pytest.raises(
+        ValueError,
+        match="GOOGLE_CLOUD_PROJECT or BQ_COMPUTE_PROJECT must be set",
+    ):
+        metrics.bigquery_result_match(
+            _metric("bigquery_result_match"), [invocation], None, None
+        )
+
+
+def test_bigquery_result_match_scores_from_route_sql_authoring(monkeypatch):
+    """Tests bigquery_result_match scores 1.0 when candidate SQL is from route_sql_authoring."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "example-eval-project")
+    source = "bigquery-public-data.thelook_ecommerce.orders"
+    fake_client = _FakeBigQueryClient((source,), ({"completed_orders": 42},))
+    monkeypatch.setattr(metrics.bigquery, "Client", lambda *args, **kwargs: fake_client)
+
+    invocation = _invocation(
+        "How many completed orders were placed?",
+        sql_text=(
+            "SELECT COUNT(DISTINCT order_id) AS completed_orders "
+            "FROM `bigquery-public-data.thelook_ecommerce.orders` "
+            "WHERE status = 'Complete'"
+        ),
+        sql_author="semantic_analytics.route_sql_authoring",
+    )
+
+    result = metrics.bigquery_result_match(
+        _metric("bigquery_result_match"), [invocation], None, None
+    )
+    assert result.overall_score == 1.0
+    assert result.overall_eval_status is EvalStatus.PASSED
+

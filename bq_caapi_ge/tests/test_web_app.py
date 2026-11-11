@@ -1,4 +1,4 @@
-"""Tests for the Phase 9 Slice 2 hardened OAuth test harness.
+"""Tests for the hardened OAuth test harness.
 
 These are hermetic: no live OAuth, backend, or network calls. They require the
 ``web`` extra (Flask, google-auth-oauthlib) and skip otherwise.
@@ -20,7 +20,7 @@ pytest.importorskip("google_auth_oauthlib")
 os.environ.setdefault("ADK_LOCAL_BASE_URL", "http://localhost:9999")
 os.environ.setdefault("OAUTH_CLIENT_ID", "test-client-id")
 os.environ.setdefault("OAUTH_CLIENT_SECRET", "test-secret")
-os.environ.setdefault("ADK_OAUTH_TOKEN_STATE_KEY", "AUTH_RESOURCE_SEMANTIC_ANALYTICS")
+os.environ.setdefault("ADK_OAUTH_TOKEN_STATE_KEY", "bq-caapi-oauth-semantic")
 
 _WEB_DIR = Path(__file__).resolve().parents[1] / "advanced" / "test_web"
 if not _WEB_DIR.exists():
@@ -65,6 +65,11 @@ def test_select_final_output():
 def test_extract_provenance():
     output = {
         "status": "sql_executed",
+        "authoring_mode": "compiled",
+        "trust_tier": "TIER_1_VERIFIED_OR_COMPILED",
+        "trust_sub_mode": "STRICT_CONTRACT_COMPILED",
+        "trust_reasons": ["deterministically compiled from YAML contract"],
+        "semantic_context_ids": ["thelook_orders"],
         "auth": {"mode": "user", "authorized": True},
         "sql": "SELECT 1",
         "execution": {"status": "SUCCESS"},
@@ -73,6 +78,11 @@ def test_extract_provenance():
     }
     prov = web_app.extract_provenance(output)
     assert prov["status"] == "sql_executed"
+    assert prov["authoring_mode"] == "compiled"
+    assert prov["trust_tier"] == "TIER_1_VERIFIED_OR_COMPILED"
+    assert prov["trust_sub_mode"] == "STRICT_CONTRACT_COMPILED"
+    assert prov["trust_reasons"] == ["deterministically compiled from YAML contract"]
+    assert prov["semantic_context_ids"] == ["thelook_orders"]
     assert prov["auth"] == {"mode": "user", "authorized": True}
     assert prov["sql"] == "SELECT 1"
     assert prov["catalog_route"] == "narrow"

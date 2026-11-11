@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -21,16 +22,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
-PROJECT_NUMBER = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
-GE_LOCATION = os.getenv("GEMINI_APP_LOCATION", "global")
-OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
-OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
-
-# Load Auth Resource IDs from environment
-AUTH_ID_ORDERS = os.getenv("AUTH_RESOURCE_ORDERS", "bq-caapi-oauth-orders")
-AUTH_ID_INVENTORY = os.getenv("AUTH_RESOURCE_INVENTORY", "bq-caapi-oauth-inventory")
-
 
 def create_auth_resource(auth_id: str) -> None:
     """Create an OAuth authorization resource in Gemini Enterprise.
@@ -41,9 +32,15 @@ def create_auth_resource(auth_id: str) -> None:
     Raises:
         ValueError: If required OAuth or project configuration is not set.
     """
-    if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    project_number = os.getenv("GOOGLE_CLOUD_PROJECT_NUMBER")
+    ge_location = os.getenv("GEMINI_APP_LOCATION", "global")
+    oauth_client_id = os.getenv("OAUTH_CLIENT_ID")
+    oauth_client_secret = os.getenv("OAUTH_CLIENT_SECRET")
+
+    if not oauth_client_id or not oauth_client_secret:
         raise ValueError("OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET must be set")
-    if not PROJECT_NUMBER:
+    if not project_number:
         raise ValueError("GOOGLE_CLOUD_PROJECT_NUMBER must be set")
 
     logger.info("Creating Authorization Resource: %s...", auth_id)
@@ -51,18 +48,22 @@ def create_auth_resource(auth_id: str) -> None:
     # Authorization resources are addressed by project number so the reference
     # built by register_agents.py resolves to the resource created here.
     url = (
-        f"https://{GE_LOCATION}-discoveryengine.googleapis.com/v1alpha/"
-        f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations?authorizationId={auth_id}"
+        f"https://{ge_location}-discoveryengine.googleapis.com/v1alpha/"
+        f"projects/{project_number}/locations/{ge_location}/authorizations?authorizationId={auth_id}"
     )
 
     payload = {
-        "name": f"projects/{PROJECT_NUMBER}/locations/{GE_LOCATION}/authorizations/{auth_id}",
+        "name": f"projects/{project_number}/locations/{ge_location}/authorizations/{auth_id}",
         "serverSideOauth2": {
-            "clientId": OAUTH_CLIENT_ID,
-            "clientSecret": OAUTH_CLIENT_SECRET,
-            "authorizationUri": "https://accounts.google.com/o/oauth2/v2/auth?client_id="
-            + OAUTH_CLIENT_ID
-            + "&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Foauth-redirect&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent",
+            "clientId": oauth_client_id,
+            "clientSecret": oauth_client_secret,
+            "authorizationUri": (
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id="
+                + oauth_client_id
+                + "&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Foauth-redirect"
+                "&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform"
+                "&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent"
+            ),
             "tokenUri": "https://oauth2.googleapis.com/token",
         },
     }
@@ -73,8 +74,8 @@ def create_auth_resource(auth_id: str) -> None:
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    if PROJECT_ID:
-        headers["X-Goog-User-Project"] = PROJECT_ID
+    if project_id:
+        headers["X-Goog-User-Project"] = project_id
 
     req = urllib.request.Request(
         url,
@@ -99,30 +100,21 @@ def create_auth_resource(auth_id: str) -> None:
         logger.error("Failed to create %s: %s", auth_id, e)
 
 
-if __name__ == "__main__":
-    import argparse
+def main() -> None:
+    default_auth_id = os.getenv("AUTH_RESOURCE_SEMANTIC_ANALYTICS", "bq-caapi-oauth-semantic")
 
     parser = argparse.ArgumentParser(
-        description="Create OAuth authorization resources for Gemini Enterprise."
+        description="Create OAuth authorization resource for Gemini Enterprise."
     )
     parser.add_argument(
-        "--orders-only",
-        action="store_true",
-        help="Only create authorization for Orders agent",
-    )
-    parser.add_argument(
-        "--inventory-only",
-        action="store_true",
-        help="Only create authorization for Inventory agent",
+        "--auth-id",
+        default=default_auth_id,
+        help=f"Authorization resource ID to create (default: {default_auth_id})",
     )
 
     args = parser.parse_args()
+    create_auth_resource(args.auth_id)
 
-    if args.orders_only:
-        create_auth_resource(AUTH_ID_ORDERS)
-    elif args.inventory_only:
-        create_auth_resource(AUTH_ID_INVENTORY)
-    else:
-        # Default: create both
-        create_auth_resource(AUTH_ID_ORDERS)
-        create_auth_resource(AUTH_ID_INVENTORY)
+
+if __name__ == "__main__":
+    main()

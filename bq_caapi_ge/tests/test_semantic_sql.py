@@ -366,9 +366,15 @@ def test_workflow_user_mode_binds_token(monkeypatch):
         _run_query(
             _scripted_model(_SQL),
             _scripted_model("There are 3."),
-            state={"AUTH_RESOURCE_SEMANTIC_ANALYTICS": "tok-xyz"},
+            state={"bq-caapi-oauth-semantic": "tok-xyz"},
         )
     )[-1]
     assert final["status"] == "answered"
     assert final["auth"] == {"mode": "user", "source": "user-token"}
-    assert calls == [{"access_token": "tok-xyz", "auth_mode": "user"}]
+    assert calls == [
+        {
+            "access_token": "tok-xyz",
+            "auth_mode": "user",
+            "allowed_sources": frozenset({_READINGS}),
+        }
+    ]

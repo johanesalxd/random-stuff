@@ -47,24 +47,22 @@ flowchart TD
     style ABORT fill:#f8cecc,stroke:#b85450
 ```
 
-This is the expected V2 prototype flow. The resolver deterministically validates
-the selected contract version and concept IDs, injects required dimensions, and
-computes the relationship closure. Sonnet is then instructed to follow the
-grounded context, but the runtime does not currently inspect the generated SQL
-for semantic equivalence before executing it.
+The resolver deterministically validates the selected contract version and
+concept IDs, injects required dimensions, computes the relationship closure, and
+determines whether the question qualifies for the Tier-1 deterministic compiler
+fast-path (zero Stage-2 LLM drift) or Tier-2 guarded SQL authoring.
 
 Current execution guardrails are:
 
+- Tier-1 deterministic SQL compilation for clean single-metric narrow selections.
+- Pre-execution BigQuery dry-run policy gate enforcing statement type (`SELECT`),
+  source-table allowlists, and maximum bytes billed (`SQL_MAX_BYTES_BILLED`).
 - BigQuery writes are blocked.
 - SQL executes once, without a repair loop.
 - Results are capped at 50 rows by default.
-- Broad catalog discovery is default-deny and requires explicit project or
+- Broad Knowledge Catalog discovery is default-deny and requires explicit project or
   dataset allowlists.
-- Query errors return through the error path.
-
-The runtime does not yet enforce allowed source tables, statement type, or
-maximum bytes billed before execution. The evaluation metric applies those
-checks independently.
+- Query errors return through the error path with Tier-3 classification.
 
 ## Normal Success Path
 
@@ -111,7 +109,7 @@ Three sources contribute different kinds of grounding:
 flowchart LR
     CONTRACT["Semantic contract<br/>Business definitions"] --> PAYLOAD[Grounded SQL-generation payload]
     BQ["BigQuery<br/>Current physical schema"] --> PAYLOAD
-    DP["Dataplex Knowledge Catalog<br/>Supplemental metadata"] --> PAYLOAD
+    DP["Knowledge Catalog<br/>Supplemental metadata"] --> PAYLOAD
     PAYLOAD --> SONNET[Sonnet SQL generator]
 
     style CONTRACT fill:#dae8fc,stroke:#6c8ebf
@@ -124,7 +122,7 @@ The intended authority order is:
 ```text
 Semantic contract  -> authoritative business meaning
 BigQuery           -> authoritative current physical schema
-Dataplex           -> supplemental catalog knowledge
+Knowledge Catalog  -> supplemental catalog knowledge
 ```
 
 ### Semantic Contract Context
@@ -164,14 +162,14 @@ This includes table descriptions and current column names, types, modes, and
 descriptions. It does not include sample values, row counts, distributions, or
 query-cost estimates.
 
-### Dataplex Knowledge Catalog Context
+### Knowledge Catalog Context
 
-For narrow grounding, Dataplex resolves the exact selected BigQuery tables and
+For narrow grounding, Knowledge Catalog resolves the exact selected BigQuery tables and
 calls `LookupContext`. For broad grounding, it first performs semantic table
 search inside configured allowlists.
 
 The lookup requests schemas, descriptions, relationships, guidelines, quality
-status, and SQL examples while explicitly asking Dataplex to omit data values.
+status, and SQL examples while explicitly asking Knowledge Catalog to omit data values.
 The returned JSON is sanitized to an allowlist that can retain:
 
 - Business and technical descriptions.
@@ -185,8 +183,8 @@ The returned JSON is sanitized to an allowlist that can retain:
 - Guidelines, verified queries, and SQL examples.
 - Related resources and resource ancestry.
 
-Dataplex enrichment is best effort. Narrow grounding can proceed when BigQuery
-returns complete schema metadata even if Dataplex returns no additional context.
+Knowledge Catalog enrichment is best effort. Narrow grounding can proceed when BigQuery
+returns complete schema metadata even if Knowledge Catalog returns no additional context.
 
 ### Combined Payload
 

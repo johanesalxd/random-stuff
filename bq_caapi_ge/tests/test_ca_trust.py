@@ -609,3 +609,65 @@ def test_mid_stream_exception_returns_incomplete_stream():
     assert assessment.sub_mode == "INCOMPLETE_STREAM"
     assert "incomplete_stream" in assessment.reasons
     assert any("stream_error:TimeoutError" in r for r in assessment.reasons)
+
+
+def test_graph_measure_grounded_sub_mode():
+    """GRAPH_EXPAND and AGG() in final SQL promote TIER_2_GROUNDED to GRAPH_MEASURE_GROUNDED."""
+    sql = (
+        "SELECT * FROM GRAPH_EXPAND(my_graph, (u:Users) "
+        "COLUMNS (u.id, AGG(u.completed_order_count) AS order_cnt))"
+    )
+    stream = [
+        {
+            "data": {
+                "generated_sql": sql,
+                "result": {"name": "graph_query", "data": [{"order_cnt": 42.0}]},
+            }
+        },
+        {"text": {"text_type": 1, "parts": ["Total count is 42."]}},
+    ]
+    assessment = evaluate_ca_stream_trust(stream, question="Count orders via graph")
+    assert assessment.tier == TrustTier.TIER_2_GROUNDED
+    assert assessment.sub_mode == "GRAPH_MEASURE_GROUNDED"
+    assert assessment.uses_graph_expand is True
+    assert assessment.uses_agg_measures is True
+
+
+def test_array_agg_string_agg_does_not_misfire_as_measure():
+    """ARRAY_AGG and STRING_AGG do not misfire as AGG measures."""
+    sql = "SELECT ARRAY_AGG(id) AS ids, STRING_AGG(country) AS countries FROM users"
+    stream = [
+        {
+            "data": {
+                "generated_sql": sql,
+                "result": {"name": "query", "data": [{"ids": [1], "countries": "USA"}]},
+            }
+        },
+        {"text": {"text_type": 1, "parts": ["Country is USA."]}},
+    ]
+    assessment = evaluate_ca_stream_trust(stream, question="List countries")
+    assert assessment.tier == TrustTier.TIER_2_GROUNDED
+    assert assessment.sub_mode == "DYNAMIC_SQL_GROUNDED"
+    assert assessment.uses_graph_expand is False
+    assert assessment.uses_agg_measures is False
+
+
+def test_reconcile_prose_numbers_reexport():
+    """Confirms reconcile_prose_numbers and has_assumption_markers are re-exported."""
+    from semantic.ca_trust import (
+        has_assumption_markers as ca_has_assumption,
+        reconcile_prose_numbers as ca_reconcile,
+    )
+    from semantic.numeric_reconcile import (
+        has_assumption_markers as num_has_assumption,
+        reconcile_prose_numbers as num_reconcile,
+    )
+
+    assert ca_has_assumption is num_has_assumption
+    assert ca_reconcile is num_reconcile
+
+    assert ca_has_assumption("I assumed the order was completed.") is True
+    assert ca_has_assumption("There are 10 orders.") is False
+    unverified = ca_reconcile("Total is 999.", question="Total?", result_rows=[{"total": 10}])
+    assert "999" in unverified
+

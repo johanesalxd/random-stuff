@@ -223,6 +223,7 @@ def test_build_semantic_context_is_domain_neutral_and_json_safe(monkeypatch):
         "orders"
     ] == "bigquery-public-data.thelook_ecommerce.orders"
     assert {metric["name"] for metric in context["metrics"]} == {
+        "active_buyer_rate",
         "average_order_value",
         "completed_order_count",
         "completed_revenue",

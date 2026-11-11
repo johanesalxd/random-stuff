@@ -26,7 +26,7 @@ There is no separate virtualenv or manual `uv pip install` step.
    Use one of these modes:
 
    - Local ADK API server mode: set `ADK_LOCAL_BASE_URL`
-   - Agent Engine mode: set `ORDERS_REASONING_ENGINE_ID`
+   - Agent Engine mode: set `SEMANTIC_REASONING_ENGINE_ID`
 
 3. Environment variables in root `../../.env`:
     - `OAUTH_CLIENT_ID`
@@ -37,8 +37,8 @@ There is no separate virtualenv or manual `uv pip install` step.
     - `COOKIE_SECURE`, optional; set to `1` to mark session cookies `Secure` when
       serving over HTTPS.
     - `ADK_OAUTH_TOKEN_STATE_KEY`, optional; the session-state key the user token is
-      written to. Defaults to `AUTH_RESOURCE_SEMANTIC_ANALYTICS` and must match the
-      target agent's `external_access_token_key`.
+      written to. Defaults to `AUTH_RESOURCE_SEMANTIC_ANALYTICS` if set, otherwise
+      `"bq-caapi-oauth-semantic"`, and must match the target agent's `external_access_token_key`.
 
    Local ADK API server mode also needs:
 
@@ -46,18 +46,10 @@ There is no separate virtualenv or manual `uv pip install` step.
    - `ADK_LOCAL_APP_NAME`, optional, defaults to `semantic_analytics`
    - `SEMANTIC_CONTRACT_PATH`, optional semantic YAML file or directory
 
-   > **Driving the orders/inventory baseline agents.** The defaults target
-   > `semantic_analytics`. To drive the orders or inventory agent instead, set
-   > `ADK_LOCAL_APP_NAME` to `orders` or `inventory` **and** override
-   > `ADK_OAUTH_TOKEN_STATE_KEY` to that agent's key — `bq-caapi-oauth-orders`
-   > (orders, from `AUTH_RESOURCE_ORDERS`) or `bq-caapi-oauth-inventory`
-   > (inventory, from `AUTH_RESOURCE_INVENTORY`) — so the token is written to the
-   > key the agent's `external_access_token_key` reads.
-
    Agent Engine mode also needs:
 
    - `GOOGLE_CLOUD_PROJECT`
-   - `ORDERS_REASONING_ENGINE_ID`
+   - `SEMANTIC_REASONING_ENGINE_ID`
 
 ## Local ADK Mode
 
@@ -86,7 +78,7 @@ Then run the Flask app from `advanced/test_web`.
 
 Local mode creates an ADK API server session at
 `/apps/{app_name}/users/{user_id}/sessions`, stores the OAuth token in session
-state at `ADK_OAUTH_TOKEN_STATE_KEY` (default `AUTH_RESOURCE_SEMANTIC_ANALYTICS`),
+state at `ADK_OAUTH_TOKEN_STATE_KEY` (defaulting to `AUTH_RESOURCE_SEMANTIC_ANALYTICS` if set, otherwise `"bq-caapi-oauth-semantic"`),
 and calls `/run`. The backend session is reused across queries and recreated only
 when the token is refreshed.
 
@@ -104,7 +96,7 @@ absent.
 ## Agent Engine Mode
 
 Unset `ADK_LOCAL_BASE_URL` and set `GOOGLE_CLOUD_PROJECT` plus
-`ORDERS_REASONING_ENGINE_ID`. The app creates an Agent Engine session with the
+`SEMANTIC_REASONING_ENGINE_ID`. The app creates an Agent Engine session with the
 OAuth token in `sessionState[ADK_OAUTH_TOKEN_STATE_KEY]`, then calls
 `:streamQuery`.
 

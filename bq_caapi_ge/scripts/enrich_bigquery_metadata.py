@@ -16,10 +16,6 @@ look.
   equivalent of the console "Save to schema" action, and it requires ``--wait``
   (the descriptions only exist once the documentation job has finished).
 
-The generic Dataplex REST plumbing is kept byte-compatible with
-``bq_cross_cloud_lakehouse/agent/scripts/enrich_bigquery_metadata.py`` so the
-two stay easy to sync.
-
 Usage::
 
     uv run python scripts/enrich_bigquery_metadata.py

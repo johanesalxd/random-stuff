@@ -18,6 +18,15 @@ class ContractError(ValueError):
 
 
 @dataclass(frozen=True)
+class VerifiedQuerySpec:
+    """Client-side verified query contract specification."""
+
+    question: str
+    sql: str
+    query_id: str | None = None
+
+
+@dataclass(frozen=True)
 class TableSource:
     """Identifies a physical BigQuery table."""
 

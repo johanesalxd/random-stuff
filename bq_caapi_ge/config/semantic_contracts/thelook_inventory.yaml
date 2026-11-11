@@ -87,7 +87,7 @@ metrics:
 
   available_inventory_item_count:
     label: Available inventory items
-    description: Number of distinct inventory items that have not been sold.
+    description: Number of distinct unsold inventory items currently available or held in stock.
     synonyms: [available stock, unsold inventory, stock on hand]
     type: count_distinct
     base_table: inventory_items

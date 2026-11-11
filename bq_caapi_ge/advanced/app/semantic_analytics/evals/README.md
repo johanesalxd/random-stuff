@@ -7,10 +7,8 @@ oracle-authored semantic selection and an exact BigQuery result.
 See [`ADK_FLOW.md`](ADK_FLOW.md) for diagrams of the runtime and evaluation
 success, recovery, and failure paths.
 
-The suite uses the local
-`johanesa-playground-326616.thelook_ecommerce` snapshot. The contracts under
-`contracts/` isolate evaluation from the production contracts that target the
-public dataset.
+The suite evaluates twelve cases against canonical semantic contracts in
+`config/semantic_contracts/` targeting `bigquery-public-data.thelook_ecommerce`.
 
 ## Metrics
 
@@ -34,18 +32,18 @@ contracts:
 set -a; . ./.env; set +a
 export GOOGLE_GENAI_USE_ENTERPRISE=TRUE
 export SQL_GENERATOR_MODEL=claude-sonnet-4-5
-export SEMANTIC_CONTRACT_PATH="$PWD/advanced/app/semantic_analytics/evals/contracts"
+export SEMANTIC_CONTRACT_PATH="$PWD/config/semantic_contracts"
 export EVAL_MAXIMUM_BYTES_BILLED=1000000000
 ```
 
 `GOOGLE_GENAI_USE_ENTERPRISE=TRUE` is required when `SQL_GENERATOR_MODEL` uses
-Claude through Agent Platform. The active credentials must be able to read the
-local dataset and use the configured selector, SQL generator, and summarizer
-models. Enable `claude-sonnet-5` from its Agent Platform Model Garden card for
-the active project before using the V2 default. A `404 NOT_FOUND` from the
-Anthropic publisher endpoint indicates that the project does not have access to
-the model; set `SQL_GENERATOR_MODEL` to an enabled model before retrying. The
-commands above use Sonnet 4.5 as a temporary baseline until Sonnet 5 is enabled.
+Claude through Vertex AI. `claude-sonnet-4-5` is the configured default
+(`SQL_GENERATOR_MODEL=claude-sonnet-4-5`), which requires enabling Claude Sonnet 4.5
+in Model Garden when routing Anthropic via Vertex AI (`GOOGLE_GENAI_USE_ENTERPRISE=TRUE`).
+A `404 NOT_FOUND` from the Anthropic publisher endpoint indicates that the project does
+not have access to the model; set `SQL_GENERATOR_MODEL` to an enabled model before retrying.
+The evaluation reads the public `bigquery-public-data.thelook_ecommerce` tables using
+the active project (`BQ_COMPUTE_PROJECT` / `GOOGLE_CLOUD_PROJECT`) for query execution billing.
 
 ## Run
 

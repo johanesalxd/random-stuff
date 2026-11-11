@@ -10,7 +10,8 @@ from typing import Any
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_AGENT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _AGENT_DIR if (_AGENT_DIR / "semantic").is_dir() else _AGENT_DIR.parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
@@ -31,15 +32,15 @@ from semantic.runtime import (  # noqa: E402
 from semantic.sql_runtime import (  # noqa: E402
     GENERATE_SQL_INSTRUCTION,
     SUMMARIZE_RESULT_INSTRUCTION,
-    enter_sql_generation,
     execute_sql_once,
     finish_answer,
     finish_query_error,
     prepare_result_summary,
+    route_sql_authoring,
 )
 
 _DEFAULT_SELECTOR_MODEL = "gemini-3.5-flash"
-_DEFAULT_SQL_MODEL = "claude-sonnet-5"
+_DEFAULT_SQL_MODEL = "claude-sonnet-4-5"
 _DEFAULT_SUMMARIZER_MODEL = "gemini-3.5-flash"
 
 
@@ -124,7 +125,7 @@ def build_root_agent(
             (
                 assess_context,
                 {
-                    "sufficient": enter_sql_generation,
+                    "sufficient": route_sql_authoring,
                     "insufficient": load_broad_catalog_context,
                 },
             ),
@@ -132,11 +133,17 @@ def build_root_agent(
             (
                 assess_broad_context,
                 {
-                    "grounded": enter_sql_generation,
+                    "grounded": route_sql_authoring,
                     "clarify": finish_clarification,
                 },
             ),
-            (enter_sql_generation, generator),
+            (
+                route_sql_authoring,
+                {
+                    "compiled": execute_sql_once,
+                    "generate": generator,
+                },
+            ),
             (generator, execute_sql_once),
             (
                 execute_sql_once,

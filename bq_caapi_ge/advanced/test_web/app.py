@@ -1,12 +1,12 @@
 """Test web app for OAuth passthrough to Agent Engine or local ADK.
 
-This is a development harness, not a production identity service. Phase 9 Slice 2
-hardens the legacy behavior: OAuth state is validated before token exchange, access
-tokens live in a server-side store (only an opaque session id is placed in the
-signed cookie), tokens are refreshed when expired, backend sessions are reused
-across queries, and the user token is written to the workflow's configured
-session-state key (``ADK_OAUTH_TOKEN_STATE_KEY``, default
-``AUTH_RESOURCE_SEMANTIC_ANALYTICS``) so it reaches the guarded SQL executor.
+This is a development harness, not a production identity service. OAuth state is
+validated before token exchange, access tokens live in a server-side store (only
+an opaque session id is placed in the signed cookie), tokens are refreshed when
+expired, backend sessions are reused across queries, and the user token is
+written to the workflow's configured session-state key
+(``ADK_OAUTH_TOKEN_STATE_KEY``, default ``bq-caapi-oauth-semantic``) so
+it reaches the guarded SQL executor.
 """
 
 from __future__ import annotations
@@ -52,11 +52,13 @@ os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
-REASONING_ENGINE_ID = os.getenv("ORDERS_REASONING_ENGINE_ID")
+REASONING_ENGINE_ID = os.getenv("SEMANTIC_REASONING_ENGINE_ID")
 # The workflow reads the user token from this session-state key. It must match the
-# engine's ADK_OAUTH_TOKEN_STATE_KEY (default AUTH_RESOURCE_SEMANTIC_ANALYTICS).
-TOKEN_STATE_KEY = os.getenv(
-    "ADK_OAUTH_TOKEN_STATE_KEY", "AUTH_RESOURCE_SEMANTIC_ANALYTICS"
+# engine's ADK_OAUTH_TOKEN_STATE_KEY (default bq-caapi-oauth-semantic).
+TOKEN_STATE_KEY = (
+    os.getenv("ADK_OAUTH_TOKEN_STATE_KEY")
+    or os.getenv("AUTH_RESOURCE_SEMANTIC_ANALYTICS")
+    or "bq-caapi-oauth-semantic"
 )
 ADK_LOCAL_BASE_URL = os.getenv("ADK_LOCAL_BASE_URL")
 ADK_LOCAL_APP_NAME = os.getenv("ADK_LOCAL_APP_NAME", "semantic_analytics")
@@ -72,10 +74,10 @@ elif PROJECT_ID and REASONING_ENGINE_ID:
 else:
     raise ValueError(
         "Set ADK_LOCAL_BASE_URL for local ADK mode or set "
-        "GOOGLE_CLOUD_PROJECT and ORDERS_REASONING_ENGINE_ID for Agent Engine mode"
+        "GOOGLE_CLOUD_PROJECT and SEMANTIC_REASONING_ENGINE_ID for Agent Engine mode"
     )
 
-# Option A (Phase 9): the user token scopes SQL execution. `bigquery` is sufficient;
+# The user token scopes SQL execution. `bigquery` is sufficient;
 # `cloud-platform` is a superset that also covers user-scoped Dataplex if adopted.
 SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
@@ -162,6 +164,11 @@ def extract_provenance(output: Any) -> dict[str, Any]:
         return {}
     keys = (
         "status",
+        "authoring_mode",
+        "trust_tier",
+        "trust_sub_mode",
+        "trust_reasons",
+        "semantic_context_ids",
         "next_step",
         "catalog_route",
         "catalog_discovery_backend",
@@ -171,6 +178,7 @@ def extract_provenance(output: Any) -> dict[str, Any]:
         "row_count",
         "truncated",
         "error",
+        "reasoning_path",
     )
     return {key: output[key] for key in keys if key in output}
 

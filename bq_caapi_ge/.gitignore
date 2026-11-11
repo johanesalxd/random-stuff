@@ -12,8 +12,7 @@ requirements.txt
 *.db
 
 # Per-agent environment files (contain secrets)
-advanced/app/orders/.env
-advanced/app/inventory/.env
+advanced/app/semantic_analytics/.env
 
 # ADK deployment temp folders
 *_tmp*/

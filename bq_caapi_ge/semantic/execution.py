@@ -6,10 +6,19 @@ from dataclasses import dataclass
 import os
 from typing import Any, Callable, Protocol, runtime_checkable
 
+from semantic.guardrails import (
+    DryRunSummary,
+    SqlPolicyError,
+    validate_dry_run_summary,
+)
+from semantic.sql_lex import has_multiple_statements
+
 _AUTH_MODE_ENV = "SQL_AUTH_MODE"
 _MAX_ROWS_ENV = "SQL_MAX_RESULT_ROWS"
 _LOCATION_ENV = "BIGQUERY_LOCATION"
+_ALT_COMPUTE_PROJECT_ENV = "BQ_COMPUTE_PROJECT"
 _COMPUTE_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT"
+_MAX_BYTES_ENV = "SQL_MAX_BYTES_BILLED"
 
 ADC_AUTH_MODE = "adc"
 USER_AUTH_MODE = "user"
@@ -76,16 +85,30 @@ class AdkBigQueryExecutor:
         location: str | None = None,
         credentials: Any = None,
         execute_fn: Callable[..., dict[str, Any]] | None = None,
+        allowed_sources: frozenset[str] | None = None,
+        max_bytes_billed: int | None = None,
+        dry_run_fn: Callable[[str], DryRunSummary] | None = None,
     ):
         self._project = project
         self._max_result_rows = max_result_rows
         self._location = location
         self._credentials = credentials
         self._execute_fn = execute_fn
+        self._allowed_sources = allowed_sources
+        self._max_bytes_billed = max_bytes_billed
+        self._dry_run_fn = dry_run_fn
         self._settings_obj: Any = None
 
     def execute(self, sql: str) -> ExecResult:
         """Executes SQL once through the read-only ADK integration."""
+        if self._allowed_sources is not None or self._max_bytes_billed is not None:
+            try:
+                self._enforce_guardrails(sql)
+            except SqlPolicyError as error:
+                return ExecResult(status="ERROR", error=f"SQL policy violation: {error}")
+            except Exception as error:
+                return ExecResult(status="ERROR", error=f"SQL dry-run failed: {error}")
+
         try:
             raw = self._get_execute_fn()(
                 project_id=self._project,
@@ -98,6 +121,48 @@ class AdkBigQueryExecutor:
         except Exception as error:  # pragma: no cover - defensive provider boundary
             return ExecResult(status="ERROR", error=str(error))
         return _map_result(raw, max_result_rows=self._max_result_rows)
+
+    def _enforce_guardrails(self, sql: str) -> None:
+        if not sql or not sql.strip():
+            raise SqlPolicyError("SQL query cannot be empty")
+        if has_multiple_statements(sql):
+            raise SqlPolicyError("Multiple SQL statements are not allowed")
+
+        if self._dry_run_fn is not None:
+            summary = self._dry_run_fn(sql)
+        else:
+            try:
+                from google.cloud import bigquery
+            except ImportError as error:  # pragma: no cover - dependency guard
+                raise SqlExecutionError(
+                    "google-cloud-bigquery is required for dry-run guardrails"
+                ) from error
+            client = bigquery.Client(
+                project=self._project,
+                credentials=self._get_credentials(),
+                location=self._location,
+            )
+            job = client.query(
+                sql,
+                job_config=bigquery.QueryJobConfig(
+                    dry_run=True,
+                    use_query_cache=False,
+                ),
+            )
+            summary = DryRunSummary(
+                statement_type=str(job.statement_type or ""),
+                referenced_sources=frozenset(
+                    f"{t.project}.{t.dataset_id}.{t.table_id}"
+                    for t in (job.referenced_tables or ())
+                ),
+                total_bytes_processed=int(job.total_bytes_processed or 0),
+            )
+        validate_dry_run_summary(
+            sql,
+            summary,
+            allowed_sources=self._allowed_sources,
+            max_bytes_billed=self._max_bytes_billed,
+        )
 
     def _get_execute_fn(self) -> Callable[..., dict[str, Any]]:
         if self._execute_fn is None:
@@ -132,13 +197,16 @@ class AdkBigQueryExecutor:
                 raise SqlExecutionError(
                     "google-adk is required for live SQL execution"
                 ) from error
-            self._settings_obj = BigQueryToolConfig(
-                write_mode=WriteMode.BLOCKED,
-                max_query_result_rows=self._max_result_rows,
-                compute_project_id=self._project,
-                location=self._location,
-                application_name=_APPLICATION_NAME,
-            )
+            kwargs: dict[str, Any] = {
+                "write_mode": WriteMode.BLOCKED,
+                "max_query_result_rows": self._max_result_rows,
+                "compute_project_id": self._project,
+                "location": self._location,
+                "application_name": _APPLICATION_NAME,
+            }
+            if self._max_bytes_billed is not None:
+                kwargs["maximum_bytes_billed"] = self._max_bytes_billed
+            self._settings_obj = BigQueryToolConfig(**kwargs)
         return self._settings_obj
 
 
@@ -162,13 +230,17 @@ def resolve_auth_mode(raw: str | None = None) -> str:
 
 
 def build_sql_executor(
-    *, access_token: str | None = None, auth_mode: str | None = None
+    *,
+    access_token: str | None = None,
+    auth_mode: str | None = None,
+    allowed_sources: frozenset[str] | None = None,
 ) -> SqlExecutor:
     """Builds the configured one-shot BigQuery executor.
 
     Args:
         access_token: End-user OAuth token required in ``user`` mode.
         auth_mode: Optional mode override.
+        allowed_sources: Optional set of allowed fully-qualified source tables.
 
     Returns:
         A configured :class:`AdkBigQueryExecutor`.
@@ -176,10 +248,14 @@ def build_sql_executor(
     Raises:
         SqlExecutionError: If project or user credentials are missing.
     """
-    project = os.getenv(_COMPUTE_PROJECT_ENV, "").strip()
+    project = (
+        os.getenv(_ALT_COMPUTE_PROJECT_ENV)
+        or os.getenv(_COMPUTE_PROJECT_ENV)
+        or ""
+    ).strip()
     if not project:
         raise SqlExecutionError(
-            f"{_COMPUTE_PROJECT_ENV} must be set to build the SQL executor"
+            f"{_COMPUTE_PROJECT_ENV} or {_ALT_COMPUTE_PROJECT_ENV} must be set to build the SQL executor"
         )
     mode = resolve_auth_mode(auth_mode)
     credentials: Any = None
@@ -189,6 +265,7 @@ def build_sql_executor(
                 "user auth mode requires a per-request OAuth access token"
             )
         credentials = _build_user_credentials(access_token)
+    max_bytes = _optional_positive_int_env(_MAX_BYTES_ENV)
     return AdkBigQueryExecutor(
         project=project,
         max_result_rows=_positive_int_env(
@@ -197,6 +274,8 @@ def build_sql_executor(
         ),
         location=os.getenv(_LOCATION_ENV, "").strip() or None,
         credentials=credentials,
+        allowed_sources=allowed_sources,
+        max_bytes_billed=max_bytes,
     )
 
 
@@ -240,3 +319,20 @@ def _positive_int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _optional_positive_int_env(name: str) -> int | None:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise SqlExecutionError(
+            f"{name} must be a positive integer; received {raw!r}"
+        ) from error
+    if value <= 0:
+        raise SqlExecutionError(
+            f"{name} must be a positive integer; received {raw!r}"
+        )
+    return value

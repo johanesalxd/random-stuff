@@ -96,6 +96,10 @@ def finish_clarification(node_input: dict[str, Any]) -> dict[str, Any]:
     payload = dict(node_input)
     payload["status"] = "catalog_context_insufficient"
     payload["next_step"] = "clarify_or_refuse"
+    payload["authoring_mode"] = "none"
+    payload["trust_tier"] = "TIER_3_REVIEW_REQUIRED"
+    payload["trust_sub_mode"] = "CLARIFICATION_OR_REFUSAL"
+    payload["trust_reasons"] = []
     return payload
 
 
@@ -199,6 +203,7 @@ def ground_broad(
     payload.pop("catalog_missing_sources", None)
     payload.pop("catalog_error", None)
     payload.pop("knowledge_catalog_context", None)
+    payload.pop("compiled_query", None)
     payload["catalog_context"] = []
     if not allowed_projects and not allowed_datasets:
         payload["catalog_error"] = (

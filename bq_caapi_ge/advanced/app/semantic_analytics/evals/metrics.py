@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 _FIXTURE_PATH = Path(__file__).with_name("gold_cases.yaml")
 _SELECTOR_AUTHOR = "semantic_context_selector"
 _SQL_AUTHOR = "semantic_sql_generator"
-_DEFAULT_PROJECT = "johanesa-playground-326616"
 _DEFAULT_LOCATION = "US"
 _DEFAULT_MAXIMUM_BYTES = 1_000_000_000
 _MAX_RESULT_ROWS = 100
@@ -85,7 +84,11 @@ def bigquery_result_match(
 ) -> EvaluationResult:
     """Compares generated-query results with the case's gold BigQuery result."""
     del conversation_scenario
-    project = os.getenv("GOOGLE_CLOUD_PROJECT", _DEFAULT_PROJECT)
+    project = (os.getenv("BQ_COMPUTE_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
+    if not project:
+        raise ValueError(
+            "GOOGLE_CLOUD_PROJECT or BQ_COMPUTE_PROJECT must be set for BigQuery evaluation"
+        )
     location = os.getenv("BIGQUERY_LOCATION", _DEFAULT_LOCATION)
     maximum_bytes = _positive_int_env(
         "EVAL_MAXIMUM_BYTES_BILLED", _DEFAULT_MAXIMUM_BYTES
@@ -94,7 +97,9 @@ def bigquery_result_match(
 
     def score(actual: Invocation) -> float:
         case = _case_for_invocation(actual)
-        candidate_sql = _event_text(actual, _SQL_AUTHOR)
+        candidate_sql = _event_text(actual, _SQL_AUTHOR) or _event_text(
+            actual, "route_sql_authoring"
+        )
         if not candidate_sql:
             logger.error("No SQL generator event found for case %s", case["id"])
             return 0.0

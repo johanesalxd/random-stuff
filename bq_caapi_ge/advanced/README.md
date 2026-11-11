@@ -1,180 +1,137 @@
-# Advanced: Custom ADK Runtime and Semantic Contract
+# Advanced: Custom ADK Runtime & Semantic Layer
 
-This directory contains two parallel ADK paths:
+This directory contains the custom ADK (Agent Development Kit) runtime providing the **Layer 3 High-Precision Runtime** of the architecture.
 
-- Independent orders and inventory CA API baselines that deploy to Agent Engine
-  and call CA API data agents with end-user OAuth.
-- A local-first `semantic_analytics` Workflow that selects bounded semantic
-  concepts from portable YAML, grounds narrow requests against exact sources or
-  broad requests through Knowledge Catalog, generates SQL once, executes it with
-  ADK BigQuery write mode blocked, and summarizes the returned rows. See
-  [`docs/adk_semantic_layer_plan_v2.md`](../docs/adk_semantic_layer_plan_v2.md).
-  The CA data agents are evaluated with Prism; see
-  [`docs/eval-with-prism.md`](../docs/eval-with-prism.md).
+See [`docs/architecture.md`](../docs/architecture.md) for the end-to-end architectural comparison with Out-of-the-Box BigQuery Conversational Analytics (BQCA) and the 3-Layer adoption path.
 
-The historical deterministic compiler and execution adapters were removed from
-`semantic/` in the Phase 7 cleanup; they are recoverable from git history if a
-strict-compilation mode is revisited. See
- [`docs/adk_semantic_layer_plan.md`](../docs/adk_semantic_layer_plan.md) for the
- superseded V1 design.
+Use this runtime when you need:
 
-Use this approach when you need:
+- **Zero-Tolerance KPI Determinism:** Tier-1 deterministic compiler fast-path (`semantic/compiler.py`) for exact metric queries without Stage-2 LLM drift.
+- **Cross-Table Ratios:** Native support for ratios spanning multiple tables with unmatched denominator rows (`active_buyer_rate`) using join cardinality guards.
+- **Wide Schema Routing:** Modular domain routing across wide schemas (50+ tables) using portable YAML semantic contracts (`config/semantic_contracts/`) and Knowledge Catalog discovery.
+- **Pre-Execution Runtime Guardrails:** Dry-run BigQuery policy gates enforcing `SELECT`-only execution, source-table allowlists, and per-query scan byte caps (`SQL_MAX_BYTES_BILLED`).
+- **Verifiable 3-Tier Stream Trust:** Machine-readable confidence classification and client-side prose-to-row numeric reconciliation.
+- **End-User OAuth Identity Passthrough:** Per-request OAuth tokens forwarded over transport credentials to enforce BigQuery Row-Level Security (RLS) and Column-Level Security (CLS).
 
-- Custom agent orchestration logic beyond what CA API data agents provide
-- A standalone web frontend (Flask test harness included)
-- Direct control over the ADK agent runtime and tool callbacks
-- Chart/visualization support via custom CA API calls
+For standard native CA API integration (no custom agent runtime required), see the [root README](../README.md).
 
-For the standard integration (no ADK runtime required), see the
-[root README](../README.md).
+---
 
-## CA API Baseline (Agent Engine) Architecture
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant GE as Gemini Enterprise
-    participant ADK as ADK Agent (Agent Engine)
-    participant CA as Conversational Analytics API
-    participant BQ as BigQuery
-
-    User->>GE: Asks question (OAuth)
-    GE->>ADK: Routes query
-    ADK->>CA: ask_data_agent(query)
-    CA->>BQ: Executes SQL (as user)
-    BQ-->>CA: Returns data
-    CA-->>ADK: Returns answer
-    ADK-->>GE: Formats response
-    GE-->>User: Displays answer
-```
-
-OAuth identity passthrough ensures queries execute with the end user's
-BigQuery permissions.
-
-## Structure
+## Directory Structure
 
 ```text
 advanced/
 ├── app/
-│   ├── orders/              # Orders Analyst ADK agent
-│   │   ├── __init__.py
-│   │   └── agent.py         # Agent definition + DataAgentToolset
-│   ├── inventory/           # Inventory Analyst ADK agent
-│   │   ├── __init__.py
-│   │   └── agent.py         # Agent definition + DataAgentToolset
-│   └── semantic_analytics/  # Semantic context-selection Workflow
+│   └── semantic_analytics/  # High-precision analytics ADK Workflow
+│       ├── __init__.py
+│       ├── agent.py         # Workflow definition and tool nodes
+│       └── evals/           # Native ADK evaluation suite
 ├── scripts/
-│   ├── deploy_agents.sh     # Deploy to Vertex AI Agent Engine
-│   ├── setup_auth.py        # Create OAuth auth resources in GE
-│   └── register_agents.py   # Register ADK agents in GE (adkAgentDefinition)
+│   ├── deploy_agents.sh     # Deploy or stage Semantic Analytics Agent for Agent Engine
+│   ├── setup_auth.py        # Create OAuth authorization resource in Gemini Enterprise
+│   └── register_agents.py   # Register Agent Engine agent with Gemini Enterprise
 ├── test_web/
-│   ├── app.py               # Flask OAuth test harness
-│   ├── templates/            # HTML templates
-│   └── static/               # CSS
+│   ├── app.py               # Flask OAuth test harness with provenance display
+│   ├── templates/           # HTML templates
+│   └── static/              # CSS stylesheet
 ├── docs/
 │   └── examples/
 │       └── chart_with_ca_api.py  # Reference: direct CA API with chart support
 └── README.md
 ```
 
+---
+
 ## Prerequisites
 
-Install the advanced dependencies:
+Install the advanced runtime dependencies:
 
 ```bash
 uv sync --extra advanced
 ```
 
-This adds `google-adk`, Anthropic, BigQuery, and Dataplex client dependencies.
+This adds `google-adk`, Anthropic (`anthropic[vertex]`), BigQuery, and Knowledge Catalog client dependencies.
 
-## Deployment
+---
 
-### Step 1: Create Backend Data Agents
+## Local Development & Execution
 
-Run the shared admin tools from the project root (if not already done):
-
-```bash
-uv run python scripts/admin_tools.py
-```
-
-### Step 2: Configure Per-Agent Environment
-
-Create per-agent `.env` files:
+Test the semantic analytics workflow locally using the ADK CLI:
 
 ```bash
-cat > advanced/app/orders/.env << EOF
-GOOGLE_CLOUD_PROJECT=your-project-id
-AGENT_ORDERS_ID=your-orders-data-agent-id
-EOF
+# Load environment
+set -a; source .env; set +a
+
+# Run the semantic analytics workflow interactively
+uv run --extra advanced adk run advanced/app/semantic_analytics
 ```
 
-### Step 3: Deploy to Agent Engine
+The workflow operates in stages:
+1. **Semantic Selection:** `gemini-3.5-flash` maps the question to bounded concepts from `config/semantic_contracts/`.
+2. **Tier-1 Compiler Fast-Path:** If the question maps cleanly to an exact metric and dimensions, `semantic/compiler.py` generates the exact SQL deterministically.
+3. **Tier-2 Guarded Authoring:** For exploratory queries, the query is grounded against narrow YAML context or broad Knowledge Catalog search, passed to `claude-sonnet-4-5`, and validated via pre-execution dry run before executing once against BigQuery.
+4. **Result Summarization:** `gemini-3.5-flash` summarizes the result rows, and `semantic/numeric_reconcile.py` verifies all numbers in prose.
+
+### Running Evaluations
+
+To run the native ADK evaluation suite:
+
+```bash
+uv run --extra advanced --extra evaluation adk eval \
+  advanced/app/semantic_analytics \
+  advanced/app/semantic_analytics/evals/thelook_narrow.evalset.json \
+  --config_file_path advanced/app/semantic_analytics/evals/eval_config.json \
+  --print_detailed_results
+```
+
+See [`app/semantic_analytics/evals/README.md`](app/semantic_analytics/evals/README.md) for full evaluation documentation.
+
+---
+
+## Deployment to Vertex AI Agent Engine
+
+### Step 1: Stage or Deploy the Agent Bundle
+
+To preview or stage the deployment bundle without calling cloud APIs:
+
+```bash
+bash advanced/scripts/deploy_agents.sh --stage-only /path/to/stage_dir
+```
+
+To deploy directly to Vertex AI Agent Engine:
 
 ```bash
 bash advanced/scripts/deploy_agents.sh
 ```
 
-Deploys to `us-central1` by default; set `AGENT_ENGINE_LOCATION` to target a
-different Vertex AI region (this is separate from `GEMINI_APP_LOCATION=global`,
-which addresses Discovery Engine). Save the Reasoning Engine resource names from
-the output. Note that ADK's built-in `DataAgentToolset` targets the global CA API endpoint
-exclusively (`geminidataanalytics.googleapis.com`); for regional or multi-regional agents,
-call `DataChatServiceClient` directly with `config.ca_locations.ca_api_endpoint`.
+Deploys to `us-central1` by default (set `AGENT_ENGINE_LOCATION` in `.env` to target another region). Note the deployed Reasoning Engine resource ID from the output (e.g. `projects/.../locations/.../reasoningEngines/...`).
 
-### Step 4: Setup OAuth Authorization
+### Step 2: Create OAuth Authorization Resource
+
+Create the authorization resource in Gemini Enterprise so end-user OAuth tokens are passed through:
 
 ```bash
-uv run python advanced/scripts/setup_auth.py
+uv run python advanced/scripts/setup_auth.py --auth-id bq-caapi-oauth-semantic
 ```
 
-### Step 5: Register with Gemini Enterprise
+### Step 3: Register with Gemini Enterprise
+
+Register the deployed Reasoning Engine agent with Gemini Enterprise:
 
 ```bash
 uv run python advanced/scripts/register_agents.py \
-  --orders-resource <ORDERS_RESOURCE_NAME> \
-  --inventory-resource <INVENTORY_RESOURCE_NAME>
+  --reasoning-engine <REASONING_ENGINE_ID> \
+  --auth-id bq-caapi-oauth-semantic
 ```
 
-## Local Development
+---
 
-Test agents locally with the ADK CLI:
+## Local Web Test Harness
+
+A lightweight Flask web application is provided in `test_web/` to test OAuth passthrough, token refresh, and stream provenance inspection:
 
 ```bash
-set -a; . ./.env; set +a
-uv run adk run advanced/app/orders
+uv run --extra web python advanced/test_web/app.py
 ```
 
-Run the semantic workflow with:
-
-```bash
-uv run --extra advanced adk run advanced/app/semantic_analytics
-```
-
-The workflow uses `SEMANTIC_SELECTOR_MODEL`, `SQL_GENERATOR_MODEL`, and
-`RESULT_SUMMARIZER_MODEL` independently. Broad discovery is default-deny and
-requires `CATALOG_ALLOWED_PROJECTS` or `CATALOG_ALLOWED_DATASETS`.
-
-Run the native ADK semantic evaluation suite with the instructions in
-[`app/semantic_analytics/evals/README.md`](app/semantic_analytics/evals/README.md).
-
-## Local Testing with OAuth
-
-See [`test_web/README.md`](test_web/README.md) for local ADK and Agent Engine
-test-harness instructions.
-
-## Chart Visualization
-
-The ADK's `DataAgentToolset` does not currently support chart responses from
-the CA API. The API returns Vega-Lite specifications in streaming responses,
-but the toolset only processes text, schema, and data messages.
-
-See [`docs/examples/chart_with_ca_api.py`](docs/examples/chart_with_ca_api.py)
-for a reference implementation showing direct CA API calls with chart support.
-
-## Demo
-
-### Test Web App
-
-![Test Web App Demo](docs/test-web-demo.png)
-
-*Local OAuth test harness showing token passthrough*
+See [`test_web/README.md`](test_web/README.md) for full configuration and usage instructions.

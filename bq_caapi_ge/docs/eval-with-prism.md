@@ -6,8 +6,8 @@ bespoke in-repo harness. This document covers what Prism measures, how to stand 
 up, how to configure it against this project, the IAM it needs, and an example test
 suite over the demo dataset.
 
-For the current semantic workflow design, see
-[`adk_semantic_layer_plan_v2.md`](./adk_semantic_layer_plan_v2.md).
+For the complete architectural design and adoption path, see
+[`architecture.md`](./architecture.md).
 
 ## What Prism is
 
