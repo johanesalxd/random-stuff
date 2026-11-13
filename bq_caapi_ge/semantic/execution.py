@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import os
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -22,6 +23,7 @@ _MAX_BYTES_ENV = "SQL_MAX_BYTES_BILLED"
 
 ADC_AUTH_MODE = "adc"
 USER_AUTH_MODE = "user"
+IMPERSONATED_SA_AUTH_MODE = "impersonated_sa"
 _DEFAULT_MAX_RESULT_ROWS = 50
 _APPLICATION_NAME = "semantic-analytics"
 
@@ -88,6 +90,8 @@ class AdkBigQueryExecutor:
         allowed_sources: frozenset[str] | None = None,
         max_bytes_billed: int | None = None,
         dry_run_fn: Callable[[str], DryRunSummary] | None = None,
+        require_explicit_credentials: bool = False,
+        job_labels: Mapping[str, str] | None = None,
     ):
         self._project = project
         self._max_result_rows = max_result_rows
@@ -97,6 +101,8 @@ class AdkBigQueryExecutor:
         self._allowed_sources = allowed_sources
         self._max_bytes_billed = max_bytes_billed
         self._dry_run_fn = dry_run_fn
+        self._require_explicit_credentials = require_explicit_credentials
+        self._job_labels = dict(job_labels) if job_labels else None
         self._settings_obj: Any = None
 
     def execute(self, sql: str) -> ExecResult:
@@ -142,12 +148,15 @@ class AdkBigQueryExecutor:
                 credentials=self._get_credentials(),
                 location=self._location,
             )
+            job_kwargs: dict[str, Any] = {
+                "dry_run": True,
+                "use_query_cache": False,
+            }
+            if self._job_labels:
+                job_kwargs["labels"] = dict(self._job_labels)
             job = client.query(
                 sql,
-                job_config=bigquery.QueryJobConfig(
-                    dry_run=True,
-                    use_query_cache=False,
-                ),
+                job_config=bigquery.QueryJobConfig(**job_kwargs),
             )
             summary = DryRunSummary(
                 statement_type=str(job.statement_type or ""),
@@ -177,6 +186,10 @@ class AdkBigQueryExecutor:
 
     def _get_credentials(self) -> Any:
         if self._credentials is None:
+            if self._require_explicit_credentials:
+                raise SqlExecutionError(
+                    "explicit credentials are required when SQL_AUTH_MODE is not 'adc'"
+                )
             try:
                 import google.auth
             except ImportError as error:  # pragma: no cover - dependency guard
@@ -206,6 +219,8 @@ class AdkBigQueryExecutor:
             }
             if self._max_bytes_billed is not None:
                 kwargs["maximum_bytes_billed"] = self._max_bytes_billed
+            if self._job_labels:
+                kwargs["job_labels"] = dict(self._job_labels)
             self._settings_obj = BigQueryToolConfig(**kwargs)
         return self._settings_obj
 
@@ -217,14 +232,14 @@ def resolve_auth_mode(raw: str | None = None) -> str:
         raw: Explicit mode override. When omitted, reads ``SQL_AUTH_MODE``.
 
     Returns:
-        ``adc`` or ``user``.
+        ``adc``, ``user``, or ``impersonated_sa``.
 
     Raises:
         SqlExecutionError: If the configured mode is unknown.
     """
     value = raw if raw is not None else os.getenv(_AUTH_MODE_ENV, ADC_AUTH_MODE)
     mode = value.strip().lower()
-    if mode not in {ADC_AUTH_MODE, USER_AUTH_MODE}:
+    if mode not in {ADC_AUTH_MODE, USER_AUTH_MODE, IMPERSONATED_SA_AUTH_MODE}:
         raise SqlExecutionError(f"unsupported SQL_AUTH_MODE: {value!r}")
     return mode
 
@@ -234,6 +249,8 @@ def build_sql_executor(
     access_token: str | None = None,
     auth_mode: str | None = None,
     allowed_sources: frozenset[str] | None = None,
+    impersonated_credentials: Any = None,
+    job_labels: Mapping[str, str] | None = None,
 ) -> SqlExecutor:
     """Builds the configured one-shot BigQuery executor.
 
@@ -241,6 +258,8 @@ def build_sql_executor(
         access_token: End-user OAuth token required in ``user`` mode.
         auth_mode: Optional mode override.
         allowed_sources: Optional set of allowed fully-qualified source tables.
+        impersonated_credentials: Verified impersonated credentials for ``impersonated_sa`` mode.
+        job_labels: Optional BigQuery job labels to attach to queries.
 
     Returns:
         A configured :class:`AdkBigQueryExecutor`.
@@ -259,12 +278,24 @@ def build_sql_executor(
         )
     mode = resolve_auth_mode(auth_mode)
     credentials: Any = None
+    require_explicit_credentials = False
     if mode == USER_AUTH_MODE:
         if not access_token:
             raise SqlExecutionError(
                 "user auth mode requires a per-request OAuth access token"
             )
         credentials = _build_user_credentials(access_token)
+        require_explicit_credentials = True
+    elif mode == IMPERSONATED_SA_AUTH_MODE:
+        if impersonated_credentials is None:
+            raise SqlExecutionError(
+                "impersonated_sa auth mode requires verified impersonated credentials"
+            )
+        credentials = impersonated_credentials
+        require_explicit_credentials = True
+    elif mode == ADC_AUTH_MODE:
+        require_explicit_credentials = False
+
     max_bytes = _optional_positive_int_env(_MAX_BYTES_ENV)
     return AdkBigQueryExecutor(
         project=project,
@@ -276,6 +307,8 @@ def build_sql_executor(
         credentials=credentials,
         allowed_sources=allowed_sources,
         max_bytes_billed=max_bytes,
+        require_explicit_credentials=require_explicit_credentials,
+        job_labels=job_labels,
     )
 
 

@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 .env
-# Any .env variant (.env.backup, .env.local, .env.scoot) carries real secrets.
+# Any .env variant (.env.backup, .env.local, .env.production) carries real secrets.
 # Only the placeholder template is tracked.
 .env.*
 !.env.example

@@ -206,6 +206,7 @@ import semantic.numeric_reconcile
 import semantic.compiler
 import semantic.guardrails
 import semantic.graph_export
+import semantic.rls_impersonation
 
 forbidden = [
     'google.adk',

@@ -81,9 +81,69 @@ EOF
 
     # Note: adk deploy strips GOOGLE_CLOUD_PROJECT and injects the hosting project,
     # so BQ_COMPUTE_PROJECT preserves explicit query billing project override.
-    # Secrets like OAUTH_CLIENT_SECRET and FLASK_SECRET_KEY are NEVER copied here.
+    # Secrets like SQL_ROLE_ASSERTION_HMAC_SECRET, OAUTH_CLIENT_SECRET, and FLASK_SECRET_KEY are NEVER copied here.
+    local deploy_auth_mode="${DEPLOY_SQL_AUTH_MODE:-user}"
+    case "$deploy_auth_mode" in
+        user|impersonated_sa)
+            ;;
+        adc)
+            echo "Error: Shared ADC mode ('adc') cannot be deployed to multi-user Agent Engine." >&2
+            exit 1
+            ;;
+        *)
+            echo "Error: Invalid DEPLOY_SQL_AUTH_MODE: '$deploy_auth_mode'. Allowed values: 'user', 'impersonated_sa'." >&2
+            exit 1
+            ;;
+    esac
+
+    local canonical_role_map=""
+    if [[ "$deploy_auth_mode" == "impersonated_sa" ]]; then
+        if [[ -z "${SQL_ROLE_TRUSTED_CALLER_SA:-}" ]]; then
+            echo "Error: SQL_ROLE_TRUSTED_CALLER_SA must be set when DEPLOY_SQL_AUTH_MODE=impersonated_sa" >&2
+            exit 1
+        fi
+        if [[ -z "${SQL_ROLE_SA_MAP_JSON:-}" ]]; then
+            echo "Error: SQL_ROLE_SA_MAP_JSON must be set when DEPLOY_SQL_AUTH_MODE=impersonated_sa" >&2
+            exit 1
+        fi
+        canonical_role_map="$(PYTHONPATH="$REPO_ROOT" python3 -c '
+import json, os, re, sys
+from semantic.rls_impersonation import parse_role_sa_map, _CUSTOMER_SA_REGEX, _is_google_managed_sa
+
+trusted_sa = os.environ.get("SQL_ROLE_TRUSTED_CALLER_SA", "").strip()
+if not _CUSTOMER_SA_REGEX.match(trusted_sa) or _is_google_managed_sa(trusted_sa):
+    sys.exit(f"Error: Invalid customer-managed service account for SQL_ROLE_TRUSTED_CALLER_SA: {trusted_sa!r}")
+
+aud = os.environ.get("SQL_ROLE_ASSERTION_AUDIENCE", "bq-caapi-rls").strip() or "bq-caapi-rls"
+if not re.match(r"^[A-Za-z0-9._:-]{1,128}$", aud):
+    sys.exit(f"Error: Invalid SQL_ROLE_ASSERTION_AUDIENCE: {aud!r}")
+
+state_key = os.environ.get("ADK_ROLE_ASSERTION_STATE_KEY", "bq-caapi-role-assertion").strip() or "bq-caapi-role-assertion"
+if not re.match(r"^[A-Za-z0-9_-]{1,128}$", state_key):
+    sys.exit(f"Error: Invalid ADK_ROLE_ASSERTION_STATE_KEY: {state_key!r}")
+
+try:
+    lifetime = int(os.environ.get("SQL_IMPERSONATION_LIFETIME_SECONDS", "300"))
+    if not (60 <= lifetime <= 3600):
+        raise ValueError("out of range")
+except Exception:
+    sys.exit("Error: SQL_IMPERSONATION_LIFETIME_SECONDS must be an integer between 60 and 3600")
+
+try:
+    max_ttl = int(os.environ.get("SQL_ROLE_ASSERTION_MAX_TTL_SECONDS", "900"))
+    if not (60 <= max_ttl <= 3600):
+        raise ValueError("out of range")
+except Exception:
+    sys.exit("Error: SQL_ROLE_ASSERTION_MAX_TTL_SECONDS must be an integer between 60 and 3600")
+
+role_map_raw = os.environ.get("SQL_ROLE_SA_MAP_JSON")
+m = parse_role_sa_map(role_map_raw)
+print(json.dumps(m, separators=(",", ":")))
+')"
+    fi
+
     cat > "$agent_stage/.env" << EOF
-SQL_AUTH_MODE=user
+SQL_AUTH_MODE=$deploy_auth_mode
 ADK_OAUTH_TOKEN_STATE_KEY=${ADK_OAUTH_TOKEN_STATE_KEY:-${AUTH_RESOURCE_SEMANTIC_ANALYTICS:-bq-caapi-oauth-semantic}}
 BIGQUERY_LOCATION=${BIGQUERY_LOCATION:-US}
 CATALOG_ALLOWED_PROJECTS=${CATALOG_ALLOWED_PROJECTS:-bigquery-public-data}
@@ -95,6 +155,17 @@ SQL_MAX_BYTES_BILLED=${SQL_MAX_BYTES_BILLED:-1000000000}
 EOF
     if [[ -n "${BQ_COMPUTE_PROJECT:-}" ]]; then
         echo "BQ_COMPUTE_PROJECT=$BQ_COMPUTE_PROJECT" >> "$agent_stage/.env"
+    fi
+
+    if [[ "$deploy_auth_mode" == "impersonated_sa" ]]; then
+        cat >> "$agent_stage/.env" << EOF
+SQL_ROLE_TRUSTED_CALLER_SA=$SQL_ROLE_TRUSTED_CALLER_SA
+SQL_ROLE_ASSERTION_AUDIENCE=${SQL_ROLE_ASSERTION_AUDIENCE:-bq-caapi-rls}
+ADK_ROLE_ASSERTION_STATE_KEY=${ADK_ROLE_ASSERTION_STATE_KEY:-bq-caapi-role-assertion}
+SQL_IMPERSONATION_LIFETIME_SECONDS=${SQL_IMPERSONATION_LIFETIME_SECONDS:-300}
+SQL_ROLE_ASSERTION_MAX_TTL_SECONDS=${SQL_ROLE_ASSERTION_MAX_TTL_SECONDS:-900}
+SQL_ROLE_SA_MAP_JSON='$canonical_role_map'
+EOF
     fi
 }
 

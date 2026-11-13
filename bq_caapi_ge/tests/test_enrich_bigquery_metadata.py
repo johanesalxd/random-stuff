@@ -1,4 +1,4 @@
-"""Tests for Dataplex metadata enrichment helpers."""
+"""Tests for Knowledge Catalog metadata enrichment helpers."""
 
 from __future__ import annotations
 

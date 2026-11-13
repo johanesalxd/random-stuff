@@ -42,6 +42,14 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "build_stateless_chat_request": ("semantic.ca_trust", "build_stateless_chat_request"),
     "stream_stateless_chat": ("semantic.ca_trust", "stream_stateless_chat"),
     "evaluate_ca_stream_trust": ("semantic.ca_trust", "evaluate_ca_stream_trust"),
+    # rls_impersonation (only loaded on access)
+    "ImpersonationError": ("semantic.rls_impersonation", "ImpersonationError"),
+    "RoleAssertion": ("semantic.rls_impersonation", "RoleAssertion"),
+    "build_impersonated_credentials": ("semantic.rls_impersonation", "build_impersonated_credentials"),
+    "mint_hmac_role_assertion": ("semantic.rls_impersonation", "mint_hmac_role_assertion"),
+    "parse_role_sa_map": ("semantic.rls_impersonation", "parse_role_sa_map"),
+    "redact_service_account_emails": ("semantic.rls_impersonation", "redact_service_account_emails"),
+    "verify_role_assertion": ("semantic.rls_impersonation", "verify_role_assertion"),
 }
 
 __all__ = list(_EXPORTS.keys())

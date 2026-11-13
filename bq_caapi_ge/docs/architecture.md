@@ -1,6 +1,6 @@
 # Architecture: Beyond Out-of-the-Box BigQuery Conversational Analytics
 
-This document details the architectural foundation of `bq_caapi_ge`, explaining why enterprise analytics requires going beyond default out-of-the-box BigQuery Conversational Analytics (BQCA), comparing alternative semantic approaches, and detailing the progressive 3-Layer adoption path.
+This document details the architectural foundation of `bq_caapi_ge`, explaining why enterprise analytics requires going beyond default out-of-the-box BigQuery Conversational Analytics (BQCA), comparing alternative semantic approaches, detailing the progressive 3-Layer adoption path, and establishing enterprise Row-Level Security (RLS) and FinOps observability patterns.
 
 ```mermaid
 flowchart TB
@@ -69,8 +69,8 @@ Downstream client applications need machine-readable provenance metadata: Did th
 | **Cross-Table Ratios** | Model-generated SQL (join type not contract-pinned) | Single-element-table derived MEASURE() or custom SQL view | Supported via symmetric aggregate fan-out formulas | **Native support** via Tier-1 compiler (`LEFT JOIN` unmatched denominator preservation) |
 | **Wide Schema Routing** | Single Data Agent Context Set | Single Property Graph scope | Model-selected explores | **Semantic Domain Selector** + Knowledge Catalog allowlisted broad search |
 | **Runtime Guardrails** | BigQuery IAM/RLS & configurable query byte limits ([manage costs](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/manage-costs)) | BigQuery project quotas & IAM | Looker user permission sets | Pre-execution gate: SELECT-only syntax check, plus dry-run referenced_tables allowlist and scan byte cap when configured (enabled by default) |
-| **Stream Trust & Auditing** | Natural language response | Natural language response | Fixed query hash & SQL inspection | **3-Tier Trust Assessment** + automated numeric reconciliation against result rows |
-| **End-User RLS/CLS** | Supported in Gemini Enterprise via authorization resources | Project/table-level BigQuery permissions & RLS | Native Looker user attributes & RLS | **End-user OAuth passthrough in GE**, plus direct gRPC / per-request OAuth RLS (Layer 2 & Layer 3 `SQL_AUTH_MODE=user`) for custom apps |
+| **Stream Trust & Auditing** | Natural language response (`ca-bq-job=true`, `data-agent-id` job labels in BQ) | Natural language response | Fixed query hash & SQL inspection | **3-Tier Trust Assessment** + automated numeric reconciliation against result rows + audit job labels (`bqca-role`, `bqca-user-hash`) |
+| **End-User RLS/CLS** | Supported in Gemini Enterprise via authorization resources | Project/table-level BigQuery permissions & RLS | Native Looker user attributes & RLS | **Two Enterprise Models**: (1) End-user Google OAuth (`user`) in GE & custom apps, or (2) Gateway-signed RS256 Role-SA impersonation (`impersonated_sa`) for non-Google IdPs with zero-downtime BigQuery RLS |
 
 ---
 
@@ -126,7 +126,7 @@ Organizations already using or evaluating native BigQuery Conversational Analyti
 
 For applications consuming conversational streams from either native BQCA or custom agents:
 
-- **User-Scoped Security:** In the Google Cloud CA API, `DataAgentContext.credentials` is reserved for Looker connections. Direct BigQuery execution passes end-user OAuth bearer tokens over the gRPC transport credentials channel so BigQuery Row-Level Security (RLS) and Column-Level Security (CLS) policies evaluate under the end-user's identity. Avoiding server-side row persistence in Layer 2 requires three joint controls: (1) stateless ChatRequest calls ([state management](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management)), (2) Data Agent conversation logging disabled, and (3) the consuming client not persisting returned rows. In Layer 3 (advanced/app/semantic_analytics/), executed result rows are held in ADK session state for the active session so the answer synthesizer and provenance inspector can read them.
+- **User-Scoped Security:** In the Google Cloud CA API, `DataAgentContext.credentials` is reserved for Looker connections. Direct BigQuery execution passes end-user OAuth bearer tokens over the gRPC transport credentials channel so BigQuery Row-Level Security (RLS) and Column-Level Security (CLS) policies evaluate under the end-user's identity. Avoiding server-side row persistence in Layer 2 requires three joint controls: (1) stateless ChatRequest calls ([state management](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/state-management)), (2) Data Agent conversation logging disabled, and (3) the consuming client not persisting returned rows. In Layer 3 (`advanced/app/semantic_analytics/`), executed result rows are held in ADK session state for the active session so the answer synthesizer and provenance inspector can read them.
 - **3-Tier Stream Trust Classification:** Streams are inspected chunk-by-chunk and categorized:
   - **Tier 1 (`TIER_1_VERIFIED_OR_COMPILED`):** The query matched an authored Verified Query (`AUTHORED_VERIFIED_QUERY`) or was compiled directly from the contract (`STRICT_CONTRACT_COMPILED`).
   - **Tier 2 (`TIER_2_GROUNDED`):** The query utilized GA Graph Measures (`GRAPH_MEASURE_GROUNDED`) or executed clean dynamic SQL without speculative assumptions (`DYNAMIC_SQL_GROUNDED`).
@@ -143,3 +143,87 @@ When applications demand deterministic accuracy, multi-domain routing, and rigor
 4. **Narrow & Broad Knowledge Catalog Discovery:** If a question requires unmodeled tables, `semantic/catalog_runtime.py` performs default-deny allowlisted search via Knowledge Catalog (`dataplex.googleapis.com`), pulling only authorized BigQuery assets.
 5. **Pre-Execution Dry-Run Policy Gate:** Whenever `allowed_sources` or `SQL_MAX_BYTES_BILLED` is configured (supplied on all shipped narrow/broad workflow paths and `.env.example`, alongside ADK's read-only `WriteMode.BLOCKED`), `semantic/guardrails.py` enforces single-statement `SELECT`-only syntax and performs a zero-cost BigQuery dry run verifying `referenced_tables` against the allowlist and enforcing `SQL_MAX_BYTES_BILLED`.
 6. **Execution & Answer Synthesis:** The query executes once using the user's OAuth token (`SQL_AUTH_MODE=user`), results are formatted, numbers in prose are verified, and structured provenance metadata is returned to the client.
+
+#### ADK Framework Implementation Notes
+- **`adk eval` Event Visibility:** The ADK `EvaluationGenerator` inspects `InvocationEvent.content.parts`. If `parts` is empty or matches `final_event`, the intermediate authored SQL event is silently dropped from benchmark traces. `@node route_sql_authoring` populates `Content.parts` with the compiled SQL text so `adk eval` captures Tier-1 compiled SQL for regression scoring.
+- **Dry-Run Policy Gate Implementation:** The dry-run guardrail invokes `bigquery.Client.query(..., QueryJobConfig(dry_run=True, use_query_cache=False))` directly rather than delegating to ADK's built-in `execute_sql(dry_run=True)`. This is because ADK's `execute_sql` converts the job via `QueryJob.to_api_repr()`, which retains only `jobReference` and `configuration`, stripping `statistics.query.referencedTables` and `totalBytesProcessed`. Calling the BigQuery client directly provides full access to `job.referenced_tables` (including `INFORMATION_SCHEMA` views) and `job.total_bytes_processed`.
+
+---
+
+### Enterprise Row-Level Security: Pattern A vs. Pattern B
+
+Enterprises adopt one of two row-level security architectures depending on their client identity provider:
+
+```mermaid
+flowchart TD
+    subgraph PatternA["Pattern A: Google Workspace / Gemini Enterprise OAuth"]
+        U1["End User"] -->|"Google OAuth Token"| GE["Gemini Enterprise / Test Web"]
+        GE -->|"Per-Request User Bearer Token"| AE1["Agent Engine (SQL_AUTH_MODE=user)"]
+        AE1 -->|"User Bearer Token"| BQ1["BigQuery (RLS via SESSION_USER())"]
+    end
+
+    subgraph PatternB["Pattern B: Custom Gateway / Non-Google IdP"]
+        U2["End User (Okta / SAML / Teams)"] -->|"Custom IdP Session"| GW["Enterprise API Gateway"]
+        GW -->|"Sign RS256 JWT (SQL_ROLE_TRUSTED_CALLER_SA)"| AE2["Agent Engine (SQL_AUTH_MODE=impersonated_sa)"]
+        AE2 -->|"Verify JWT via Google x509 Certs"| V["Extract bqca_role (e.g. apac_analyst)"]
+        V -->|"Impersonate Mapped SA (SQL_ROLE_SA_MAP_JSON)"| BQ2["BigQuery (RLS via SESSION_USER())"]
+    end
+```
+
+#### Pattern A: Google Workspace / Gemini Enterprise OAuth (`SQL_AUTH_MODE=user`)
+- Used when end users possess corporate Google Cloud identities.
+- Gemini Enterprise authorization resources handle user delegation automatically, passing the end-user's bearer token in ADK session state (`ADK_OAUTH_TOKEN_STATE_KEY`).
+- BigQuery evaluates standard `SESSION_USER()` RLS filter expressions under the user's primary email.
+
+#### Pattern B: Signed Role-SA Impersonation & 2-Policy Zero-Downtime RLS (`SQL_AUTH_MODE=impersonated_sa`)
+Used for custom front-ends (never Gemini Enterprise) when end users authenticate through Okta, Ping, Azure AD, Microsoft Teams, Slack, or internal microservices where Google OAuth bearer tokens cannot be propagated:
+
+1. **Threat Model & Cryptographic Trust Chain:**
+   - *Why Raw Session-State Slugs Are Unsafe:* In a multi-tenant agent runtime, accepting an unauthenticated role string (e.g. `{"role": "finance_director"}`) from client session state allows trivial privilege escalation.
+   - *RS256 JWT Signed Assertions:* The trusted enterprise gateway signs a short-lived (e.g. 5-minute) RS256 JWT using its Google Service Account (`SQL_ROLE_TRUSTED_CALLER_SA`) with `aud="bq-caapi-rls"` and `bqca_role="<slug>"`. Agent Engine verifies this signature against Google's public x509 certificate endpoint (`https://www.googleapis.com/service_accounts/v1/metadata/x509/<caller_sa>`), extracting the role without storing any shared secrets or certificates in the agent. (Optional local HMAC mode via `SQL_ROLE_ASSERTION_HMAC_SECRET` is supported strictly for local development and rejected when `SQL_ROLE_TRUSTED_CALLER_SA` is set.)
+   - *Scoped Token Creator IAM:* The Agent Engine host SA is granted `roles/iam.serviceAccountTokenCreator` strictly on individual Role Service Accounts (`SQL_ROLE_SA_MAP_JSON`), never at the project level.
+   - *Zero-Row Downgrade:* If an RLS policy filters out all rows for a user's role (returning 0 rows), the runtime downgrades stream trust to Tier 3 (`TIER_3_REVIEW_REQUIRED`) rather than returning speculative empty claims.
+
+2. **The 2-Policy Zero-Downtime BigQuery RLS Pattern:**
+   In BigQuery, creating the very first row access policy on a table immediately denies access (`0` rows returned) to all principals not explicitly covered by a policy. To avoid operational outages:
+   - **Step 0 — Mandatory Pre-Flight Principal Inventory:** Combine `INFORMATION_SCHEMA.JOBS_BY_ORGANIZATION` (or `JOBS_BY_PROJECT`), Cloud Audit Logs (`BigQueryRead.CreateReadSession` for Storage Read API consumers), and existing IAM `bigquery.tables.getData` policy exports so zero ETL pipelines, scheduled query owners, BI SAs, or Knowledge Catalog scanners are missed before applying RLS.
+   - **Policy 1 — Unrestricted Operational Bypass:** Apply an initial policy with `FILTER USING (TRUE)` granting access to all legacy operational, BI, and data engineering principals (multiple policies on a table combine via logical `OR`).
+   - **Policy 2 — Role-Scoped Filter Across Dimensions and Facts:** Apply the business row access policy targeting specific Role SAs across both parent dimension tables and child fact tables (using either denormalized filter columns on Gold fact tables or an unrestricted bridge lookup table so policies never violate BigQuery's ban on nested RLS subqueries).
+   - **Safe Rollback:** To revert, drop Policy 2 first (leaving Policy 1 active to maintain full read access), or run `DROP ALL ROW ACCESS POLICIES ON ...` if removing RLS entirely.
+
+For complete, production-ready SQL scripts implementing this 2-policy lifecycle, see [sql/zero_downtime_rls_pattern.sql](../sql/zero_downtime_rls_pattern.sql).
+
+Official documentation references:
+- [BigQuery Row-Level Security Overview](https://docs.cloud.google.com/bigquery/docs/row-level-security-intro)
+- [Managing BigQuery Row-Level Security](https://docs.cloud.google.com/bigquery/docs/managing-row-level-security)
+- [Google Cloud Service Account Impersonation](https://docs.cloud.google.com/iam/docs/service-account-impersonation)
+
+---
+
+## 4. Production Observability, Audit Logging & FinOps Attribution
+
+Operating conversational analytics in production requires end-to-end visibility across agent reasoning, BigQuery query execution, and compute cost allocation.
+
+### BigQuery Job Labels & Correlation
+BigQuery query jobs can be correlated across `INFORMATION_SCHEMA.JOBS_BY_PROJECT` and `JOBS_BY_ORGANIZATION`:
+
+- **Native BQCA Jobs:** Native BigQuery Conversational Analytics attaches observed service labels `ca-bq-job=true` and `data-agent-id=<AGENT_NAME>` to query jobs it issues (including intermediate exploratory `SELECT DISTINCT` queries and final result queries).
+- **Custom ADK Agent Jobs:** In `SQL_AUTH_MODE=impersonated_sa`, `semantic/execution.py` attaches:
+  - `bqca-role=<ROLE_SLUG>`: The allowlisted role slug under which the query was executed (e.g. `apac_analyst`).
+  - `bqca-user-hash=<HEX_HASH>`: A pseudonymous 16-character SHA-256 prefix (`sha256('bqca-audit:' + sub)[:16]`) that avoids raw email addresses in job labels (note: if `sub` is a predictable email address and resistance to dictionary re-identification is required, pass an HMAC-keyed opaque user ID from your gateway as `sub`).
+
+### Conversational Analytics Data Access Audit Logs
+Data Access audit logs for `geminidataanalytics.googleapis.com` are disabled by default. To record conversational API interactions and Gemini Enterprise A2A turns in Cloud Logging:
+1. In Cloud Console, navigate to **IAM & Admin > Audit Logs**.
+2. Select **Conversational Analytics API** (`geminidataanalytics.googleapis.com`).
+3. Enable **Data Read** and **Data Write** audit logs.
+Audit logs are delivered to Cloud Logging and can be routed to BigQuery via log sinks for long-term compliance storage. See [Conversational Analytics Audit Logging](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/audit-logging).
+
+### FinOps Decoupled Cost Model & Chargeback Attribution
+Conversational analytics separates model reasoning costs from warehouse execution costs:
+- **Agent Reasoning & Token Quotas:** Governed by Conversational Analytics API / Vertex AI quotas and billing ([Manage costs](https://docs.cloud.google.com/gemini/data-agents/conversational-analytics-api/manage-costs)).
+- **BigQuery Compute Execution:** Underlying SQL execution (both exploratory filter-lookup queries and final queries) is billed separately to the compute project under standard [BigQuery pricing](https://cloud.google.com/bigquery/pricing) (on-demand bytes billed or Editions slot reservations).
+
+To attribute compute spend and slot utilization across teams and data agents, query `INFORMATION_SCHEMA`:
+- When querying `JOBS_BY_ORGANIZATION` or `JOBS_TIMELINE_BY_ORGANIZATION`, always include `AND statement_type IS DISTINCT FROM 'SCRIPT'` to prevent double-counting multi-statement script parent jobs alongside child query jobs.
+- For production chargeback queries and reservation slot attribution recipes, see [sql/bqca_audit_queries.sql](../sql/bqca_audit_queries.sql).

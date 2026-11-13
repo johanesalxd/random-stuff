@@ -13,6 +13,7 @@ from google.genai import types
 
 from semantic.execution import (
     ADC_AUTH_MODE,
+    IMPERSONATED_SA_AUTH_MODE,
     USER_AUTH_MODE,
     build_sql_executor,
     resolve_auth_mode,
@@ -21,12 +22,24 @@ from semantic.numeric_reconcile import (
     has_assumption_markers,
     reconcile_prose_numbers,
 )
+from semantic.rls_impersonation import (
+    ImpersonationError,
+    RoleAssertion,
+    build_impersonated_credentials,
+    parse_role_sa_map,
+    redact_service_account_emails,
+    verify_role_assertion,
+)
 
 _CONTEXT_STATE_KEY = "sql_generation_context"
 _RESULT_STATE_KEY = "sql_execution_result"
 _TOKEN_STATE_KEY_ENV = "ADK_OAUTH_TOKEN_STATE_KEY"
 _DEFAULT_TOKEN_STATE_KEY = "bq-caapi-oauth-semantic"
-_AUTH_SOURCES = {USER_AUTH_MODE: "user-token", ADC_AUTH_MODE: "application-default"}
+_AUTH_SOURCES = {
+    USER_AUTH_MODE: "user-token",
+    ADC_AUTH_MODE: "application-default",
+    IMPERSONATED_SA_AUTH_MODE: "impersonated-role-sa",
+}
 _MAX_ERROR_CHARS = 1_000
 
 GENERATE_SQL_INSTRUCTION = """Generate one BigQuery Standard SQL query for the input.
@@ -173,35 +186,64 @@ async def execute_sql_once(ctx: Context, node_input: Any) -> Event:
     allowed_sources = (
         frozenset(context.get("candidate_sources") or ()) or None
     )
+    verified_role: str | None = None
     try:
-        auth_mode, token = resolve_sql_auth(ctx.state)
+        session_obj = getattr(ctx, "session", None)
+        raw_session_user = getattr(session_obj, "user_id", None)
+        session_user = str(raw_session_user).strip() if raw_session_user else None
+        auth_ctx = resolve_sql_auth_context(
+            ctx.state,
+            expected_subject=session_user,
+        )
+        auth_mode = auth_ctx["auth_mode"]
+        token = auth_ctx["access_token"]
+        impersonated_creds = auth_ctx["impersonated_credentials"]
+        job_labels = auth_ctx["job_labels"]
+        verified_role = auth_ctx["role"]
+
         executor = _build_auth_executor(
             auth_mode,
-            token,
+            access_token=token,
             allowed_sources=allowed_sources,
+            impersonated_credentials=impersonated_creds,
+            job_labels=job_labels,
         )
         result = executor.execute(sql)
     except Exception as error:  # configuration and provider boundary
+        err_raw = _bound_error(str(error))
+        replacement = f"role:{verified_role}" if verified_role else "[REDACTED_ROLE_SA]"
+        sanitized_error = redact_service_account_emails(err_raw, replacement=replacement)
         payload.update(
             status="query_error",
-            error=_bound_error(str(error)),
+            error=sanitized_error,
             next_step="return_error",
         )
         return Event(output=payload, route="error", state={_RESULT_STATE_KEY: None})
 
-    payload["auth"] = {
-        "mode": auth_mode,
-        "source": _AUTH_SOURCES[auth_mode],
-    }
+    if auth_mode == IMPERSONATED_SA_AUTH_MODE:
+        payload["auth"] = {
+            "mode": auth_mode,
+            "source": _AUTH_SOURCES[auth_mode],
+            "role": verified_role,
+            "job_labels": dict(job_labels or {}),
+        }
+    else:
+        payload["auth"] = {
+            "mode": auth_mode,
+            "source": _AUTH_SOURCES[auth_mode],
+        }
     execution = result.to_context()
     payload["execution"] = execution
     payload["rows"] = execution.get("rows", [])
     payload["row_count"] = execution.get("row_count", 0)
     payload["truncated"] = execution.get("truncated", False)
     if not result.ok:
+        err_raw = _bound_error(result.error)
+        replacement = f"role:{verified_role}" if verified_role else "[REDACTED_ROLE_SA]"
+        sanitized_error = redact_service_account_emails(err_raw, replacement=replacement)
         payload.update(
             status="query_error",
-            error=_bound_error(result.error),
+            error=sanitized_error,
             next_step="return_error",
         )
         return Event(output=payload, route="error", state={_RESULT_STATE_KEY: None})
@@ -237,6 +279,17 @@ async def finish_answer(ctx: Context, node_input: Any) -> Event:
     payload["next_step"] = "return_result"
 
     rows = payload.get("rows", [])
+    if (
+        payload.get("auth", {}).get("mode") == IMPERSONATED_SA_AUTH_MODE
+        and len(rows) == 0
+    ):
+        payload["trust_tier"] = "TIER_3_REVIEW_REQUIRED"
+        payload["trust_sub_mode"] = "REVIEW_REQUIRED"
+        payload["trust_reasons"] = [
+            "Query returned 0 rows under role-scoped RLS; verify role entitlements or filter values."
+        ]
+        return Event(output=payload)
+
     has_assumptions = has_assumption_markers(answer)
     unreconciled = reconcile_prose_numbers(
         answer,
@@ -321,6 +374,8 @@ def normalize_sql(value: Any) -> str:
 def resolve_sql_auth(state: Mapping[str, Any]) -> tuple[str, str | None]:
     """Resolves ADC or a required per-user OAuth token."""
     auth_mode = resolve_auth_mode()
+    if auth_mode == IMPERSONATED_SA_AUTH_MODE:
+        raise ValueError("impersonated_sa mode requires resolve_sql_auth_context()")
     if auth_mode != USER_AUTH_MODE:
         return auth_mode, None
     token = str(state.get(_token_state_key(), "") or "").strip()
@@ -329,16 +384,104 @@ def resolve_sql_auth(state: Mapping[str, Any]) -> tuple[str, str | None]:
     return auth_mode, token
 
 
+def resolve_sql_auth_context(
+    state: Mapping[str, Any],
+    *,
+    expected_subject: str | None = None,
+) -> dict[str, Any]:
+    """Resolves the execution credentials and audit metadata for the configured auth mode."""
+    auth_mode = resolve_auth_mode()
+    if auth_mode == ADC_AUTH_MODE:
+        return {
+            "auth_mode": ADC_AUTH_MODE,
+            "access_token": None,
+            "impersonated_credentials": None,
+            "role": None,
+            "job_labels": None,
+        }
+    if auth_mode == USER_AUTH_MODE:
+        token = str(state.get(_token_state_key(), "") or "").strip()
+        if not token:
+            raise ValueError("user authentication requires an OAuth access token")
+        return {
+            "auth_mode": USER_AUTH_MODE,
+            "access_token": token,
+            "impersonated_credentials": None,
+            "role": None,
+            "job_labels": None,
+        }
+    if auth_mode == IMPERSONATED_SA_AUTH_MODE:
+        state_key = (
+            os.getenv("ADK_ROLE_ASSERTION_STATE_KEY", "bq-caapi-role-assertion").strip()
+            or "bq-caapi-role-assertion"
+        )
+        raw_assertion = state.get(state_key)
+        assertion_str = str(raw_assertion).strip() if raw_assertion is not None else ""
+        if not assertion_str:
+            raise ImpersonationError(
+                f"impersonated_sa auth mode requires a signed role assertion in session state key {state_key!r}"
+            )
+
+        trusted_sa = os.getenv("SQL_ROLE_TRUSTED_CALLER_SA", "").strip() or None
+        expected_aud = (
+            os.getenv("SQL_ROLE_ASSERTION_AUDIENCE", "bq-caapi-rls").strip()
+            or "bq-caapi-rls"
+        )
+        hmac_sec = os.getenv("SQL_ROLE_ASSERTION_HMAC_SECRET") or None
+        max_ttl = int(os.getenv("SQL_ROLE_ASSERTION_MAX_TTL_SECONDS", "900"))
+        if not (60 <= max_ttl <= 3600):
+            raise ImpersonationError(
+                f"SQL_ROLE_ASSERTION_MAX_TTL_SECONDS must be between 60 and 3600, got {max_ttl}"
+            )
+
+        verified: RoleAssertion = verify_role_assertion(
+            assertion_str,
+            trusted_caller_sa=trusted_sa,
+            expected_audience=expected_aud,
+            hmac_secret=hmac_sec,
+            max_ttl_seconds=max_ttl,
+            expected_subject=expected_subject,
+        )
+
+        role_sa_map = parse_role_sa_map(os.getenv("SQL_ROLE_SA_MAP_JSON"))
+        lifetime_seconds = int(os.getenv("SQL_IMPERSONATION_LIFETIME_SECONDS", "300"))
+        creds, target_sa = build_impersonated_credentials(
+            role=verified.role,
+            role_sa_map=role_sa_map,
+            target_scopes=["https://www.googleapis.com/auth/bigquery"],
+            lifetime_seconds=lifetime_seconds,
+        )
+
+        return {
+            "auth_mode": IMPERSONATED_SA_AUTH_MODE,
+            "access_token": None,
+            "impersonated_credentials": creds,
+            "role": verified.role,
+            "job_labels": dict(verified.job_labels),
+            "target_sa": target_sa,
+        }
+    raise ValueError(f"unsupported SQL_AUTH_MODE: {auth_mode!r}")
+
+
 def _build_auth_executor(
     auth_mode: str,
-    access_token: str | None,
+    access_token: str | None = None,
     allowed_sources: frozenset[str] | None = None,
+    impersonated_credentials: Any = None,
+    job_labels: Mapping[str, str] | None = None,
 ) -> Any:
     if auth_mode == USER_AUTH_MODE:
         return build_sql_executor(
             access_token=access_token,
             auth_mode=auth_mode,
             allowed_sources=allowed_sources,
+        )
+    if auth_mode == IMPERSONATED_SA_AUTH_MODE:
+        return build_sql_executor(
+            auth_mode=auth_mode,
+            allowed_sources=allowed_sources,
+            impersonated_credentials=impersonated_credentials,
+            job_labels=job_labels,
         )
     return build_sql_executor(
         auth_mode=auth_mode,

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+import os
 import re
 from typing import Any
 
@@ -101,10 +102,19 @@ def normalize_prompt_for_match(prompt: str | None) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
 def create_chat_client(
     location: str = "global",
     *,
     user_access_token: str | None = None,
+    credentials: Any | None = None,
+    impersonated_role: str | None = None,
+    role_sa_map: Mapping[str, str] | None = None,
+    lifetime_seconds: int = 300,
+    source_credentials: Any | None = None,
+    transport: str | None = None,
 ) -> geminidataanalytics.DataChatServiceClient:
     """Creates a transport-safe CA API DataChatServiceClient.
 
@@ -112,26 +122,66 @@ def create_chat_client(
         location: Google Cloud region or multi-region (e.g. 'global', 'us', 'eu').
         user_access_token: Optional OAuth bearer access token. If provided, binds
             transport credentials directly to the gRPC channel.
+        credentials: Optional explicit credentials object.
+        impersonated_role: Optional role slug to impersonate via SQL_ROLE_SA_MAP_JSON.
+        role_sa_map: Optional mapping of role slugs to service account emails.
+        lifetime_seconds: Impersonated token lifetime in seconds.
+        source_credentials: Base credentials initiating the impersonation.
+        transport: Optional transport name (e.g. 'grpc').
 
     Returns:
         Configured DataChatServiceClient.
 
     Raises:
-        ValueError: If user_access_token is empty or whitespace.
+        ValueError: If auth parameters are ambiguous or invalid.
     """
+    auth_count = sum(
+        x is not None for x in (user_access_token, credentials, impersonated_role)
+    )
+    if auth_count > 1:
+        raise ValueError(
+            "Ambiguous auth parameters: provide at most one of user_access_token, credentials, or impersonated_role."
+        )
+
+    resolved_credentials: Any = None
     if user_access_token is not None:
         token = user_access_token.strip()
         if not token:
             raise ValueError("user_access_token cannot be empty or whitespace.")
-        credentials = Credentials(token=token)
-    else:
-        credentials = None
+        resolved_credentials = Credentials(token=token)
+    elif credentials is not None:
+        resolved_credentials = credentials
+    elif impersonated_role is not None:
+        role_name = impersonated_role.strip()
+        if not role_name:
+            raise ValueError("impersonated_role cannot be empty or whitespace.")
+        from semantic.rls_impersonation import (
+            build_impersonated_credentials,
+            parse_role_sa_map,
+        )
+
+        mapping = (
+            role_sa_map
+            if role_sa_map is not None
+            else parse_role_sa_map(os.getenv("SQL_ROLE_SA_MAP_JSON"))
+        )
+        resolved_credentials, _ = build_impersonated_credentials(
+            role=role_name,
+            role_sa_map=mapping,
+            target_scopes=[_CLOUD_PLATFORM_SCOPE],
+            lifetime_seconds=lifetime_seconds,
+            source_credentials=source_credentials,
+        )
 
     client_options = ClientOptions(api_endpoint=ca_api_endpoint(location))
-    return geminidataanalytics.DataChatServiceClient(
-        credentials=credentials,
-        client_options=client_options,
-    )
+    kwargs: dict[str, Any] = {
+        "credentials": resolved_credentials,
+        "client_options": client_options,
+    }
+    if transport is not None:
+        kwargs["transport"] = transport
+
+    return geminidataanalytics.DataChatServiceClient(**kwargs)
 
 
 def build_stateless_chat_request(

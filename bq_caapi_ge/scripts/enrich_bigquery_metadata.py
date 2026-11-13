@@ -1,6 +1,6 @@
-"""Run Dataplex scans that enrich BigQuery metadata for data agents.
+"""Run Knowledge Catalog scans that enrich BigQuery metadata for data agents.
 
-This script creates and runs Dataplex DataScan resources for the configured
+This script creates and runs Knowledge Catalog DataScan resources for the configured
 BigQuery dataset and tables. Run it before creating or updating CA API data
 agents so Gemini has profile results, table documentation, and dataset insights
 available through BigQuery and Knowledge Catalog.
@@ -9,7 +9,7 @@ Running the scans is only half the job: by default the generated documentation
 is also published back to each table, so it is visible where people actually
 look.
 
-- ``publish_documentation_to_table`` sets the Dataplex publish labels, which
+- ``publish_documentation_to_table`` sets the Knowledge Catalog publish labels, which
   surface the generated descriptions on the BigQuery Studio "Insights" tab.
 - ``apply_documentation_to_schema`` writes the generated table overview and
   column descriptions into the table schema itself. This is the programmatic
@@ -260,14 +260,14 @@ def build_data_documentation_payload(
     generation_scope: str | None,
     publish: bool,
 ) -> dict:
-    """Build a Dataplex data documentation scan payload.
+    """Build a Knowledge Catalog data documentation scan payload.
 
     Args:
         resource: BigQuery dataset or table resource URI.
-        generation_scope: Dataplex DataDocumentationSpec generation scope for
+        generation_scope: DataDocumentationSpec generation scope for
             table scans. Pass ``None`` for dataset-level scans, which do not
             support generation scopes.
-        publish: Whether to publish results to Dataplex Catalog.
+        publish: Whether to publish results to Knowledge Catalog.
 
     Returns:
         DataScan create payload.
@@ -290,12 +290,12 @@ def build_data_profile_payload(
     sampling_percent: float | None = None,
     export_results_table: str | None = None,
 ) -> dict:
-    """Build a Dataplex data profile scan payload.
+    """Build a Knowledge Catalog data profile scan payload.
 
     Args:
         resource: BigQuery table resource URI.
         mode: Data profile execution mode.
-        publish: Whether to publish profile results to Dataplex Catalog.
+        publish: Whether to publish profile results to Knowledge Catalog.
         sampling_percent: Optional sampling percentage for STANDARD mode.
         export_results_table: Optional BigQuery table resource for exported profile
             results.

@@ -87,11 +87,44 @@ against exact YAML sources or Knowledge Catalog (`semantic_narrow` or
 `catalog_broad`), generates SQL once, executes it with writes blocked, and
 summarizes the returned rows.
 
-Whose credentials run the query is governed separately by `SQL_AUTH_MODE`. The
-default `adc` uses Application Default Credentials. Setting `SQL_AUTH_MODE=user`
-binds each query to the per-request OAuth access token this harness writes to
-`ADK_OAUTH_TOKEN_STATE_KEY`, and fails closed with a query error when the token is
-absent.
+Whose credentials run the query is governed separately by `SQL_AUTH_MODE`:
+- **`SQL_AUTH_MODE=adc`**: Uses local Application Default Credentials (shared developer identity for local testing and benchmark runs).
+- **`SQL_AUTH_MODE=user`**: Binds each query to the per-request OAuth access token this harness writes to `ADK_OAUTH_TOKEN_STATE_KEY`, and fails closed with a query error when the token is absent. This matches production `DEPLOY_SQL_AUTH_MODE=user` in Gemini Enterprise and Google Workspace.
+- **`SQL_AUTH_MODE=impersonated_sa`**: Used by custom enterprise gateways (Slack, Microsoft Teams, Okta portals) where end users do not have Google Workspace OAuth tokens. Instead of passing an OAuth token, the trusted gateway signs a short-lived RS256 JWT role assertion.
+  *(Note: `test_web/app.py` is a Google OAuth development harness for `SQL_AUTH_MODE=user` or `adc`, and does **not** mint role assertions for `SQL_AUTH_MODE=impersonated_sa`. For custom gateway integration and `impersonated_sa` deployment details, see [`../README.md`](../README.md).)*
+
+```python
+# Custom enterprise gateway role assertion signing example:
+import json, time
+from google.cloud import iam_credentials_v1
+
+client = iam_credentials_v1.IAMCredentialsClient()
+caller_sa = "gateway-runner@my-project.iam.gserviceaccount.com"
+now = int(time.time())
+payload = json.dumps({
+    "iss": caller_sa,
+    "aud": "bq-caapi-rls",
+    "sub": "user_12345",
+    "bqca_role": "apac_analyst",
+    "iat": now,
+    "exp": now + 300,
+})
+response = client.sign_jwt(name=f"projects/-/serviceAccounts/{caller_sa}", payload=payload)
+# Passed to agent session state: session_state["bq-caapi-role-assertion"] = response.signed_jwt
+```
+
+For local testing with `adk run` without GCP IAM credentials, mint an HMAC assertion:
+
+```python
+from semantic.rls_impersonation import mint_hmac_role_assertion
+
+token = mint_hmac_role_assertion(
+    role="apac_analyst",
+    subject="local_dev_user",
+    hmac_secret="local-test-secret-at-least-32-chars-long",
+    ttl_seconds=300,
+)
+```
 
 ## Agent Engine Mode
 
